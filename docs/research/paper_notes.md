@@ -1,5 +1,12 @@
 # Paper notes
 
+> **Authorship.** sachin is the implementer of this library, not the
+> paper's author. The JoLT algorithm is from
+> *Krishnan, R. & Schulz, V. (2026). "A JoLT for the KV Cache: Near-Lossless
+> KV Cache Compression via Joint Tucker and JL-Residual Allocation for
+> LLMs." arXiv:2607.12550.* This document is sachin's reading notes on
+> the paper, not a summary written by the paper's authors.
+
 Caveats and limitations of the paper that this repo inherits.
 
 ## Edge cases the paper does not cover
