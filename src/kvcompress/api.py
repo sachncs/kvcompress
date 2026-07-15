@@ -159,8 +159,10 @@ def enable_compression(
         seed=seed,
         **kwargs,
     )
+    handle = CompressionHandle(adapter=adapter, model=model)
+    adapter._stats = handle.stats
     adapter.enable()
-    return CompressionHandle(adapter=adapter, model=model)
+    return handle
 
 
 def disable_compression(handle: CompressionHandle) -> None:
