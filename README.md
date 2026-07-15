@@ -1,5 +1,3 @@
-# kvcompress
-
 <p align="center">
   <h1 align="center">kvcompress</h1>
   <p align="center">Universal plug-and-play KV cache compression for decoder-only LLMs.</p>
