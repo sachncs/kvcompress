@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/runtime/profiler.py
+# hypothesis_version: 6.148.6
+
+[0.0, 1000, 'CompressionProfiler', 'bytes_in', 'bytes_out', 'count', 'duration_ms', 'mean_ms', 'name', 'total_ms']

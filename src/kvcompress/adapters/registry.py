@@ -4,8 +4,13 @@ Maps ``config.model_type`` (as exposed by Hugging Face ``transformers``) to
 the appropriate shim module that knows how to wire :class:`KVCompressor`
 into that family's attention layer.
 
-Adding a new family: write ``adapters/<name>.py`` exposing ``install(model,
-cache_manager)`` and add an entry here.
+Adding a new family: write ``adapters/<name>.py`` exposing
+``install(model, cache_manager)`` and add an entry to :data:`_REGISTRY`.
+
+Today every entry is a no-op shim because the :class:`HuggingFaceAdapter`'s
+:class:`~transformers.cache_utils.DynamicCache` subclass already covers the
+standard cache layout. The registry exists so future model-specific hooks
+(custom attention kernels, MLA, fused QKV) have a place to land.
 """
 
 from __future__ import annotations

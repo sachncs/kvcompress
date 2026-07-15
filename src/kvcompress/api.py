@@ -10,9 +10,23 @@ This module exposes:
   to disable compression, query stats, or swap methods at runtime.
 * :func:`enable_compression` — entry point.
 * :func:`disable_compression` — revert the patch.
+* :func:`_parse_target_memory` — helper that converts ``"25%"`` / ``0.25``
+  to a ratio of ``4.0``.
 
 The Hugging Face integration lives here rather than in ``adapters/`` because
 this is the *only* function end-users need to know about.
+
+Design notes:
+
+* ``enable_compression`` is *not* idempotent: calling it twice on the same
+  model raises a warning and returns the same handle. Use
+  ``CompressionHandle.disable()`` first.
+* ``enable_compression`` returns a :class:`CompressionHandle` rather than
+  ``None`` because callers need to (a) disable compression later, (b)
+  read cumulative stats. Returning ``None`` would force callers to use
+  module-level state.
+* The ``method`` string is the *only* required selection. All other knobs
+  have sensible defaults that put the model in the paper's free zone.
 """
 
 from __future__ import annotations

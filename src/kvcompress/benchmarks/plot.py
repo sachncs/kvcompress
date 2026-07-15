@@ -1,7 +1,13 @@
 """Plot helpers for benchmark scripts.
 
 Uses matplotlib (optional, in the ``bench`` extra) and saves PNG figures
-next to the benchmark output JSON.
+next to the benchmark output JSON. When matplotlib is not installed
+each function returns silently rather than raising — benchmarks that
+write JSON still complete; only the plot step is skipped.
+
+We don't pin matplotlib to a version: the API surface used here
+(``plt.subplots``, ``ax.bar``, ``ax.set_yscale``, ``fig.savefig``) has
+been stable since matplotlib 3.x.
 """
 
 from __future__ import annotations

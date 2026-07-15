@@ -1,4 +1,16 @@
-"""Compression / decompression speed benchmark."""
+"""Compression / decompression speed benchmark.
+
+Measures mean wall time for :meth:`KVCompressor.compress` and
+:meth:`KVCompressor.decompress` across JoLT, FlashJoLT, and the low-rank
+baseline. Includes warm-up iterations to amortise first-call cache effects.
+
+Usage::
+
+    python -m kvcompress.benchmarks.throughput --T 1024 --dh 128 --ratio 3
+
+On CPU the three methods are roughly comparable at small T; FlashJoLT
+pulls ahead at T ≥ 1024 once the SVD becomes the bottleneck.
+"""
 
 from __future__ import annotations
 

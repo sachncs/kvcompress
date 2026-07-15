@@ -2,6 +2,18 @@
 
 The :class:`CacheManager` is the entry point used by the HF adapter. It owns
 a :class:`CompressedKVCache` and a per-call record of which layers are live.
+
+Why a manager on top of :class:`CompressedKVCache`:
+
+* It tracks *which layers are live* — needed by the adapter's
+  ``__getitem__`` path to know whether to reconstruct or pass through.
+* It forwards :meth:`memory_used`, :meth:`compression_ratio`, and
+  :meth:`stats` so the adapter can report unified metrics.
+* It's the natural place to add cross-layer optimisations later (e.g.
+  shared JL projections across groups) without changing the lower cache.
+
+The manager is *not* model-aware; it does not know which tensor is K vs V
+— both are passed through the underlying cache as opaque payloads.
 """
 
 from __future__ import annotations

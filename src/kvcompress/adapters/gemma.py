@@ -10,4 +10,11 @@ from typing import Any
 
 
 def install(model: Any, cache_manager: Any) -> None:
+    """No-op for Gemma and Gemma2.
+
+    The two differ in attention pattern (Gemma2 uses logit soft-capping and
+    sliding-window attention) but share the same KV cache layout, so a
+    single shim covers both ``config.model_type == "gemma"`` and
+    ``"gemma2"``.
+    """
     return None

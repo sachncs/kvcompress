@@ -10,4 +10,5 @@ from typing import Any
 
 
 def install(model: Any, cache_manager: Any) -> None:
+    """No-op for InternLM."""
     return None

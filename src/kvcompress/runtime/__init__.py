@@ -2,6 +2,13 @@
 
 Imports are lazy so the package can be imported even when individual modules
 are still stubbed out.
+
+* :mod:`.memory` defines :class:`~kvcompress.runtime.memory.MemoryPool`,
+  a small object pool that reuses contiguous tensors across compress /
+  decompress calls to reduce allocator pressure during long-context
+  generation.
+* :mod:`.profiler` defines :class:`~kvcompress.runtime.profiler.CompressionProfiler`,
+  a context-manager-style timer used by the benchmark suite.
 """
 
 from __future__ import annotations

@@ -10,4 +10,10 @@ from typing import Any
 
 
 def install(model: Any, cache_manager: Any) -> None:
+    """No-op for Qwen2 / Qwen2-MoE.
+
+    The MoE variant uses sparse experts in the FFN but the KV cache
+    layout is identical to non-MoE Qwen2, so the generic DynamicCache
+    subclass covers both.
+    """
     return None

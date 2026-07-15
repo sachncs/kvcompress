@@ -3,6 +3,10 @@
 A tiny per-call recorder that captures timing and size statistics. Useful
 for the benchmark suite and for inspecting a real generation's KV cache
 behaviour.
+
+The profiler is *passive*: it doesn't change the algorithm's runtime
+behaviour beyond the per-call wall-clock measurement. Disabling it via
+the private ``_enabled`` flag removes the cost entirely.
 """
 
 from __future__ import annotations

@@ -2,6 +2,29 @@
 
 Public symbols are exposed lazily through :func:`__getattr__` so this package
 can be imported even when individual modules are still stubbed out.
+
+Subpackages and modules:
+
+* :mod:`.base` defines the :class:`KVCompressor` ABC that every concrete
+  compressor subclasses.
+* :mod:`.jolt` is the paper-faithful JoLT implementation.
+* :mod:`.flashjolt` is the randomised-SVD fast variant.
+* :mod:`.lowrank` and :mod:`.quantization_only` are ablation baselines.
+* :mod:`.identity` is a passthrough compressor used for benchmarking.
+* :mod:`.allocator` holds the joint Lagrangian allocator and the greedy
+  ablation allocator.
+* :mod:`.tucker` implements the partial Tucker ST-HOSVD used as JoLT's
+  low-rank backbone.
+* :mod:`.svd` is the unified exact + randomised SVD class.
+* :mod:`.jl` is the Johnson-Lindenstrauss projection used to rotate the
+  residual before quantisation.
+* :mod:`.quantization` provides the FP16/BF16/FP8/INT2/4/8 quantizers.
+* :mod:`.residual` packages the JL-rotated residual into a serialisable
+  payload.
+
+Why lazy imports: during incremental development we want the package to
+remain importable even when a single submodule is mid-edit. Lazy loading
+makes the public surface robust to that.
 """
 
 from __future__ import annotations

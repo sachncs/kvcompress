@@ -1,7 +1,17 @@
 """Memory benchmark — bytes occupied by compressed vs uncompressed cache.
 
-Usage:
+Compares :class:`~kvcompress.IdentityCompressor` against
+:class:`~kvcompress.JoLTCompressor`,
+:class:`~kvcompress.FlashJoLTCompressor`, and
+:class:`~kvcompress.LowRankCompressor` across a sweep of compression
+ratios. Reports the achieved bytes per method and ratio.
+
+Usage::
+
     python -m kvcompress.benchmarks.memory --T 1024 --dh 128 --m 8 --ratio 3.0
+
+The benchmark runs purely on synthetic tensors so it does not require
+GPU resources.
 """
 
 from __future__ import annotations

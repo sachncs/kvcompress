@@ -10,4 +10,9 @@ from typing import Any
 
 
 def install(model: Any, cache_manager: Any) -> None:
+    """No-op for Phi-1/2/Phi-3.
+
+    Phi-3 uses MHA (unlike most modern decoder LMs which use GQA), so the
+    paper's MHA-vs-GQA caveat applies: stay in the 2-3× free zone.
+    """
     return None

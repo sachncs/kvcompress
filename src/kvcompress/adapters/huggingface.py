@@ -8,7 +8,25 @@ The adapter works in two ways:
    class, etc.) so the patched class is the one that gets instantiated.
 
 2. The user-facing API is :func:`kvcompress.api.enable_compression` which
-   returns a :class:`CompressionHandle` to disable the patch later.
+   returns a :class:`~kvcompress.api.CompressionHandle` to disable the
+   patch later.
+
+Why we patch *multiple* module symbol tables:
+
+Hugging Face's :class:`~transformers.cache_utils.DynamicCache` is
+imported by name in many places:
+``transformers.cache_utils.DynamicCache``,
+``transformers.generation.utils.DynamicCache``, and per-model
+``DynamicCache`` imports. After ``import transformers.cache_utils as cu;
+cu.DynamicCache = X``, the module attribute on ``cache_utils`` is
+``X`` but a *previously-imported* name in ``generation.utils`` is
+still the original class. Methods that look up ``DynamicCache`` by
+name in their enclosing namespace see the original. To override that
+we walk all loaded ``transformers.*`` modules and reassign their
+``DynamicCache`` attribute.
+
+This pattern is the same one used by ``accelerate`` for device
+placement and by some HF callback libraries for tracing.
 """
 
 from __future__ import annotations

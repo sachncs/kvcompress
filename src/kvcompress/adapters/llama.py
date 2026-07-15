@@ -7,7 +7,8 @@ this shim exists as a documented no-op so the registry can dispatch to
 a family-specific module.
 
 For RoPE pre/post handling on keys, see :class:`kvcompress.compressor.jolt`
-which compresses pre-RoPE by default.
+which compresses pre-RoPE by default (the paper's Appendix C shows this
+reduces key-error by 22-44% on LLaMA-2-13B).
 """
 
 from __future__ import annotations
@@ -16,5 +17,9 @@ from typing import Any
 
 
 def install(model: Any, cache_manager: Any) -> None:
-    """No-op for Llama; the generic DynamicCache subclass is sufficient."""
+    """No-op for Llama; the generic DynamicCache subclass is sufficient.
+
+    Add family-specific hooks here only when needed for non-standard
+    attention layouts (e.g. grouped-query with unusual head groupings).
+    """
     return None

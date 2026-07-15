@@ -12,6 +12,25 @@ Public surface:
 
 The split mirrors ``DynamicCache``'s split between raw storage and the
 model-facing API.
+
+Lifecycle:
+
+1. Caller creates a :class:`CompressedKVCache` with a compressor and
+   optional eviction cap.
+2. ``store(layer, K, V)`` accepts K/V in either ``(B, n_kv, T, dh)`` or
+   ``(n_kv, T, dh)`` layout (see :func:`_normalize_kv`). It compresses
+   each tensor via the compressor and stashes the
+   :class:`~kvcompress.compressor.base.CompressedPayload`.
+3. ``retrieve(layer)`` returns the reconstructed K/V pair. The cache
+   itself never stores decompressed tensors — the compressor is called on
+   every retrieve. Callers that need amortised cost should cache the
+   result themselves.
+4. Eviction is LRU when ``max_layers`` is set; otherwise the cache grows
+   unbounded.
+
+Thread-safety: not thread-safe. Single-inference workloads (one
+generation loop) are fine; concurrent generations on the same cache
+require external synchronisation.
 """
 
 from __future__ import annotations

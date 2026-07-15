@@ -7,6 +7,21 @@ to PyTorch ``einsum``.
 
 Tile sizes are tuned for typical transformer dimensions
 (m=8, T=128-1024, dh=64-128) and a single warp per block.
+
+Algorithm:
+
+1. Load a ``BLOCK_RT × BLOCK_RD`` tile of ``core[m]``.
+2. Load the matching rows of ``u_token`` (size BLOCK_RT) and ``u_feature``
+   (size BLOCK_RD).
+3. Reduce along the token-rank axis with an outer product against
+   ``u_token``.
+4. Reduce along the feature-rank axis with an outer product against
+   ``u_feature``.
+5. Store the resulting scalar to ``out[m, t, d]``.
+
+The grid is ``(m, T, d)`` — one program per (m, t, d) triple. For
+typical cache sizes (~1k tokens, ~16 heads, ~64 head dim), the grid
+fits comfortably in a single SM.
 """
 
 from __future__ import annotations

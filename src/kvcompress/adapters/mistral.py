@@ -11,4 +11,11 @@ from typing import Any
 
 
 def install(model: Any, cache_manager: Any) -> None:
+    """No-op for Mistral.
+
+    The DynamicCache subclass installed by :class:`HuggingFaceAdapter` is
+    sufficient. If you need explicit sliding-window semantics, do not
+    override here — instead, use ``model.generation_config`` with the
+    appropriate sliding-window config before calling ``enable_compression``.
+    """
     return None

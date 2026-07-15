@@ -1,12 +1,21 @@
 """kvcompress CLI.
 
-Top-level Typer app exposing the four user-facing commands:
+Top-level Typer app exposing the user-facing commands:
 
-* ``kvcompress version``
-* ``kvcompress validate``
-* ``kvcompress benchmark``
-* ``kvcompress profile``
-* ``kvcompress compress``
+* ``kvcompress version`` — print the installed version.
+* ``kvcompress validate`` — run a smoke test on synthetic K/V and, if
+  ``transformers`` is installed, on a small HF model.
+* ``kvcompress benchmark`` — orchestrate the memory / speed /
+  reconstruction benchmarks. Spawns each benchmark module as a
+  subprocess so a failure in one doesn't take down the others.
+* ``kvcompress profile`` — run a single model through ``model.generate``
+  with compression enabled, printing cumulative stats.
+* ``kvcompress compress`` — one-shot compression on a single prompt.
+
+Why subprocess for benchmarks: a misbehaving benchmark (e.g. an OOM)
+should fail loudly without aborting the orchestration. Each benchmark
+script writes its own JSON output, so a partial run still leaves usable
+artefacts on disk.
 """
 
 from __future__ import annotations

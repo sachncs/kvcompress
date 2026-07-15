@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/cache/metadata.py
+# hypothesis_version: 6.148.6
+
+[1.0, 'CompressionMetadata', 'LayerCompression', 'bits_allowed', 'dtype', 'extras', 'fp16', 'layer_groups', 'layers', 'method']

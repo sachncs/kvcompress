@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/cache/compress.py
+# hypothesis_version: 6.148.6
+
+[1.0, 'CompressedKVCache', 'bits', 'bytes_compressed', 'bytes_original', 'compression_ratio', 'core_dtype', 'fp16', 'key', 'method', 'n_layers', 'r_feature', 'r_token', 'unknown', 'value']

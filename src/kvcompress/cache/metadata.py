@@ -3,6 +3,21 @@
 Every layer of a compressed cache carries a small dataclass describing its
 layout. The payload's tensor factors live separately; only this dataclass
 needs to be JSON-serializable for safetensors round-trips.
+
+Two dataclasses:
+
+* :class:`LayerCompression` — one cell (layer × kind × K/V). Carries the
+  ``r_token``, ``r_feature``, ``bits`` chosen by the allocator plus the
+  bytes-original / bytes-compressed bookkeeping that
+  :class:`CompressedKVCache` uses to report memory.
+* :class:`CompressionMetadata` — top-level metadata for one cache. Holds a
+  list of :class:`LayerCompression` entries plus the cache-wide settings
+  (method, dtype, layer-group count, allowed bit-widths, calibration
+  extras).
+
+Both classes implement :meth:`to_dict` / :meth:`from_dict` for round-trip
+serialisation. The dict shape is stable across versions: any field that
+exists today stays, new fields may be appended.
 """
 
 from __future__ import annotations

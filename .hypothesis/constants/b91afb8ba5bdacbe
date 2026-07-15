@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/api.py
+# hypothesis_version: 6.148.6
+
+[1.0, 100.0, 100, '%', 'PreTrainedModel', 'bytes_compressed', 'bytes_original', 'compress_calls', 'compression_ratio', 'decompress_calls', 'flashjolt', 'fp16', 'fp8', 'identity', 'int2', 'int4', 'int8', 'jolt', 'kvcompress', 'lowrank', 'memory_saved_bytes', 'unreachable']

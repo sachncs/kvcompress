@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/kernels/triton/compression.py
+# hypothesis_version: 6.148.6
+
+['is_triton_available', 'jl_project', 'mar,ta,dr->mtd', 'quantize_int8', 'tucker_reconstruct']

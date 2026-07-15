@@ -3,6 +3,13 @@
 A simple pool that hands out contiguous tensors of a given shape/dtype and
 recycles them across calls. Reduces allocator pressure during repeated
 compression/decompression cycles.
+
+Why this matters: PyTorch's caching allocator is fast for repeated
+``torch.empty(shape)`` calls, but freeing the result back to the
+allocator still incurs bookkeeping. A small object pool that holds
+buffers across calls removes that bookkeeping and is most useful during
+long-context generation where the same shapes are allocated on every
+step (e.g. the partial-Tucker core or the JL-rotated residual).
 """
 
 from __future__ import annotations

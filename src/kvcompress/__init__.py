@@ -12,7 +12,8 @@ Public API:
     CacheManager           — high-level cache orchestration
 
 Imports are lazy so the package can be imported even when individual modules
-are still stubbed out during incremental development.
+are still stubbed out during incremental development. The first attribute
+access triggers the actual import via :func:`__getattr__` below.
 """
 
 from __future__ import annotations

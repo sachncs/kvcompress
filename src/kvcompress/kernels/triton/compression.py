@@ -7,7 +7,16 @@ Provides:
 * ``quantize_int8`` — fused per-channel int8 quantization.
 
 These are *no-op fallbacks* on systems without ``triton``; the public
-functions in :mod:`kvcompress.compressor` always go through PyTorch.
+functions in :mod:`kvcompress.compressor` always go through PyTorch. The
+fallback ensures the library is importable on every platform (CPU,
+MPS, no-CUDA) without a hard dependency on Triton.
+
+Why fall back unconditionally: Triton is CUDA-only. Even on systems
+with Triton installed, the kernels are only marginally faster than the
+PyTorch equivalents for the typical cache sizes we target. The fused
+Tucker kernel in :mod:`.tucker_reconstruct` is the one place where
+Triton buys a real speedup (the einsum-with-token-broadcast pattern
+is memory-bound and Triton can overlap loads).
 """
 
 from __future__ import annotations

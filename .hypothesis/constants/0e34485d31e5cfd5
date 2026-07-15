@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/adapters/registry.py
+# hypothesis_version: 6.148.6
+
+['deepseek', 'falcon', 'gemma', 'gemma2', 'internlm', 'llama', 'mistral', 'mixtral', 'phi', 'phi3', 'qwen2', 'qwen2_moe']

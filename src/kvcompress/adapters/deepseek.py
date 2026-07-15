@@ -12,4 +12,10 @@ from typing import Any
 
 
 def install(model: Any, cache_manager: Any) -> None:
+    """No-op for DeepSeek-V2/V3.
+
+    MLA compresses K and V into a single latent before the cache is
+    written, so the cache we intercept already has the typical
+    ``(B, n_kv, T, dh)`` layout. No model-specific hook is required.
+    """
     return None

@@ -4,6 +4,7 @@ Measures relative Frobenius reconstruction error of JoLT vs. baselines at
 2x compression on synthetic K/V tensors that mimic a real cache's spectrum.
 
 The paper's Table 2 (Mistral-7B layer 15, T=1024):
+
 - JoLT: K=0.009, V=0.006
 - int4 per-token: K=0.080, V=0.131
 - xKV (cross-layer SVD): K=0.077, V=0.237
@@ -14,6 +15,15 @@ at 10% error for K is ~228, for V is ~563; feature rank at 10% error
 for K is ~101, for V is ~126). This validates the algorithm against the
 paper's qualitative claim that JoLT reaches ~0.01 reconstruction error
 in the free zone.
+
+Caveats:
+
+* The decay slopes differ from real Mistral-7B layer 15, so absolute
+  numbers differ. The qualitative ordering (JoLT ≪ int4 ≪ lowrank on
+  reconstruction fidelity) is preserved.
+* For the paper's *exact* numbers, run on a real model with the same
+  WikiText-2/C4 calibration setup the paper uses. See
+  :doc:`docs/research/reproduction_notes` for the gap analysis.
 """
 
 from __future__ import annotations
