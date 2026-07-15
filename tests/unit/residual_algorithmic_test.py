@@ -34,9 +34,7 @@ def test_encode_decode_zero_bits_is_zero_tensor(residual: torch.Tensor) -> None:
 
 
 @pytest.mark.parametrize("bits", [2, 4, 8])
-def test_encode_decode_round_trip_preserves_shape(
-    residual: torch.Tensor, bits: int
-) -> None:
+def test_encode_decode_round_trip_preserves_shape(residual: torch.Tensor, bits: int) -> None:
     payload = encode_residual(residual, bits=bits, seed=0)
     decoded = decode_residual(payload)
     assert decoded.shape == residual.shape
@@ -93,9 +91,7 @@ def test_residual_bits_property() -> None:
 def test_residual_rademacher_distribution_supported(
     residual: torch.Tensor,
 ) -> None:
-    payload = encode_residual(
-        residual, bits=4, seed=0, distribution="rademacher"
-    )
+    payload = encode_residual(residual, bits=4, seed=0, distribution="rademacher")
     assert payload.projection_distribution == "rademacher"
     decoded = decode_residual(payload)
     assert decoded.shape == residual.shape
@@ -126,6 +122,4 @@ def test_residual_decode_preserves_norm_within_quantisation_error(
     # which is ≤ ‖Π‖_F. We just check that the recovered norm is
     # non-zero and within the same order of magnitude as the source.
     assert dec_norm > 0
-    assert dec_norm < src_norm * 5, (
-        f"dec_norm {dec_norm} not within 5x of src_norm {src_norm}"
-    )
+    assert dec_norm < src_norm * 5, f"dec_norm {dec_norm} not within 5x of src_norm {src_norm}"

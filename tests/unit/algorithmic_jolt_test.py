@@ -9,13 +9,10 @@ from __future__ import annotations
 
 import math
 
-import pytest
 import torch
 
 from kvcompress.compressor.flashjolt import FlashJoLTCompressor, flashjolt_cap
 from kvcompress.compressor.jolt import JoLTCompressor
-from kvcompress.compressor.quantization import IntQuantizer
-from kvcompress.compressor.tucker import partial_tucker_st_hosvd, reconstruct_partial_tucker
 
 
 def make_smooth_tensor(
@@ -156,9 +153,9 @@ def test_jolt_compression_actually_reduces_bytes() -> None:
     comp = JoLTCompressor(compression_ratio=3.0, bits=(0, 2, 4, 8))
     kp, vp = comp.compress(K, V)
     compressed_bytes = kp.bytes_compressed + vp.bytes_compressed
-    assert compressed_bytes < original_bytes, (
-        f"compressed {compressed_bytes} not smaller than original {original_bytes}"
-    )
+    assert (
+        compressed_bytes < original_bytes
+    ), f"compressed {compressed_bytes} not smaller than original {original_bytes}"
 
 
 def test_jolt_shape_preservation_across_compress_decompress() -> None:
@@ -170,9 +167,7 @@ def test_jolt_shape_preservation_across_compress_decompress() -> None:
         comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 2, 4, 8))
         kp, vp = comp.compress(K, V)
         K_hat, V_hat = comp.decompress(kp, vp)
-        assert K_hat.shape == K.shape, (
-            f"shape mismatch: {shape} -> K_hat {K_hat.shape}"
-        )
+        assert K_hat.shape == K.shape, f"shape mismatch: {shape} -> K_hat {K_hat.shape}"
         assert V_hat.shape == V.shape
 
 

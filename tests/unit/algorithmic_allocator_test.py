@@ -23,7 +23,6 @@ import math
 import pytest
 
 from kvcompress.compressor.allocator import (
-    Allocation,
     Cell,
     JointAllocator,
 )
@@ -43,22 +42,31 @@ def test_allocator_respects_byte_budget() -> None:
         # Achieved ratio should be within 2x of the target (either way).
         if result.achieved_ratio > 0:
             log_ratio = math.log2(result.achieved_ratio / ratio)
-            assert abs(log_ratio) < 1.5, (
-                f"target={ratio}, achieved={result.achieved_ratio:.2f}, "
-                f"log2={log_ratio:.2f}"
-            )
+            assert (
+                abs(log_ratio) < 1.5
+            ), f"target={ratio}, achieved={result.achieved_ratio:.2f}, log2={log_ratio:.2f}"
 
 
 def test_allocator_at_higher_ratio_uses_more_residual_bits() -> None:
     """At higher compression ratios, the allocator commits more residual
     bits per cell (because lower ranks alone can't hit the budget)."""
     cells = [Cell(shape=(4, 128, 64), kind="key", layer_group=0)]
-    bits_low = sum(a.bits for a in JointAllocator(target_ratio=2.0, bits_grid=(0, 2, 4, 8)).optimize(cells).allocations)
-    bits_high = sum(a.bits for a in JointAllocator(target_ratio=4.0, bits_grid=(0, 2, 4, 8)).optimize(cells).allocations)
-    # Higher ratio → at least as many residual bits, generally more.
-    assert bits_high >= bits_low, (
-        f"expected more bits at higher ratio: 2x={bits_low}, 4x={bits_high}"
+    bits_low = sum(
+        a.bits
+        for a in JointAllocator(target_ratio=2.0, bits_grid=(0, 2, 4, 8))
+        .optimize(cells)
+        .allocations
     )
+    bits_high = sum(
+        a.bits
+        for a in JointAllocator(target_ratio=4.0, bits_grid=(0, 2, 4, 8))
+        .optimize(cells)
+        .allocations
+    )
+    # Higher ratio → at least as many residual bits, generally more.
+    assert (
+        bits_high >= bits_low
+    ), f"expected more bits at higher ratio: 2x={bits_low}, 4x={bits_high}"
 
 
 def test_allocator_error_model_is_monotone_in_tau() -> None:
@@ -72,12 +80,10 @@ def test_allocator_error_model_is_monotone_in_tau() -> None:
     result = alloc.optimize(cells)
     a = result.allocations[0]
     # Re-derive τ for the chosen (rT, rd) and a slightly higher rank.
-    rt, rd, bits = a.r_token, a.r_feature, a.bits
-    eps = alloc.epsilon_squared.get(bits, 1.0)
+    rt, rd, _ = a.r_token, a.r_feature, a.bits
     m, t, d = cells[0].shape
     # Default τ model: max(1 - rT/T, 1 - rd/d).
     tau_at = max(1 - rt / t, 1 - rd / d)
-    err_at = eps * tau_at
     # Higher rank → lower τ → lower error.
     if rt < t:
         tau_higher = max(1 - (rt + 1) / t, 1 - rd / d)
@@ -108,9 +114,9 @@ def test_allocator_target_ratio_2x_picks_substantial_compression() -> None:
     cells = [Cell(shape=(4, 256, 64), kind="key", layer_group=0)]
     alloc = JointAllocator(target_ratio=2.0, bits_grid=(0, 2, 4, 8))
     result = alloc.optimize(cells)
-    assert result.achieved_ratio >= 1.5, (
-        f"achieved ratio {result.achieved_ratio:.2f} too low for 2x target"
-    )
+    assert (
+        result.achieved_ratio >= 1.5
+    ), f"achieved ratio {result.achieved_ratio:.2f} too low for 2x target"
 
 
 def test_allocator_handles_empty_cell_list() -> None:

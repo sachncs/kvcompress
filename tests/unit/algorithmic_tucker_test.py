@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import math
 
-import pytest
 import torch
 
 from kvcompress.compressor.svd import SVD
 from kvcompress.compressor.tucker import (
-    TuckerFactors,
     mode_n_fold,
     mode_n_unfold,
     partial_tucker_st_hosvd,
@@ -66,9 +64,9 @@ def test_mode_n_unfold_invertible() -> None:
     for mode in range(3):
         unfolded = mode_n_unfold(X, mode)
         folded = mode_n_fold(unfolded, mode, X.shape)
-        assert torch.allclose(folded, X, atol=1e-6), (
-            f"unfold/fold round-trip failed for mode {mode}"
-        )
+        assert torch.allclose(
+            folded, X, atol=1e-6
+        ), f"unfold/fold round-trip failed for mode {mode}"
 
 
 def test_full_rank_tucker_is_identity() -> None:
@@ -99,9 +97,7 @@ def test_st_hosvd_reconstruction_close_to_identity_at_full_rank() -> None:
     X_hat = reconstruct_partial_tucker(factors, X.shape)
     rel_err = float(torch.linalg.norm(X - X_hat) / torch.linalg.norm(X))
     # ST-HOSVD full-rank error is bounded by ~5% on realistic tensors.
-    assert rel_err < 0.05, (
-        f"full-rank ST-HOSVD error too high: rel_err={rel_err}"
-    )
+    assert rel_err < 0.05, f"full-rank ST-HOSVD error too high: rel_err={rel_err}"
 
 
 def test_st_hosvd_reconstruction_error_bounded_by_tail_masses() -> None:
@@ -137,9 +133,9 @@ def test_token_truncation_tail_mass_matches_paper() -> None:
     X, _ = make_rank_r_tensor(m=4, T=32, dh=4, rank_T=rank_T, rank_d=2)
 
     factors = partial_tucker_st_hosvd(X, r_token=rank_T, r_feature=2)
-    assert factors.token_tail_mass < 1e-3, (
-        f"expected ~0 tail mass at full token rank, got {factors.token_tail_mass}"
-    )
+    assert (
+        factors.token_tail_mass < 1e-3
+    ), f"expected ~0 tail mass at full token rank, got {factors.token_tail_mass}"
 
 
 def test_truncation_increases_error_monotonically() -> None:
@@ -177,9 +173,9 @@ def test_mode_pinning_preserves_head_axis() -> None:
     factors_perm = partial_tucker_st_hosvd(X_perm, r_token=8, r_feature=4)
     X_perm_hat = reconstruct_partial_tucker(factors_perm, X_perm.shape)
     err_perm = torch.linalg.norm(X_perm - X_perm_hat) / torch.linalg.norm(X_perm)
-    assert abs(err_original - err_perm) < 1e-5, (
-        f"mode-0 permutation changed error: {err_original} vs {err_perm}"
-    )
+    assert (
+        abs(err_original - err_perm) < 1e-5
+    ), f"mode-0 permutation changed error: {err_original} vs {err_perm}"
 
 
 def test_svd_exact_tail_mass_definition() -> None:
@@ -194,9 +190,9 @@ def test_svd_exact_tail_mass_definition() -> None:
     unfold_full = A
     s_full = torch.linalg.svdvals(unfold_full)
     true_tail = float(torch.sum(s_full[r:] ** 2) / torch.sum(s_full**2))
-    assert abs(res.tail_mass - true_tail) < 1e-4, (
-        f"tail_mass {res.tail_mass} != expected {true_tail}"
-    )
+    assert (
+        abs(res.tail_mass - true_tail) < 1e-4
+    ), f"tail_mass {res.tail_mass} != expected {true_tail}"
 
 
 def test_svd_randomised_tail_mass_is_upper_bound() -> None:
@@ -225,6 +221,6 @@ def test_svd_randomised_tail_mass_is_upper_bound() -> None:
     # (the "retained" in the estimator includes everything the
     # randomised path captured, which is at most what the exact path
     # captured).
-    assert rand.tail_mass >= exact.tail_mass - 1e-6, (
-        f"rand.tail_mass={rand.tail_mass} < exact.tail_mass={exact.tail_mass}"
-    )
+    assert (
+        rand.tail_mass >= exact.tail_mass - 1e-6
+    ), f"rand.tail_mass={rand.tail_mass} < exact.tail_mass={exact.tail_mass}"

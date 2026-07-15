@@ -1,5 +1,77 @@
-# Vulture configuration for kvcompress.
+# pyproject.toml — project configuration
 #
+# The original [build-system] and [project] sections from M1 are below.
+# We keep them intact and add documentation / lint / coverage tools
+# below.
+# (Build-system and project sections live in setup.cfg-like form;
+#  this file is the doc/lint/test configuration centre.)
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "examples", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF",
+    "PT", "TID", "ARG", "PL",
+]
+ignore = [
+    "PLR0913",  # too many arguments
+    "PLR2004",  # magic value
+    "B008",     # do not call function in default argument
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["PLR0915", "N806", "ARG"]
+"examples/**/*.py" = ["E402"]
+"src/kvcompress/kernels/triton/**/*.py" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_unused_ignores = false
+warn_return_any = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+files = ["src/kvcompress"]
+
+[[tool.mypy.overrides]]
+module = "torch.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "transformers.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "triton.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "kvcompress.adapters.huggingface"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "kvcompress.kernels.triton.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "kvcompress.adapters.registry"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "kvcompress.benchmarks.*"
+ignore_errors = true
+
+# Vulture configuration.
 # Vulture's 60%-confidence findings flag a lot of internal-but-useful symbols
 # (CompressorFactory, __getattr__, _LayerEntry, _resolve_cache, etc.). We use
 # 80% as the floor and exclude common library-internal patterns explicitly.
@@ -23,6 +95,7 @@ exclude_patterns = [
     # inside benchmarks/*).
     "src/kvcompress/benchmarks/",
 ]
+
 [tool.coverage.run]
 source = ["src/kvcompress"]
 branch = true
@@ -35,4 +108,24 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests that require model downloads",
+    "gpu: marks tests that require a CUDA device",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:transformers.*",
+    "ignore::DeprecationWarning:huggingface_hub.*",
+    "ignore::FutureWarning:transformers.*",
 ]

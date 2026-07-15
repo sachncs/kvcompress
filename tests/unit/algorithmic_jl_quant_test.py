@@ -6,13 +6,11 @@ quantization-error bounds (half a bin).
 
 from __future__ import annotations
 
-import math
 
 import pytest
 import torch
 
 from kvcompress.compressor.jl import (
-    JLProjection,
     cached_projection,
     clear_projection_cache,
     gaussian_projection,
@@ -47,9 +45,7 @@ def test_jl_gaussian_norm_preservation() -> None:
     mean_ratio = float(ratios.mean().item())
     # The mean ratio is exactly 1.0 in expectation; allow 10% slack on a
     # 2048-sample Monte Carlo.
-    assert abs(mean_ratio - 1.0) < 0.1, (
-        f"E[||Πx||²/||x||²] = {mean_ratio:.4f}, expected ~1.0"
-    )
+    assert abs(mean_ratio - 1.0) < 0.1, f"E[||Πx||²/||x||²] = {mean_ratio:.4f}, expected ~1.0"
 
 
 def test_jl_rademacher_norm_preservation() -> None:
@@ -61,9 +57,7 @@ def test_jl_rademacher_norm_preservation() -> None:
     y = proj.apply(x)
     ratios = (y * y).sum(dim=-1) / (x * x).sum(dim=-1)
     mean_ratio = float(ratios.mean().item())
-    assert abs(mean_ratio - 1.0) < 0.15, (
-        f"E[||Πx||²/||x||²] = {mean_ratio:.4f}, expected ~1.0"
-    )
+    assert abs(mean_ratio - 1.0) < 0.15, f"E[||Πx||²/||x||²] = {mean_ratio:.4f}, expected ~1.0"
 
 
 def test_jl_apply_shape_preservation() -> None:
@@ -82,13 +76,12 @@ def test_jl_projection_is_orthonormal_at_limit() -> None:
     dim = 128
     proj = gaussian_projection(dim, dim, seed=0)
     gram = proj.matrix.t() @ proj.matrix / dim
-    eye = torch.eye(dim)
     # Off-diagonal elements should be small relative to the diagonal.
     off_diag = (gram - torch.diag(torch.diagonal(gram))).abs().mean()
     diag = torch.diagonal(gram).mean()
-    assert off_diag < 0.1 * diag, (
-        f"off-diagonal mean {off_diag:.4f} too large vs diagonal {diag:.4f}"
-    )
+    assert (
+        off_diag < 0.1 * diag
+    ), f"off-diagonal mean {off_diag:.4f} too large vs diagonal {diag:.4f}"
 
 
 def test_jl_cache_returns_same_object() -> None:
@@ -124,10 +117,9 @@ def test_quant_error_bounded_by_one_bin() -> None:
         per_channel_err = (x - x_hat).abs().amax(dim=0)
         # Each channel's max error is at most half a bin (rounding) plus
         # fp32 noise.
-        assert (per_channel_err <= bin_size / 2 + 1e-3).all(), (
-            f"bits={bits}: per-channel error {per_channel_err} "
-            f"exceeds bin/2 = {bin_size / 2}"
-        )
+        assert (
+            per_channel_err <= bin_size / 2 + 1e-3
+        ).all(), f"bits={bits}: per-channel error {per_channel_err} exceeds bin/2 = {bin_size / 2}"
 
 
 def test_quant_error_bounded_by_one_bin_asymmetric() -> None:
@@ -143,10 +135,9 @@ def test_quant_error_bounded_by_one_bin_asymmetric() -> None:
         rng = (x.amax(dim=0) - x.amin(dim=0)).clamp(min=1e-9)
         bin_size = rng / (q._qmax - q._qmin)
         per_channel_err = (x - x_hat).abs().amax(dim=0)
-        assert (per_channel_err <= bin_size + 1e-3).all(), (
-            f"bits={bits}: per-channel error {per_channel_err} "
-            f"exceeds bin = {bin_size}"
-        )
+        assert (
+            per_channel_err <= bin_size + 1e-3
+        ).all(), f"bits={bits}: per-channel error {per_channel_err} exceeds bin = {bin_size}"
 
 
 def test_packing_unpacking_roundtrip_per_bit_width() -> None:
@@ -161,9 +152,9 @@ def test_packing_unpacking_roundtrip_per_bit_width() -> None:
             q_int = torch.randint(qmin, qmax + 1, (last,))
             packed = bit_packing_signed(q_int, bits, symmetric=True)
             unpacked = bit_unpacking_signed(packed, bits, last, symmetric=True)
-            assert torch.equal(unpacked, q_int.to(torch.int32)), (
-                f"packing roundtrip failed for bits={bits}, last={last}"
-            )
+            assert torch.equal(
+                unpacked, q_int.to(torch.int32)
+            ), f"packing roundtrip failed for bits={bits}, last={last}"
 
 
 def test_quantizer_dispatch_returns_int_quantizer() -> None:
@@ -211,11 +202,7 @@ def test_quant_per_group_smaller_error_than_per_tensor() -> None:
         ]
     ).unsqueeze(0)
     q_per_tensor = IntQuantizer(bits=4, symmetric=True, per_channel=False)
-    q_per_group = IntQuantizer(
-        bits=4, symmetric=True, per_channel=False, group_size=20
-    )
-    _, s1, _ = q_per_tensor.quantize(x)
-    err_tensor = (x - q_per_tensor.dequantize(*_, s1, _)).norm() if False else None
+    q_per_group = IntQuantizer(bits=4, symmetric=True, per_channel=False, group_size=20)
     p1 = q_per_tensor.quantize(x)
     p2 = q_per_group.quantize(x)
     err_t = (x - q_per_tensor.dequantize(*p1)).norm() / x.norm()

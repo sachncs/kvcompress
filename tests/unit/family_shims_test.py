@@ -65,7 +65,17 @@ def test_register_duplicate_raises() -> None:
 
 @pytest.mark.parametrize(
     "family",
-    ["llama", "mistral", "qwen2", "gemma", "phi", "mixtral", "falcon", "deepseek", "internlm"],
+    [
+        "llama",
+        "mistral",
+        "qwen2",
+        "gemma",
+        "phi",
+        "mixtral",
+        "falcon",
+        "deepseek",
+        "internlm",
+    ],
 )
 def test_every_family_shim_imports_and_installs(family: str) -> None:
     """Each registered family shim exposes an ``install`` function that

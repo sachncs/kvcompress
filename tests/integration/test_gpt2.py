@@ -76,9 +76,9 @@ def test_gpt2_disable_restores_behavior(gpt2_model_with_pad) -> None:
             ids, max_new_tokens=5, do_sample=False, pad_token_id=tok.eos_token_id
         )
 
-    assert torch.equal(out_compressed, out_baseline), (
-        "after disable, output should be identical to baseline"
-    )
+    assert torch.equal(
+        out_compressed, out_baseline
+    ), "after disable, output should be identical to baseline"
 
 
 @pytest.mark.integration
