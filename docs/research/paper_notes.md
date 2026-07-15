@@ -75,3 +75,45 @@ the default CI run.
 6. [Free zone](free_zone.md) — when it works.
 7. [Comparison with baselines](comparison_with_baselines.md) — vs other methods.
 8. [Reproduction notes](reproduction_notes.md) — what we did and didn't reproduce.
+## vLLM integration
+
+Two integration shapes ship with the library today:
+
+### Shape A — `kvcompress.adapters.vllm.export_kv` / `import_kv`
+
+User-driven workflow that works on any HF or vLLM-style model with a
+`DynamicCache`:
+
+```python
+from vllm import LLM
+from kvcompress.adapters.vllm import export_kv
+
+llm = LLM(model="meta-llama/Llama-2-7b-hf")
+llm.generate(["Hello, my name is"])
+export_kv(llm, "kv.safetensors", method="flashjolt", compression_ratio=3.0)
+```
+
+The exported file is a single safetensors with one tensor per
+(layer, kind) cell plus a `.meta.json` sidecar. `import_kv` does the
+reverse.
+
+### Shape B — `kvcompress.adapters.vllm_kv_offload.JoLTOffloadWorker`
+
+Subclasses `vllm.v1.kv_offload.base.KVCacheOffloadWorker` so vLLM's
+block-eviction path uses our compressor. Requires a real vLLM + CUDA
+install; this Mac (and CI) can structurally validate the subclass but
+cannot integration-test the runtime path.
+
+Three integration levels, ranked by invasiveness:
+
+1. **Shape A (current, useful):** export/import helpers. Works today on
+   any model with a `DynamicCache`. Doesn't touch vLLM's scheduler.
+2. **Shape B (current, structural):** `KVCacheOffloadWorker` subclass.
+   Plugs into vLLM v1's offload path. Needs GPU validation.
+3. **Shape C (future):** custom attention backend with per-block
+   compression in the attention kernel itself. Requires deep vLLM
+   expertise + CUDA work.
+
+The right path for high-throughput serving is Shape C, but it requires
+dedicated vLLM expertise. Shape A and B together cover the realistic
+near-term needs.

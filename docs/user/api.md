@@ -120,6 +120,26 @@ result = alloc.optimize(cells)
 result.allocations[0].r_token, result.allocations[0].r_feature, result.allocations[0].bits
 ```
 
+## vLLM integration (Shape A)
+
+```python
+from kvcompress.adapters.vllm import export_kv, import_kv
+
+# Save a vLLM / HF model's KV cache to disk in compressed form.
+export_kv(model, "kv.safetensors", method="flashjolt", compression_ratio=3.0)
+
+# Restore it (in this process or a different one).
+import_kv(model, "kv.safetensors")
+```
+
+The exported file is a single safetensors with one tensor per (layer,
+kind) cell plus a `.meta.json` sidecar. Both functions work with any HF
+or vLLM-style model that exposes a `DynamicCache` via
+`model.past_key_values` / `model.kv_cache` / `model.cache`.
+
+For the deeper vLLM integration that hooks into the block-eviction
+path, see `kvcompress.adapters.vllm_kv_offload.JoLTOffloadWorker`.
+
 ## CLI
 
 ```bash

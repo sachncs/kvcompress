@@ -16,7 +16,7 @@ pip install kvcompress
 
 ```bash
 pip install "kvcompress[triton]"   # Triton kernels for reconstruction / JL
-pip install "kvcompress[vllm]"     # vLLM adapter
+pip install "kvcompress[vllm]"     # vLLM adapter (Shape A: export/import helpers; Shape B: KVCacheOffloadWorker subclass requires a CUDA box to validate)
 pip install "kvcompress[bench]"    # matplotlib, datasets, pandas for benchmarks
 pip install "kvcompress[dev]"      # pytest, ruff, mypy, hypothesis
 pip install "kvcompress[docs]"     # mkdocs for documentation

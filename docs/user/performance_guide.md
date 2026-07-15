@@ -55,7 +55,7 @@ via `DynamicCache.update`'s standard device-tracking.
 
 For multi-GPU serving, keep the cache on the same device as the model's
 parameters. The HF adapter does not currently support tensor-parallel
-cache sharding — that's an open problem for vLLM-mode deployment.
+cache sharding — use the vLLM adapter instead (see `docs/research/paper_notes.md`).
 
 ## Decode-time cost
 
