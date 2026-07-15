@@ -5,15 +5,24 @@ After a partial Tucker truncation ``X̂ = partial_tucker(...)``, the residual
 quantizes a *JL-rotated* version of ``R`` at low bit-width to recover most
 of that energy cheaply.
 
-Steps:
+Pipeline:
 
 1. Compute ``R = X - X̂``.
 2. Reshape ``R`` to a matrix with last axis ``dh``.
 3. Apply a square JL projection ``Π``: ``R̃ = R @ Π.T``.
 4. Quantize ``R̃`` uniformly at ``b`` bits.
-5. Store ``Π``, the quantized codes, and the scale/zero-point.
+5. Store ``Π`` (seed only — it's regenerable), the quantized codes, and
+   the scale/zero-point.
 
 Decode: invert the JL rotation, add the recovered residual to ``X̂``.
+
+Why JL before quantisation:
+
+A residual's spectrum is *flat* (it's whatever the truncation missed).
+Without rotation, the quantisation error budget would be spent
+overwhelmingly on the largest components — the JL rotation spreads the
+energy uniformly across all components, so a uniform b-bit quantiser
+gives a roughly uniform b-bit error across all entries.
 """
 
 from __future__ import annotations

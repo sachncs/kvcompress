@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/compressor/tucker.py
+# hypothesis_version: 6.148.6
+
+[1.0, 'TuckerFactors', 'mar,ta,dr->mtd', 'mode_n_fold', 'mode_n_unfold', 'mtd,dr->mtr', 'mtr,tn->mnr']

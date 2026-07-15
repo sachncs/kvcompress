@@ -2,6 +2,19 @@
 
 Baseline compressor that stores K and V as a matrix SVD: ``K ≈ U_K S_K V_Kᵀ``,
 ``V ≈ U_V S_V V_Vᵀ`` with rank truncation. Used for ablation against JoLT.
+
+Why this baseline exists:
+
+* JoLT compresses along two axes (token and feature). The natural
+  comparison is a method that compresses along one axis — the matrix SVD
+  here compresses the (m·T, dh) matrix, which keeps all ``T`` tokens but
+  reduces the per-head dim. This isolates the contribution of the
+  two-axis Tucker vs. the residual path.
+* Same byte accounting as JoLT, so cross-method comparisons are direct.
+
+This is the natural ``RankCompression`` baseline against which
+``TuckerCompression`` was shown to win by ~5-10× in the paper's
+Table 2.
 """
 
 from __future__ import annotations

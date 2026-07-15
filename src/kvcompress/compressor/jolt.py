@@ -9,7 +9,23 @@ Combines:
 
 The compressor takes K and V at one layer, applies the allocator to decide
 ranks and residual bit-widths jointly for K and V, compresses each, and
-returns two :class:`CompressedPayload` objects ready for storage.
+returns two :class:`~kvcompress.compressor.base.CompressedPayload`
+objects ready for storage.
+
+Algorithm (per compress() call):
+
+1. Build two :class:`~kvcompress.compressor.allocator.Cell` instances (one
+   each for K and V) describing the cell shape and budget knobs.
+2. Call :meth:`JointAllocator.optimize` to get the per-cell
+   ``(r_token, r_feature, bits)`` decisions.
+3. For each cell: run ST-HOSVD via
+   :func:`~kvcompress.compressor.tucker.partial_tucker_st_hosvd`,
+   compute the residual, JL-rotate and quantise it via
+   :func:`~kvcompress.compressor.residual.encode_residual`.
+4. Package the core + bases + residual payload into a
+   :class:`CompressedPayload` and return the K and V payloads.
+
+The :meth:`decompress` method is the exact inverse.
 """
 
 from __future__ import annotations

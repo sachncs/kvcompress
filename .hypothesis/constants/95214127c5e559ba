@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/compressor/quantization_only.py
+# hypothesis_version: 6.148.6
+
+['bits', 'int-quant-only', 'original_last', 'per_channel', 'q', 'scale', 'symmetric', 'zero_point']

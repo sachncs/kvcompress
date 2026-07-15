@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/compressor/residual.py
+# hypothesis_version: 6.148.6
+
+[1.0, 'ResidualPayload', 'decode_residual', 'encode_residual', 'gaussian', 'group_size', 'int0', 'original_last', 'original_shape', 'packed', 'per_channel', 'projection_seed', 'projection_sparsity', 'q', 'quant_dtype', 'scale', 'symmetric', 'zero_point']

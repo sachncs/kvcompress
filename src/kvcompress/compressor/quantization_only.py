@@ -3,6 +3,11 @@
 Used for ablation against JoLT: this is what an int4 / int8 quantizer
 gives you without any Tucker back-bone. Matches the "KIVI" / "TurboQuant"
 class in the paper's Table 2 baseline column.
+
+The compressor reshapes K and V to 2-D ``(N, dh)`` and quantises along
+the last axis. The bit-width is the *only* compression knob — there's no
+rank or feature-budget trade-off. This is the right comparison for "what
+if I just quantise and skip the Tucker back-bone?".
 """
 
 from __future__ import annotations

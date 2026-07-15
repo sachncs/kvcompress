@@ -15,6 +15,9 @@ Tail-mass accounting: the randomized SVD discards the spectral tail past
 rank captures. FlashJoLT corrects for this by computing τ from the
 randomized SVD's reported ``tail_mass`` (a tight upper bound on the true
 discarded mass) so the allocator sees the same error signal as exact JoLT.
+
+Speed: per the paper, FlashJoLT delivers 5-13× compression-time speedup
+over exact JoLT at matched quality (paper Section 5).
 """
 
 from __future__ import annotations
@@ -41,6 +44,11 @@ log = logging.getLogger(__name__)
 
 def flashjolt_cap(context_length: int, target_ratio: float) -> int:
     """Compute the FlashJoLT cap ``q_cap`` from context length and ratio.
+
+    The policy is a no-op for ``T ≤ 1024`` (where ``q_min`` is the floor)
+    and grows the cap sublinearly beyond that. The 512 cap reflects the
+    paper's observation that the token-mode effective rank rarely exceeds
+    a few hundred even at 8K context.
 
     Args:
         context_length: ``T`` (token axis length).
@@ -145,6 +153,11 @@ class _CapWrapper:
 
     Implements the same ``__call__(a, rank=..., cap=...)`` interface as
     :class:`SVD` but injects ``cap=cap`` so the sketch size is bounded.
+
+    Why a wrapper: :func:`~kvcompress.compressor.tucker.partial_tucker_st_hosvd`
+    calls ``SVD.__call__``, not ``SVD.randomise`` directly. The cap policy
+    lives at the FlashJoLT level, so we wrap the SVD instance to inject
+    the cap at every call site without changing the Tucker API.
     """
 
     def __init__(self, base: SVD, cap: int) -> None:
@@ -152,13 +165,15 @@ class _CapWrapper:
         self.cap = int(cap)
 
     def __call__(self, a, *, rank=None, cap=None):
-        # Force the randomized path with the cap.
+        # Force the randomized path with the cap. Any caller-provided
+        # ``cap`` argument is ignored — the FlashJoLT cap policy is
+        # authoritative.
         return self.base.randomise(a, rank=int(rank), cap=self.cap)
 
-    def exact(self, a: torch.Tensor, rank: int | None = None):
+    def exact(self, a, rank=None):
         return self.base.exact(a, rank=rank)
 
-    def randomise(self, a: torch.Tensor, rank: int, *, cap: int | None = None):
+    def randomise(self, a, rank, *, cap=None):
         return self.base.randomise(a, rank=rank, cap=self.cap)
 
 

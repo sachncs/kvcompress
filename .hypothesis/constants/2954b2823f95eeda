@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/compressor/jolt.py
+# hypothesis_version: 6.148.6
+
+[0.0, 1.0, 3.0, 1000, 'JoLTCompressor', 'achieved_ratio', 'bits', 'call_count', 'core', 'core_dtype', 'exact', 'fp16', 'fp32', 'gaussian', 'int0', 'jolt', 'k_bits', 'k_r_feature', 'k_r_token', 'key', 'lambda_star', 'method', 'r_feature', 'r_token', 'residual_dtype', 'residual_group_size', 'residual_packed', 'residual_per_channel', 'residual_scale', 'residual_seed', 'residual_sparsity', 'residual_symmetric', 'residual_zero_point', 'tail_feature_mass', 'tail_token_mass', 'target_ratio', 'u_feature', 'u_token', 'v_bits', 'v_r_feature', 'v_r_token', 'value']

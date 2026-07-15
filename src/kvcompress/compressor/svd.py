@@ -9,6 +9,19 @@ original space.
 Both paths return a :class:`SVDResult` carrying the singular triples plus a
 ``tail_mass`` scalar — the Frobenius mass discarded by the rank-r truncation.
 FlashJoLT uses ``tail_mass`` for tail-mass accounting on the allocator.
+
+Tail-mass semantics:
+
+* **Exact path**: ``tail_mass = sum(s[r:]**2) / sum(s**2)``. Computed
+  from the full singular spectrum, so it's exact.
+* **Randomised path**: ``tail_mass ≈ 1 - sum(s_r**2) / ||A||_F**2``.
+  ``sum(s_r**2)`` is the retained energy in the rank-``r`` approximation;
+  ``||A||_F**2`` is the full energy. The randomised path can't compute the
+  true discarded tail because it never sees the full spectrum; this
+  estimator is a tight upper bound in expectation when ``n_power ≥ 2``.
+
+The ``cap`` argument to :meth:`randomise` bounds the sketch size, which
+FlashJoLT uses to keep token-mode SVD cheap at long contexts.
 """
 
 from __future__ import annotations
@@ -68,6 +81,11 @@ class SVDResult:
 
 
 def _tail_mass(s: torch.Tensor, r: int) -> float:
+    """Relative Frobenius tail mass past the top-``r`` singular values.
+
+    Returns 0.0 if ``r`` covers the full spectrum or the spectrum is all
+    zeros. Otherwise returns ``sum(s[r:]**2) / sum(s**2)``.
+    """
     if r >= s.shape[0]:
         return 0.0
     total = float(torch.sum(s * s))
@@ -84,10 +102,15 @@ class SVD:
         oversampling: extra columns beyond ``rank`` for the randomised
             sketch. Paper recommends 5-10.
         n_power: number of power iterations. ``0`` skips them (fast but
-            less accurate for matrices with decaying spectra).
+            less accurate for matrices with decaying spectra). With
+            ``n_power ≥ 2`` the randomised estimator of ``tail_mass`` is
+            a tight upper bound in expectation.
         seed: seed for the randomised path. Ignored by :meth:`exact`.
         method: ``"auto"`` picks randomised when ``rank < min(shape) // 2``,
             else exact. ``"exact"`` and ``"randomised"`` force a path.
+
+    Thread-safety: instances are stateless and safe to share across
+    threads. The underlying RNG is a fresh ``torch.Generator`` per call.
     """
 
     def __init__(

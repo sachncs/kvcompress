@@ -3,13 +3,27 @@
 The KV cache at one layer is a third-order tensor
 ``X ∈ R^{m × T × dh}`` where ``m`` merges head count and number of layers in
 the group, ``T`` is the number of tokens, and ``dh`` is the per-head feature
-dim. JoLT applies *partial* Tucker: identity factors on modes 0 (head/layer
+dim. JoLT applies *partial* Tucker: identity bases on modes 0 (head/layer
 merged) and 1 (tokens), with rank truncation only on modes 1 and 2.
 
 Mode pinning is the paper's empirical finding (Appendix B.2): a full
 four-mode allocator reproduces the partial method byte-for-byte by driving
 the head and layer ranks back to their full size, and the partial form is
 2.4-3.0× faster than full HOOI at identical error.
+
+Tensor conventions (used everywhere in this module):
+
+- ``m`` — merged head × layer count for one cell: ``m = |g| · n_h``.
+- ``T`` — token axis length (context).
+- ``dh`` — per-head feature dimension.
+- ``rT`` / ``rd`` — token-mode / feature-mode rank after truncation.
+
+Einsum label discipline: when contracting tensors, the rank indices
+must use *distinct* letters from the actual axes, otherwise einsum
+silently contracts the wrong dimensions. We use ``a`` for the token-rank
+index and ``r`` for the feature-rank index throughout — never ``t`` or
+``d`` because those clash with the actual token-axis and feature-axis
+labels.
 """
 
 from __future__ import annotations
@@ -31,7 +45,7 @@ class TuckerFactors:
     The reconstruction is::
 
         X̂ = core ×_1 I_m ×_2 U_T ×_3 U_d
-          = einsum("mtr,md,tn,dr->mtd", core, eye_m, U_T, U_d)
+          = einsum("mar,ta,dr->mtd", core, u_token, u_feature)
 
     With identity on mode 1 this collapses to a 2-D matmul sequence.
 
@@ -78,6 +92,16 @@ def mode_n_unfold(x: torch.Tensor, mode: int) -> torch.Tensor:
     * mode 0 → ``X[m, t, d] -> X[m, td]`` (each row is a vector of size t·d).
     * mode 1 → ``X[m, t, d] -> X[t, md]`` (each row is a vector of size m·d).
     * mode 2 → ``X[m, t, d] -> X[d, mt]`` (each row is a vector of size m·t).
+
+    Args:
+        x: 3-D input tensor.
+        mode: which mode to unfold along (0, 1, or 2).
+
+    Returns:
+        2-D matrix whose rows are the mode-``mode`` fibres.
+
+    Raises:
+        ValueError: if ``x`` is not 3-D or ``mode`` is not 0/1/2.
     """
     if x.dim() != 3:
         raise ValueError(f"mode_n_unfold expects a 3-D tensor, got {tuple(x.shape)}")
@@ -87,18 +111,34 @@ def mode_n_unfold(x: torch.Tensor, mode: int) -> torch.Tensor:
 def mode_n_fold(mat: torch.Tensor, mode: int, shape: tuple[int, int, int]) -> torch.Tensor:
     """Inverse of :func:`mode_n_unfold`.
 
-    ``mode_n_unfold(mode)`` lays out the tensor as ``(shape[mode], shape[(mode+1)%3], shape[(mode+2)%3])``
-    when ``mode == 0`` (the simple case where the moved axis already sits at
-    position 0), but for ``mode == 1`` and ``mode == 2`` the trailing two axes
-    are reversed. We pick the correct order here.
+    ``mode_n_unfold(mode)`` lays out the tensor as
+    ``(shape[mode], shape[(mode+1)%3], shape[(mode+2)%3])`` when ``mode == 0``,
+    but for ``mode == 1`` and ``mode == 2`` the trailing two axes are
+    reversed. We pick the correct order here so :func:`mode_n_unfold` and
+    :func:`mode_n_fold` are exact inverses.
+
+    Args:
+        mat: 2-D matrix from :func:`mode_n_unfold`.
+        mode: which mode was unfolded.
+        shape: original tensor shape.
+
+    Returns:
+        3-D tensor with the original shape.
+
+    Raises:
+        ValueError: if ``shape`` doesn't have three dims.
     """
     if len(shape) != 3:
         raise ValueError(f"shape must have 3 dims, got {shape}")
     if mode == 0:
         full = mat.reshape(shape[0], shape[1], shape[2])
     elif mode == 1:
+        # moveaxis(1, 0) of (m, t, d) gives (t, m, d); the inverse is
+        # reshape(t, m, d) then moveaxis(0, 1) -> (m, t, d).
         full = mat.reshape(shape[1], shape[0], shape[2])
     else:
+        # moveaxis(2, 0) of (m, t, d) gives (d, m, t); the inverse is
+        # reshape(d, m, t) then moveaxis(0, 2) -> (m, t, d).
         full = mat.reshape(shape[2], shape[0], shape[1])
     return torch.moveaxis(full, 0, mode).contiguous()
 
@@ -116,6 +156,8 @@ def reconstruct_partial_tucker(
     Returns:
         Tensor of shape ``target_shape`` approximating the original input.
     """
+    # Convert Size to plain tuple to keep einsum labels unambiguous and
+    # to make shape validation cheap (avoid repeated .numel() calls).
     m, t, d = tuple(target_shape)
     rt, rd = factors.r_token, factors.r_feature
     if factors.core.shape != (m, rt, rd):
@@ -124,9 +166,8 @@ def reconstruct_partial_tucker(
         raise ValueError(f"u_token shape {factors.u_token.shape} != expected {(t, rt)}")
     if factors.u_feature.shape != (d, rd):
         raise ValueError(f"u_feature shape {factors.u_feature.shape} != expected {(d, rd)}")
-    # X̂[m, t, d] = sum_{rt, rd} core[m, rt, rd] * U_T[t, rt] * U_d[d, rd]
-    # Index labels: m/t/d are actual axes, a = rT (token rank), r = rd (feature
-    # rank). Einsum contracts over the rank labels a and r.
+    # Reconstruction: X̂[m, t, d] = sum_{rt, rd} core[m, rt, rd] * U_T[t, rt] * U_d[d, rd].
+    # ``a`` = token rank, ``r`` = feature rank, ``m/t/d`` = actual axes.
     return torch.einsum(
         "mar,ta,dr->mtd",
         factors.core,
@@ -155,11 +196,25 @@ def partial_tucker_st_hosvd(
 
     Returns:
         :class:`TuckerFactors`.
+
+    Raises:
+        ValueError: if ``x`` is not 3-D.
+
+    Algorithm:
+
+    1. Unfold along the feature mode (smaller dimension) and SVD.
+    2. Project the tensor along the feature mode: ``X ← X ×₃ U_d``.
+    3. Unfold the projected tensor along the token mode and SVD.
+    4. Project along the token mode to get the core.
+
+    Truncating the smaller dimension first bounds the cost of the
+    token-mode SVD by ``T · rd`` rather than ``T · m · d``.
     """
     if x.dim() != 3:
         raise ValueError(f"x must be 3-D, got {tuple(x.shape)}")
     m, t, d = x.shape
 
+    # Cap ranks by the axis length; negative or zero ranks are coerced to 1.
     rt_max = t
     rd_max = d
     rt = rt_max if r_token is None else max(1, min(int(r_token), rt_max))
@@ -169,26 +224,27 @@ def partial_tucker_st_hosvd(
     rt_used = min(rt, t)
     rd_used = min(rd, d)
 
-    # Mode 2 (feature) first — ST-HOSVD convention is to truncate the smaller
-    # mode first to bound numerical cost. Either order works mathematically;
-    # we follow the common "features first, then tokens" convention.
+    # Truncate feature mode first (smaller dim) to bound the cost of the
+    # subsequent token-mode SVD. The SVD class returns u_dh with shape
+    # (d, rd) — the leading rd left singular vectors of the feature
+    # unfolding.
     feat_unfold = mode_n_unfold(x, 2)  # (d, m*T)
     feat_svd = svd(feat_unfold, rank=rd_used)
     u_dh = feat_svd.u  # (d, rd)
     s_dh = feat_svd.s
     feature_tail_mass = feat_svd.tail_mass
 
-    # Project along mode 2.
+    # Project along mode 2: x_proj_dh[m, t, rd] = sum_d x[m, t, d] * u_dh[d, rd].
     x_proj_dh = torch.einsum("mtd,dr->mtr", x, u_dh)
 
-    # Mode 1 (token) next.
+    # Now unfold the projected tensor along the token mode.
     tok_unfold = mode_n_unfold(x_proj_dh, 1)  # (T, m*rd)
     tok_svd = svd(tok_unfold, rank=rt_used)
     u_t = tok_svd.u  # (T, rt)
     s_t = tok_svd.s
     token_tail_mass = tok_svd.tail_mass
 
-    # Project along mode 1.
+    # Project along mode 1: core[m, rt, rd] = sum_t x_proj_dh[m, t, rd] * u_t[t, rt].
     core = torch.einsum("mtr,tn->mnr", x_proj_dh, u_t)
 
     log.debug(
@@ -233,28 +289,24 @@ def estimate_token_rank_for_budget(
 
     Returns:
         Integer token rank ≤ ``T``.
+
+    Note:
+        The cost function ``cost(rt)`` is monotone in ``rt``, so we use a
+        simple linear scan from ``T`` downward. Quadratic root-finding
+        would be asymptotically faster but the ``rt`` range is bounded
+        by the candidate grid (~50 entries) in practice.
     """
     m, t, d = x.shape
     rd = min(int(feature_rank) if feature_rank else d, d)
 
-    # Cost: m*rT*rd + T*rT + d*rd  (in scalars; multiply by dtype_bytes) +
-    # (bits/8) * m * T * d  for the residual.
     def cost(rt: int) -> int:
-        scalars = m * rt * rd + t * rt + d * rd
+        # Eq. 1 in the paper (cost in scalars; multiply by dtype_bytes,
+        # plus residual at ``bits/8`` bytes per entry).
+        tucker_scalars = m * rt * rd + t * rt + d * rd
         residual = (bits_residual // 8) * m * t * d
-        return scalars * dtype_bytes + residual
+        return tucker_scalars * dtype_bytes + residual
 
     rt = t
     while rt > 1 and cost(rt) > budget:
         rt -= 1
     return rt
-
-
-__all__ = [
-    "TuckerFactors",
-    "estimate_token_rank_for_budget",
-    "mode_n_fold",
-    "mode_n_unfold",
-    "partial_tucker_st_hosvd",
-    "reconstruct_partial_tucker",
-]

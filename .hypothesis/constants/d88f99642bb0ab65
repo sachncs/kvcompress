@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/compressor/jl.py
+# hypothesis_version: 6.148.6
+
+[0.5, 1.0, 'JLDistribution', 'JLProjection', 'cached_projection', 'cpu', 'gaussian', 'gaussian_projection', 'rademacher']

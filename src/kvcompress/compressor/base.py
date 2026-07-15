@@ -5,6 +5,21 @@ A :class:`KVCompressor` takes raw key/value tensors at one layer and produces a
 and serialized factors. Decompression is a deterministic function of the
 payload. Every concrete compressor in :mod:`kvcompress.compressor` is a
 subclass.
+
+The contract is intentionally minimal:
+
+* ``compress(K, V) -> (kp, vp)`` returns two payloads.
+* ``decompress(kp, vp) -> (K', V')`` returns reconstructions.
+* :meth:`estimate_size` returns the bytes occupied by one payload.
+
+Compressors don't own caches — that's :class:`CompressedKVCache`'s job.
+This separation lets us swap compression algorithms without touching the
+cache, and vice versa.
+
+Thread-safety: compressors are stateless across calls (all per-call
+state lives in ``CompressedPayload``), so a single instance is safe to
+share across threads. The seeded RNG inside SVD/JL is a fresh
+``torch.Generator`` per call.
 """
 
 from __future__ import annotations
@@ -106,6 +121,11 @@ class CompressedPayload:
 
     @property
     def bytes_original(self) -> int:
+        """Bytes of the original (uncompressed) tensor.
+
+        Computed as ``prod(shape) * dtype_bytes``. Use ``CompressionStats.bytes_original``
+        when you want the *cumulated* original bytes across many calls.
+        """
         n = 1
         for d in self.shape:
             n *= d

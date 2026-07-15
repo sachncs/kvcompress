@@ -37,8 +37,12 @@ from typing import Sequence
 log = logging.getLogger(__name__)
 
 
-# ε²(b) calibration table from the paper. Calibrated on a Gaussian
-# round-trip: 0 → 1 (no residual), 2 → 0.30, 4 → 0.10, 8 → 0.04 (illustrative).
+# ε²(b) calibration table. Default values are calibrated on a Gaussian
+# round-trip: 0 → 1 (no residual), 2 → 0.30, 4 → 0.10, 8 → 0.04.
+#
+# These are illustrative; the paper does not publish exact calibration
+# numbers. Override per-model with ``JointAllocator(epsilon_squared=...)``
+# to improve the allocator's accuracy on a particular architecture.
 _DEFAULT_EPSILON_SQUARED = {0: 1.0, 2: 0.30, 4: 0.10, 8: 0.04}
 
 
@@ -46,10 +50,14 @@ _DEFAULT_EPSILON_SQUARED = {0: 1.0, 2: 0.30, 4: 0.10, 8: 0.04}
 class Cell:
     """One (layer group, K/V) cell the allocator optimizes.
 
+    A :class:`Cell` describes the *shape* and *budget knobs* of one
+    compression target. The allocator solves one :class:`Allocation`
+    decision per cell.
+
     Attributes:
         shape: ``(m, T, dh)`` — the cell's tensor shape.
         kind: ``"key"`` or ``"value"`` (informational).
-        layer_group: layer-group index.
+        layer_group: layer-group index (used by per-group allocators).
         epsilon_squared: per-cell ``ε²(b)`` calibration (defaults to global
             if ``None``).
         candidate_bits: residual bit-widths to consider.
@@ -109,14 +117,22 @@ class AllocationResult:
 class JointAllocator:
     """Per-(layer group, K/V) Lagrangian allocator.
 
+    The allocator solves the global optimisation problem from the paper
+    (Eq. 3): minimise the summed reconstruction error subject to a
+    byte budget. The Lagrangian relaxation (Eq. 4) decouples across
+    cells, so each cell is solved independently and a single ``λ`` is
+    found by bisection.
+
     Args:
         target_ratio: target compression ratio (e.g. ``3.0`` for 3×).
-        epsilon_squared: mapping ``bits → ε²`` used in the error model.
+        epsilon_squared: mapping ``bits → ε²`` used in the error model
+            (Eq. 2). Defaults to a Gaussian round-trip calibration.
         factor_dtype_bytes: bytes per scalar in the Tucker core and bases
             (default 2 for fp16).
         max_token_rank: optional cap on token rank to keep the grid search
             tractable on very long contexts.
-        bits_grid: residual bit-widths considered. Defaults to ``(0, 2, 4, 8)``.
+        bits_grid: residual bit-widths considered. Defaults to ``(0, 2, 4, 8)``
+            which matches the paper's grid.
     """
 
     def __init__(
@@ -270,6 +286,11 @@ class JointAllocator:
         tau_table: dict[int, list[float]] | None,
         idx: int,
     ) -> list[Allocation]:
+        """Enumerate the (r_token, r_feature, bits) candidates for one cell.
+
+        Cost is Eq. 1: tucker_scalars * c + (b/8) * m * T * d.
+        Error is Eq. 2: ε²(b) * τ(r_token, r_feature).
+        """
         m, t, d = cell.shape
         c_bytes = self.factor_dtype_bytes
         eps = cell.epsilon_squared or self.epsilon_squared
@@ -290,11 +311,12 @@ class JointAllocator:
             for rd in candidate_rd:
                 rt = min(rt, t)
                 rd = min(rd, d)
-                # Tucker cost in scalars.
+                # Cost in scalars: tucker core + tucker bases.
                 tucker_scalars = m * rt * rd + t * rt + d * rd
                 tucker_bytes = tucker_scalars * c_bytes
-                # Tail mass for this (rT, rd). The simple model is a product
-                # of two decay factors; if tau_table is provided, look up.
+                # Tail mass for this (rT, rd). The simple model is
+                # max(1 - rT/T, 1 - rd/d); if tau_table is provided,
+                # use the empirical lookup.
                 tau = self._tau(tau_table, idx, rt, rd, t, d)
                 for b in bits_grid:
                     residual_bytes = (b // 8) * m * t * d
@@ -321,13 +343,20 @@ class JointAllocator:
         t: int,
         d: int,
     ) -> float:
-        """Relative Frobenius tail mass τ(rT, rd) for a cell.
+        """Relative Frobenius tail mass ``τ(rT, rd)`` for a cell.
 
-        Simple model: ``τ = max(1 - rT/T, 1 - rd/d)`` — the worst-case
+        Default model: ``τ = max(1 - rT/T, 1 - rd/d)`` — the worst-case
         truncation across the two modes. This is monotone in both ranks,
         equals zero only when both modes are full, and is positive whenever
         *any* truncation happens (so the residual budget is meaningful).
-        Replace with a precomputed lookup if available.
+
+        The paper notes that the simple product ``(1 - rT/T) * (1 - rd/d)``
+        is wrong because it returns zero when only one mode is truncated.
+        The max-of-terms form matches the empirical behaviour of real
+        KV cache spectra.
+
+        Replace with a precomputed lookup (``tau_table[idx]`` indexed by
+        ``rt * d + rd``) when calibration data is available.
         """
         if tau_table is not None and idx in tau_table:
             try:

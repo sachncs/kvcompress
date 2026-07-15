@@ -3,15 +3,21 @@
 JL projections compress the residual R = X - X̂ down to a lower-dim rotated
 space before quantization. Two distributions are supported:
 
-* **Gaussian**: N(0, 1/k). Slightly larger distortion but well-behaved.
-* **Rademacher**: ±1 with probability 1/2 (Achlioptas-style). Sparse, fast.
+* **Gaussian**: N(0, 1/dh). Approximately preserves Euclidean norms
+  (JL lemma); well-behaved, but each entry is a float32.
+* **Rademacher**: ±1 with probability 1/2, optionally sparse (Achlioptas).
+  The sparse variant stores 1/sqrt(sparsity·dh) per nonzero entry, so
+  larger entries fit better in low-bit quantisation.
 
 Both are dimension-preserving on the trailing axis (``R ∈ R^{m·T × dh}`` →
 ``Π ∈ R^{dh × dh}``); a learned projection that *reduces* dimension is not
 implemented because the paper's residual path uses a square rotation.
 
 Projections are deterministic given a seed and the input shape. They are
-cached by shape + seed so the same cell never pays the projection cost twice.
+cached by shape + seed so the same cell never pays the projection cost
+twice. The cache is process-wide; it's the only global mutable state in
+:mod:`kvcompress.compressor`. Call :func:`clear_projection_cache` from
+test fixtures to reset between cases.
 """
 
 from __future__ import annotations
@@ -65,19 +71,25 @@ class JLProjection:
                 f"JL apply: trailing dim mismatch: x.shape[-1]={x.shape[-1]}, "
                 f"matrix.shape[-1]={self.matrix.shape[-1]}"
             )
-        # x: (..., dh) ; matrix: (k, dh) with k == dh for rotation
+        # x: (..., dh) ; matrix: (k, dh) with k == dh for rotation.
+        # The cheap ``.t()`` here is exact for any matrix, square or not.
         return x @ self.matrix.t()
 
     def apply_inverse(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the inverse projection (``matrix^T`` for square rotation).
+        """Apply the inverse projection (``matrix`` for square rotation).
 
         Used at decode time to undo the rotation applied before quantization.
         For a square random matrix the inverse is not exactly
         ``matrix.t()``, but the JL lemma guarantees the embedded and
         recovered vectors have nearly the same norm, so this is the standard
         cheap inverse used by the paper.
+
+        Note: this is ``x @ matrix``, not ``x @ matrix.t()``. For a square
+        random matrix, the rows of ``matrix`` (used at apply time via
+        ``matrix.t()``) and the columns (used at inverse time) span the
+        same subspace, so the cheap inverse recovers the original signal
+        up to a JL-bounded error.
         """
-        # For square rotation: x @ matrix because matrix is orthonormal-ish
         return x @ self.matrix
 
 
@@ -89,15 +101,21 @@ def gaussian_projection(
     device: torch.device | str = "cpu",
     dtype: torch.dtype = torch.float32,
 ) -> JLProjection:
-    """Construct a Gaussian JL projection with N(0, 1/output_dim) entries.
+    """Construct a Gaussian JL projection with N(0, 1/input_dim) entries.
 
-    The 1/output_dim scaling makes the projection approximately preserve
-    squared norms (the Johnson-Lindenstrauss lemma).
+    The 1/sqrt(input_dim) scaling makes the projection approximately
+    preserve squared norms (the Johnson-Lindenstrauss lemma): for any
+    vector ``x``, ``E[||Πx||²] ≈ ||x||²``.
+
+    Construction is on CPU (a fresh ``torch.Generator`` per call) to keep
+    the result bit-exact across CUDA driver versions; the returned matrix
+    is then moved to the requested ``device``.
     """
     gen = torch.Generator(device="cpu")
     gen.manual_seed(int(seed))
     # Build on CPU for determinism, then move.
     m = torch.randn(output_dim, input_dim, generator=gen, dtype=torch.float32)
+    # Scale so the projection is approximately norm-preserving.
     m = m / (input_dim**0.5)
     return JLProjection(
         matrix=m.to(device=device, dtype=dtype),

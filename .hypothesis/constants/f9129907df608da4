@@ -1,0 +1,4 @@
+# file: /Users/sachin/repo/jolt/src/kvcompress/compressor/base.py
+# hypothesis_version: 6.148.6
+
+[0.0, 1.0, 'base', 'bytes_compressed', 'bytes_original', 'compress_time_ms', 'compression_ratio', 'decompress_time_ms', 'reconstruction_error']

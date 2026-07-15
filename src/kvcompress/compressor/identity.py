@@ -3,6 +3,11 @@
 Useful as a baseline for ablation studies: it stores K and V in fp16
 (half the size of fp32, same as fp16 model weights) so memory accounting
 is realistic but no JoLT-specific operations are performed.
+
+The "identity" name is misleading: this compressor does halve the cache
+size by casting to fp16. Use ``raw`` semantics (no cast) only if your
+model's weights are already in fp32 and you genuinely want the baseline
+to be byte-equivalent to the uncompressed cache.
 """
 
 from __future__ import annotations

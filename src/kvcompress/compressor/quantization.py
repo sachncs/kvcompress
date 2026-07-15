@@ -19,6 +19,17 @@ All quantizers expose the same protocol:
 Round-trip is reversible up to numerical noise — the absolute error is
 bounded by half a quantization bin. The paper uses these primitives for the
 JL-residual code path.
+
+The bit-packing offset trick:
+
+    Symmetric quantisation maps ``q_int ∈ [-2^(b-1), 2^(b-1) - 1]`` to
+    ``q_unsigned = q_int + 2^(b-1) ∈ [0, 2^b - 1]`` so two's-complement
+    bit patterns line up with a contiguous uint8 representation. Asymmetric
+    quantisation already lives in ``[0, 2^b)`` so no offset is applied.
+    The decoder subtracts the same offset (or nothing) to recover signed
+    values. The 8-bit path uses an explicit offset to keep uint8 values
+    in ``[0, 255]`` rather than wrapping in int8 (which would corrupt values
+    ≥ 128).
 """
 
 from __future__ import annotations
@@ -130,10 +141,22 @@ def _bit_packing_signed(
 ) -> torch.Tensor:
     """Pack signed int tensor of width ``bits`` into ``uint8``.
 
-    For symmetric quantization the input range is ``[-2^(bits-1), 2^(bits-1) - 1]``;
-    we add an offset of ``2^(bits-1)`` to map it into ``[0, 2^bits)``. For
-    asymmetric quantization the input is already in ``[qmin, qmax]`` (typically
-    ``[0, 2^bits - 1]``) and no offset is applied.
+    For symmetric quantization the input range is
+    ``[-2^(bits-1), 2^(bits-1) - 1]``; we add an offset of ``2^(bits-1)`` to
+    map it into ``[0, 2^bits)``. For asymmetric quantization the input is
+    already in ``[qmin, qmax]`` (typically ``[0, 2^bits - 1]``) and no offset
+    is applied.
+
+    Implementation notes:
+
+    * The 8-bit path uses an explicit offset to keep uint8 values in
+      ``[0, 255]`` rather than wrapping through int8 (which would corrupt
+      values ≥ 128).
+    * The 4-bit path packs two entries per byte: low indices in the high
+      nibble, high indices in the low nibble. Last-dim padding to even
+      length happens before packing.
+    * The 2-bit path packs four entries per byte, big-endian across the
+      pair. Last-dim padding to a multiple of 4 happens before packing.
     """
     offset = 1 << (bits - 1) if symmetric else 0
     if bits == 8:
