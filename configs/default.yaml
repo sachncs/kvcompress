@@ -1,0 +1,20 @@
+default:
+  method: flashjolt
+  target_memory: "33%"        # 3x compression
+  layer_groups: 1
+  bits: [0, 2, 4, 8]
+  seed: 0
+
+showcase:
+  tinyllama:
+    model: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    method: flashjolt
+    target_memory: "33%"
+  qwen:
+    model: Qwen/Qwen2.5-0.5B-Instruct
+    method: flashjolt
+    target_memory: "33%"
+  gpt2:
+    model: gpt2
+    method: jolt
+    target_memory: "50%"

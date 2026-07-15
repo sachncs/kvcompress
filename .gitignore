@@ -1,0 +1,52 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artefacts
+*.pyc
+*.pyd
+
+# Benchmark artefacts
+benchmarks/output/
+benchmarks/plots/
+*.png
+!docs/**/*.png
+
+# Model cache
+models/
+.cache/
+*.bin
+*.safetensors
+!tests/fixtures/**
