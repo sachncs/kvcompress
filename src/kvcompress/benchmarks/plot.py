@@ -20,7 +20,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 
-def _have_matplotlib() -> bool:
+def have_matplotlib() -> bool:
     """Return True if ``matplotlib`` is importable."""
     try:
         import matplotlib  # noqa: F401
@@ -39,7 +39,7 @@ def plot_memory_sweep(rows: list[dict[str, Any]], output_path: str | Path) -> No
 
     Skips silently if matplotlib isn't installed.
     """
-    if not _have_matplotlib():
+    if not have_matplotlib():
         log.warning("matplotlib not installed; skipping plot")
         return
     import matplotlib.pyplot as plt
@@ -79,7 +79,7 @@ def plot_reconstruction_table(rows: list[dict[str, Any]], output_path: str | Pat
     Y-axis is log scale because the spread across methods is large.
     Skips silently if matplotlib isn't installed.
     """
-    if not _have_matplotlib():
+    if not have_matplotlib():
         log.warning("matplotlib not installed; skipping plot")
         return
     import matplotlib.pyplot as plt

@@ -46,6 +46,9 @@ class LayerCompression:
         seed: seed used for JL / randomized SVD on this layer.
         bytes_original: size of the original (m, T, dh) tensor in bytes.
         bytes_compressed: bytes occupied by the stored factors + residual.
+        group_id: layer-group index (forwarded by the caller; downstream
+            tooling like vLLM offload uses it to bucket layers).
+        group_size: number of layers per group (forwarded by the caller).
     """
 
     layer: int
@@ -60,6 +63,8 @@ class LayerCompression:
     seed: int = 0
     bytes_original: int = 0
     bytes_compressed: int = 0
+    group_id: int = 0
+    group_size: int = 1
 
     @property
     def shape(self) -> tuple[int, int, int]:

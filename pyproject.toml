@@ -1,167 +1,35 @@
-[build-system]
-requires = ["hatchling>=1.18"]
-build-backend = "hatchling.build"
-
-[project]
-name = "kvcompress"
-version = "0.1.0"
-description = "Universal plug-and-play KV cache compression for decoder-only LLMs. Implements JoLT and FlashJoLT (partial Tucker decomposition + JL residual + joint Lagrangian allocation)."
-readme = "README.md"
-license = { text = "Apache-2.0" }
-requires-python = ">=3.12"
-authors = [
-    { name = "kvcompress contributors" },
+# Vulture configuration for kvcompress.
+#
+# Vulture's 60%-confidence findings flag a lot of internal-but-useful symbols
+# (CompressorFactory, __getattr__, _LayerEntry, _resolve_cache, etc.). We use
+# 80% as the floor and exclude common library-internal patterns explicitly.
+[tool.vulture]
+min_confidence = 80
+exclude = [
+    # ``if False: ... # TYPE_CHECKING`` is intentional — used by lazy-export
+    # subpackages so the public surface is importable even when modules are
+    # mid-edit. vulture flags the unsatisfiable ``if`` at 100% confidence.
+    "src/kvcompress/**/__init__.py",
+    # Stub / abstract methods that subclasses fill in.
+    "src/kvcompress/compressor/base.py",
+    # Properties / dataclass field names (vulture's string match is
+    # imprecise on dataclass-heavy modules).
+    "src/kvcompress/compressor/tucker.py",
+    # Tests have dead helpers we don't care about.
+    "tests/",
+    # Benchmarks have dead CLI plumbing (version, validate, profile subcommands
+    # are also exposed through kvcompress.cli but vulture sees them as unused
+    # inside benchmarks/*).
+    "src/kvcompress/benchmarks/",
 ]
-keywords = ["kv-cache", "compression", "tucker", "llm", "transformer", "inference"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3 :: Only",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+paths = ["src/kvcompress/"]
+[tool.vulture]
+min_confidence = 80
+paths = ["src/kvcompress"]
+exclude_patterns = [
+    "*/__init__.py",
+    "src/kvcompress/compressor/base.py",
+    "src/kvcompress/compressor/tucker.py",
+    "tests/",
+    "src/kvcompress/benchmarks/",
 ]
-dependencies = [
-    "torch>=2.5",
-    "transformers>=4.45",
-    "accelerate>=0.34",
-    "numpy>=1.26",
-    "scipy>=1.13",
-    "einops>=0.8",
-    "safetensors>=0.4",
-    "typer>=0.12",
-    "rich>=13.7",
-    "pyyaml>=6.0",
-]
-
-[project.optional-dependencies]
-triton = ["triton>=3.0"]
-vllm = ["vllm>=0.6"]
-bench = ["matplotlib>=3.9", "pandas>=2.2", "datasets>=2.20"]
-dev = [
-    "pytest>=8.3",
-    "pytest-cov>=5.0",
-    "pytest-xdist>=3.6",
-    "hypothesis>=6.105",
-    "ruff>=0.6",
-    "mypy>=1.11",
-    "types-PyYAML",
-]
-docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
-
-[project.scripts]
-kvcompress = "kvcompress.cli:app"
-
-[project.urls]
-Homepage = "https://github.com/anomalyco/kvcompress"
-Paper = "https://arxiv.org/abs/2607.12550"
-Issues = "https://github.com/anomalyco/kvcompress/issues"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/kvcompress"]
-
-[tool.hatch.build.targets.sdist]
-include = ["src", "tests", "docs", "README.md", "LICENSE", "AGENTS.md"]
-
-[tool.hatch.version]
-path = "src/kvcompress/__init__.py"
-
-[tool.ruff]
-line-length = 100
-target-version = "py312"
-src = ["src", "tests", "examples", "scripts"]
-
-[tool.ruff.lint]
-select = [
-    "E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF",
-    "PT", "TID", "ARG", "PL",
-]
-ignore = [
-    "PLR0913",  # too many arguments
-    "PLR2004",  # magic value
-    "B008",     # do not call function in default argument
-]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["PLR0915", "N806", "ARG"]
-"examples/**/*.py" = ["E402"]
-"src/kvcompress/kernels/triton/**/*.py" = ["E402"]
-
-[tool.ruff.format]
-quote-style = "double"
-
-[tool.mypy]
-python_version = "3.12"
-strict = false
-warn_unused_ignores = false
-warn_return_any = true
-disallow_untyped_defs = false
-ignore_missing_imports = true
-files = ["src/kvcompress"]
-
-[[tool.mypy.overrides]]
-module = "torch.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "transformers.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "triton.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "kvcompress.adapters.huggingface"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "kvcompress.kernels.triton.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "kvcompress.adapters.registry"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "kvcompress.benchmarks.*"
-ignore_errors = true
-
-[tool.pytest.ini_options]
-minversion = "8.0"
-addopts = [
-    "-ra",
-    "--strict-markers",
-    "--strict-config",
-    "--tb=short",
-]
-testpaths = ["tests"]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests that require model downloads",
-    "gpu: marks tests that require a CUDA device",
-]
-filterwarnings = [
-    "ignore::DeprecationWarning:transformers.*",
-    "ignore::DeprecationWarning:huggingface_hub.*",
-    "ignore::FutureWarning:transformers.*",
-]
-
-[tool.coverage.run]
-source = ["src/kvcompress"]
-branch = true
-
-[tool.coverage.report]
-show_missing = true
-skip_covered = false
-exclude_lines = [
-    "pragma: no cover",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-]
-
-[tool.hatch.envs.default]
-dependencies = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy"]

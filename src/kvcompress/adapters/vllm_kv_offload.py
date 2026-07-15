@@ -168,7 +168,7 @@ class JoLTOffloadWorker:
         for payload in handle:
             # Try to find the matching V payload in the pool by layer.
             layer_idx = next(
-                (e.layer for e in self._iter_meta() if e.kind == "value"),
+                (e.layer for e in getattr(self, "_meta", []) if e.kind == "value"),
                 None,
             )
             v_payload = self._pool.get(layer_idx) if layer_idx is not None else None
@@ -181,12 +181,6 @@ class JoLTOffloadWorker:
                 out.append(k)
                 out.append(v)
         return out
-
-    def _iter_meta(self) -> Any:
-        """Iterator over the metadata entries we've stored so far."""
-        # The pool values are payloads, not metadata. We keep a small
-        # metadata sidecar for the lookup in restore().
-        return getattr(self, "_meta", [])
 
     # ------------------------------------------------------------------
     # Optional overrides

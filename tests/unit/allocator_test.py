@@ -106,7 +106,7 @@ def test_allocator_extreme_budget_min_cost() -> None:
 def test_allocator_per_cell_grid_finite() -> None:
     cell = Cell(shape=(4, 128, 32))
     alloc = JointAllocator(target_ratio=3.0)
-    grid = alloc._build_cell_grid(cell, None, 0)
+    grid = alloc.build_cell_grid(cell, None, 0)
     # Grid size is candidate_rt × candidate_rd × bits.
     assert all(isinstance(a, Allocation) for a in grid)
     assert all(a.cost_bytes > 0 for a in grid)
@@ -116,9 +116,9 @@ def test_allocator_lambda_monotone() -> None:
     """Higher λ should produce lower total cost (monotone)."""
     cells = _cells()
     alloc = JointAllocator(target_ratio=3.0)
-    grid = [alloc._build_cell_grid(c, None, i) for i, c in enumerate(cells)]
-    cost_low = sum(a.cost_bytes for a in alloc._argmin_per_cell(grid, 0.0))
-    cost_high = sum(a.cost_bytes for a in alloc._argmin_per_cell(grid, 100.0))
+    grid = [alloc.build_cell_grid(c, None, i) for i, c in enumerate(cells)]
+    cost_low = sum(a.cost_bytes for a in alloc.argmin_per_cell(grid, 0.0))
+    cost_high = sum(a.cost_bytes for a in alloc.argmin_per_cell(grid, 100.0))
     assert cost_high <= cost_low
 
 

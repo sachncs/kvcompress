@@ -95,7 +95,10 @@ def validate(
                 ids = tok.encode("Hello", return_tensors="pt")
                 with torch.no_grad():
                     out = model.generate(
-                        ids, max_new_tokens=5, do_sample=False, pad_token_id=tok.eos_token_id
+                        ids,
+                        max_new_tokens=5,
+                        do_sample=False,
+                        pad_token_id=tok.eos_token_id,
                     )
                 typer.echo(f"  HF smoke test: {tok.decode(out[0])}")
             finally:
@@ -235,7 +238,10 @@ def compress(
             ids = tok.encode(prompt, return_tensors="pt")
             with torch.no_grad():
                 out = mdl.generate(
-                    ids, max_new_tokens=max_new, do_sample=False, pad_token_id=tok.eos_token_id
+                    ids,
+                    max_new_tokens=max_new,
+                    do_sample=False,
+                    pad_token_id=tok.eos_token_id,
                 )
             typer.echo(tok.decode(out[0]))
             typer.echo(json.dumps(handle.stats_dict(), indent=2))

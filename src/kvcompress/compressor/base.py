@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import abc
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -180,16 +179,21 @@ class KVCompressor(abc.ABC):
         raise NotImplementedError
 
     def estimate_size(self, payload: CompressedPayload) -> int:
-        """Return bytes occupied by ``payload``."""
+        """Return bytes occupied by ``payload``.
+
+        Default implementation delegates to ``payload.bytes_compressed``.
+        Compressors with a more accurate measurement (e.g. accounting for
+        unpacking overhead) should override.
+        """
         return payload.bytes_compressed
 
     def stats(self) -> dict[str, Any]:
-        """Return aggregated stats for all calls so far on this instance."""
+        """Return aggregated stats for all calls so far on this instance.
+
+        Default implementation returns an empty dict; subclasses
+        override to track their own timing and byte counters.
+        """
         return {}
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(name={self.name!r})"
-
-
-# A factory callable for pluggable compressor construction.
-CompressorFactory = Callable[..., KVCompressor]

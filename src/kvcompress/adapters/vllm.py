@@ -48,10 +48,10 @@ from kvcompress.runtime.profiler import CompressionProfiler
 log = logging.getLogger(__name__)
 
 
-def _build_compressor(method: str, **kwargs: Any) -> KVCompressor:
+def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
     """Construct the named compressor from a public API string.
 
-    Mirrors :func:`kvcompress.adapters.huggingface._build_compressor` but
+    Mirrors :func:`kvcompress.adapters.huggingface.build_compressor` but
     is duplicated here to avoid an import cycle.
 
     Args:
@@ -76,7 +76,7 @@ def _build_compressor(method: str, **kwargs: Any) -> KVCompressor:
     )
 
 
-def _resolve_cache(model: Any) -> Any:
+def resolve_cache(model: Any) -> Any:
     """Locate the live :class:`DynamicCache` instance on a model.
 
     Different frameworks store the cache in different places:
@@ -143,9 +143,9 @@ def export_kv(
             "safetensors is required for export_kv; install with `pip install safetensors`"
         ) from e
 
-    cache = _resolve_cache(model)
+    cache = resolve_cache(model)
     if compressor is None:
-        compressor = _build_compressor(
+        compressor = build_compressor(
             method,
             compression_ratio=compression_ratio,
             bits=bits,
@@ -163,7 +163,8 @@ def export_kv(
         k = layer.keys
         v = layer.values
         with profiler.record(
-            "compress", bytes_in=k.numel() * k.element_size() + v.numel() * v.element_size()
+            "compress",
+            bytes_in=k.numel() * k.element_size() + v.numel() * v.element_size(),
         ):
             tmp_cache.store(layer_idx, k, v)
 
@@ -235,11 +236,11 @@ def import_kv(
             "safetensors is required for import_kv; install with `pip install safetensors`"
         ) from e
 
-    cache = _resolve_cache(model)
+    cache = resolve_cache(model)
     tensors = load_file(path)
 
     # Reconstruct a CompressedKVCache from the loaded tensors.
-    compressor = _build_compressor(
+    compressor = build_compressor(
         method,
         compression_ratio=compression_ratio or 3.0,
         bits=bits,

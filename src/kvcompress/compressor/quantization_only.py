@@ -54,25 +54,27 @@ class IntQuantOnlyCompressor(KVCompressor):
         self.bits = int(bits)
         self.per_channel = per_channel
         self.symmetric = symmetric
-        self.quantizer = IntQuantizer(bits=bits, symmetric=symmetric, per_channel=per_channel)
+        # Eagerly construct the quantizer so failures surface at __init__
+        # time rather than at the first compress() call.
+        self._quantizer = IntQuantizer(bits=bits, symmetric=symmetric, per_channel=per_channel)
 
     def compress(
         self,
         key: torch.Tensor,
         value: torch.Tensor,
     ) -> tuple[CompressedPayload, CompressedPayload]:
-        return self._compress_one(key), self._compress_one(value)
+        return self.compress_one(key), self.compress_one(value)
 
     def decompress(
         self,
         key_payload: CompressedPayload,
         value_payload: CompressedPayload,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        k = self._decompress_one(key_payload)
-        v = self._decompress_one(value_payload)
+        k = self.decompress_one(key_payload)
+        v = self.decompress_one(value_payload)
         return k, v
 
-    def _compress_one(self, x: torch.Tensor) -> CompressedPayload:
+    def compress_one(self, x: torch.Tensor) -> CompressedPayload:
         # Reshape 3-D to 2-D for per-channel quantization along the last axis.
         original_shape = tuple(x.shape)
         flat = x.reshape(-1, original_shape[-1])
@@ -106,7 +108,7 @@ class IntQuantOnlyCompressor(KVCompressor):
             ),
         )
 
-    def _decompress_one(self, payload: CompressedPayload) -> torch.Tensor:
+    def decompress_one(self, payload: CompressedPayload) -> torch.Tensor:
         flat = dequantize_tensor(
             {
                 "q": payload.data["q"],

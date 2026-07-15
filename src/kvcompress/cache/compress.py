@@ -9,6 +9,10 @@ Public surface:
 * :class:`CompressedKVCache` — per-call store/retrieve; thread-unsafe but
   re-entrant for single-inference workloads.
 * :class:`CacheManager` — high-level facade for HF integration.
+* :class:`LayerEntry` — one (layer, K, V) record held inside the cache.
+* :func:`normalize_kv` — reshape HF-style K/V to ``(m, T, dh)``.
+* :func:`payload_to_meta` — convert a payload to a
+  :class:`~kvcompress.cache.metadata.LayerCompression`.
 
 The split mirrors ``DynamicCache``'s split between raw storage and the
 model-facing API.
@@ -18,7 +22,7 @@ Lifecycle:
 1. Caller creates a :class:`CompressedKVCache` with a compressor and
    optional eviction cap.
 2. ``store(layer, K, V)`` accepts K/V in either ``(B, n_kv, T, dh)`` or
-   ``(n_kv, T, dh)`` layout (see :func:`_normalize_kv`). It compresses
+   ``(n_kv, T, dh)`` layout (see :func:`normalize_kv`). It compresses
    each tensor via the compressor and stashes the
    :class:`~kvcompress.compressor.base.CompressedPayload`.
 3. ``retrieve(layer)`` returns the reconstructed K/V pair. The cache
@@ -43,18 +47,24 @@ from typing import Any
 
 import torch
 
-from kvcompress.cache.metadata import CompressionMetadata
+from kvcompress.cache.metadata import CompressionMetadata, LayerCompression
 from kvcompress.compressor.base import CompressedPayload, KVCompressor
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
-class _LayerEntry:
-    """Internal per-(layer) entry.
+class LayerEntry:
+    """One (layer, K, V) record held inside :class:`CompressedKVCache`.
 
-    Holds the compressed key and value payloads plus optional precomputed
-    JL projections for the residual path.
+    Attributes:
+        layer: layer index.
+        key: compressed K payload, or ``None`` while a layer is being
+            populated.
+        value: compressed V payload, or ``None`` while a layer is being
+            populated.
+        extras: compressor-specific extra data (currently unused; kept
+            for forward compatibility).
     """
 
     layer: int
@@ -97,14 +107,14 @@ class CompressedKVCache:
             device: device tensors will be moved to on reconstruction.
                 ``None`` preserves the device of the stored factors.
         """
-        self._compressor = compressor
-        self._metadata = metadata or CompressionMetadata(
+        self.compressor = compressor
+        self.metadata_ = metadata or CompressionMetadata(
             method=compressor.name,
             dtype="unknown",
         )
-        self._max_layers = max_layers
-        self._device = torch.device(device) if device is not None else None
-        self._entries: OrderedDict[int, _LayerEntry] = OrderedDict()
+        self.max_layers = max_layers
+        self.device = torch.device(device) if device is not None else None
+        self.entries: OrderedDict[int, LayerEntry] = OrderedDict()
 
     # ------------------------------------------------------------------
     # Read / write
@@ -127,34 +137,44 @@ class CompressedKVCache:
             layer: layer index.
             key: tensor of shape ``(B, n_kv, T, dh)`` or ``(n_kv, T, dh)``.
             value: same shape as ``key``.
-            group_id: layer-group index used by the allocator.
-            group_size: number of layers per group.
+            group_id: layer-group index used by the allocator (forwarded
+                to ``CompressionMetadata`` so downstream tooling can split
+                layers into groups).
+            group_size: number of layers per group (forwarded to metadata).
             bits: residual bit-widths to consider.
             seed: per-layer seed.
         """
-        k, v = _normalize_kv(key, value)
-        k_payload, v_payload = self._compressor.compress(k, v)
-        entry = _LayerEntry(layer=layer, key=k_payload, value=v_payload)
-        self._entries[layer] = entry
-        self._entries.move_to_end(layer)
-        self._metadata.add_layer(_payload_to_meta(layer, "key", k, k_payload, seed))
-        self._metadata.add_layer(_payload_to_meta(layer, "value", v, v_payload, seed))
-        self._enforce_eviction()
+        k, v = normalize_kv(key, value)
+        k_payload, v_payload = self.compressor.compress(k, v)
+        entry = LayerEntry(layer=layer, key=k_payload, value=v_payload)
+        self.entries[layer] = entry
+        self.entries.move_to_end(layer)
+        self.metadata_.add_layer(
+            payload_to_meta(layer, "key", k, k_payload, seed, group_id, group_size)
+        )
+        self.metadata_.add_layer(
+            payload_to_meta(layer, "value", v, v_payload, seed, group_id, group_size)
+        )
+        self.enforce_eviction()
 
     def retrieve(
         self,
         layer: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Reconstruct and return the K/V pair for one layer."""
-        entry = self._entries.get(layer)
+        """Reconstruct and return the K/V pair for ``layer``.
+
+        Raises:
+            KeyError: if ``layer`` isn't in the cache or isn't fully populated.
+        """
+        entry = self.entries.get(layer)
         if entry is None:
             raise KeyError(f"layer {layer} not in cache")
         if entry.key is None or entry.value is None:
             raise KeyError(f"layer {layer} is not fully populated")
-        k, v = self._compressor.decompress(entry.key, entry.value)
-        if self._device is not None:
-            k = k.to(self._device)
-            v = v.to(self._device)
+        k, v = self.compressor.decompress(entry.key, entry.value)
+        if self.device is not None:
+            k = k.to(self.device)
+            v = v.to(self.device)
         return k, v
 
     def payload(
@@ -162,8 +182,13 @@ class CompressedKVCache:
         layer: int,
         kind: str,
     ) -> CompressedPayload:
-        """Return the raw payload for one (layer, kind) cell."""
-        entry = self._entries[layer]
+        """Return the raw payload for one (layer, kind) cell.
+
+        Raises:
+            ValueError: if ``kind`` isn't ``"key"`` or ``"value"``.
+            IndexError: if ``layer`` isn't in the cache.
+        """
+        entry = self.entries[layer]
         if kind == "key":
             return entry.key  # type: ignore[return-value]
         if kind == "value":
@@ -172,17 +197,17 @@ class CompressedKVCache:
 
     def has_layer(self, layer: int) -> bool:
         """Return ``True`` if the cache has an entry for ``layer``."""
-        return layer in self._entries
+        return layer in self.entries
 
     def clear(self) -> None:
         """Drop every entry and reset the metadata layer list."""
-        self._entries.clear()
-        self._metadata.layers.clear()
+        self.entries.clear()
+        self.metadata_.layers.clear()
 
     def evict_layer(self, layer: int) -> None:
         """Remove the entry for ``layer`` if present; no-op otherwise."""
-        self._entries.pop(layer, None)
-        self._metadata.layers = [entry for entry in self._metadata.layers if entry.layer != layer]
+        self.entries.pop(layer, None)
+        self.metadata_.layers = [entry for entry in self.metadata_.layers if entry.layer != layer]
 
     # ------------------------------------------------------------------
     # Memory accounting
@@ -190,11 +215,11 @@ class CompressedKVCache:
 
     def memory_used(self) -> int:
         """Bytes occupied by all stored factors + residuals."""
-        return sum(p.bytes_compressed for p in self._all_payloads())
+        return sum(p.bytes_compressed for p in self.all_payloads())
 
     def memory_original(self) -> int:
         """Sum of ``bytes_original`` across all stored payloads."""
-        return sum(p.bytes_original for p in self._all_payloads())
+        return sum(p.bytes_original for p in self.all_payloads())
 
     def compression_ratio(self) -> float:
         """Achieved compression ratio across all stored payloads.
@@ -214,16 +239,16 @@ class CompressedKVCache:
             ``bytes_compressed``, ``compression_ratio``, ``method``.
         """
         return {
-            "n_layers": len(self._entries),
+            "n_layers": len(self.entries),
             "bytes_original": self.memory_original(),
             "bytes_compressed": self.memory_used(),
             "compression_ratio": self.compression_ratio(),
-            "method": self._compressor.name,
+            "method": self.compressor.name,
         }
 
     def metadata(self) -> CompressionMetadata:
         """Return the live :class:`CompressionMetadata` (mutated in place)."""
-        return self._metadata
+        return self.metadata_
 
     # ------------------------------------------------------------------
     # Iteration
@@ -231,44 +256,44 @@ class CompressedKVCache:
 
     def layers(self) -> Iterator[int]:
         """Iterate over live layer indices in insertion order."""
-        return iter(list(self._entries.keys()))
+        return iter(list(self.entries.keys()))
 
     def __len__(self) -> int:
         """Number of layers currently stored."""
-        return len(self._entries)
+        return len(self.entries)
 
     def __contains__(self, layer: int) -> bool:
         """``layer in cache`` is ``True`` when the layer has an entry."""
-        return layer in self._entries
+        return layer in self.entries
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
-    def _all_payloads(self) -> list[CompressedPayload]:
+    def all_payloads(self) -> list[CompressedPayload]:
         """Flatten K and V payloads across all live entries."""
         out: list[CompressedPayload] = []
-        for e in self._entries.values():
+        for e in self.entries.values():
             if e.key is not None:
                 out.append(e.key)
             if e.value is not None:
                 out.append(e.value)
         return out
 
-    def _enforce_eviction(self) -> None:
+    def enforce_eviction(self) -> None:
         """Drop the oldest entries until the cache fits under ``max_layers``.
 
         Uses LRU semantics (``OrderedDict.popitem(last=False)``) so the
         least-recently-stored layer is evicted first. The matching
         metadata entries are removed in the same pass.
         """
-        if self._max_layers is None:
+        if self.max_layers is None:
             return
-        while len(self._entries) > self._max_layers:
-            evicted_layer, _ = self._entries.popitem(last=False)
-            log.debug("evicted layer %d (cache cap %d)", evicted_layer, self._max_layers)
-            self._metadata.layers = [
-                entry for entry in self._metadata.layers if entry.layer != evicted_layer
+        while len(self.entries) > self.max_layers:
+            evicted_layer, _ = self.entries.popitem(last=False)
+            log.debug("evicted layer %d (cache cap %d)", evicted_layer, self.max_layers)
+            self.metadata_.layers = [
+                entry for entry in self.metadata_.layers if entry.layer != evicted_layer
             ]
 
 
@@ -277,7 +302,7 @@ class CompressedKVCache:
 # ---------------------------------------------------------------------------
 
 
-def _normalize_kv(
+def normalize_kv(
     key: torch.Tensor,
     value: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -305,21 +330,36 @@ def _normalize_kv(
     raise ValueError(f"unsupported K/V rank: {key.dim()}")
 
 
-def _payload_to_meta(
+def payload_to_meta(
     layer: int,
     kind: str,
     original: torch.Tensor,
     payload: CompressedPayload,
     seed: int,
-) -> Any:
+    group_id: int = 0,
+    group_size: int = 1,
+) -> LayerCompression:
     """Convert a payload to a :class:`LayerCompression` metadata entry.
 
     Pulls the per-cell ``(r_token, r_feature, bits)`` out of the payload's
     ``metadata`` dict and stamps the original / compressed byte counts so
-    the cache's stats are correct.
-    """
-    from kvcompress.cache.metadata import LayerCompression
+    the cache's stats are correct. The group_id and group_size are
+    forwarded to metadata so downstream tooling (e.g. vLLM offload) can
+    split layers into groups without re-deriving that information.
 
+    Args:
+        layer: layer index.
+        kind: ``"key"`` or ``"value"``.
+        original: the uncompressed K or V tensor.
+        payload: the :class:`CompressedPayload` produced by the compressor.
+        seed: seed used for JL / randomised SVD on this layer.
+        group_id: layer-group index.
+        group_size: number of layers per group.
+
+    Returns:
+        A :class:`LayerCompression` ready to be appended to
+        ``CompressionMetadata.layers``.
+    """
     return LayerCompression(
         layer=layer,
         kind=kind,
@@ -333,7 +373,9 @@ def _payload_to_meta(
         seed=seed,
         bytes_original=payload.bytes_original,
         bytes_compressed=payload.bytes_compressed,
+        group_id=group_id,
+        group_size=group_size,
     )
 
 
-__all__ = ["CompressedKVCache"]
+__all__ = ["CompressedKVCache", "LayerEntry", "normalize_kv", "payload_to_meta"]

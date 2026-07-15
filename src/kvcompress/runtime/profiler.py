@@ -83,7 +83,10 @@ class CompressionProfiler:
             elapsed_ms = (time.perf_counter() - t0) * 1000
             self.records.append(
                 _CallRecord(
-                    name=name, duration_ms=elapsed_ms, bytes_in=bytes_in, bytes_out=bytes_out
+                    name=name,
+                    duration_ms=elapsed_ms,
+                    bytes_in=bytes_in,
+                    bytes_out=bytes_out,
                 )
             )
 

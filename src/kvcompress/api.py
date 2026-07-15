@@ -10,7 +10,7 @@ This module exposes:
   to disable compression, query stats, or swap methods at runtime.
 * :func:`enable_compression` — entry point.
 * :func:`disable_compression` — revert the patch.
-* :func:`_parse_target_memory` — helper that converts ``"25%"`` / ``0.25``
+* :func:`parse_target_memory` — helper that converts ``"25%"`` / ``0.25``
   to a ratio of ``4.0``.
 
 The Hugging Face integration lives here rather than in ``adapters/`` because
@@ -148,7 +148,7 @@ def enable_compression(
         raise ValueError("Exactly one of `target_memory` or `compression_ratio` must be provided.")
 
     if target_memory is not None:
-        compression_ratio = _parse_target_memory(target_memory)
+        compression_ratio = parse_target_memory(target_memory)
     elif compression_ratio is None:
         raise ValueError("unreachable")
 
@@ -173,7 +173,7 @@ def enable_compression(
     )
     handle = CompressionHandle(adapter=adapter, model=model)
     # Wire the stats object so the patched DynamicCache can update it.
-    adapter._stats = handle.stats  # type: ignore[assignment]
+    adapter.stats_ref = handle.stats  # type: ignore[assignment]
     adapter.enable()
     return handle
 
@@ -183,7 +183,7 @@ def disable_compression(handle: CompressionHandle) -> None:
     handle.disable()
 
 
-def _parse_target_memory(value: str | float) -> float:
+def parse_target_memory(value: str | float) -> float:
     """Convert a target-memory specification to a compression ratio.
 
     Examples:

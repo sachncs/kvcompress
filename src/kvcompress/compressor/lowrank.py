@@ -72,8 +72,8 @@ class LowRankCompressor(KVCompressor):
         V_flat = value.reshape(m * T, dh)
         k_res = self.svd(K_flat, rank=self.rank)
         v_res = self.svd(V_flat, rank=self.rank)
-        kp = self._build_payload(key, k_res, m, T, dh)
-        vp = self._build_payload(value, v_res, m, T, dh)
+        kp = self.build_payload(key, k_res, m, T, dh)
+        vp = self.build_payload(value, v_res, m, T, dh)
         return kp, vp
 
     def decompress(
@@ -81,11 +81,11 @@ class LowRankCompressor(KVCompressor):
         key_payload: CompressedPayload,
         value_payload: CompressedPayload,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        k = self._reconstruct_payload(key_payload)
-        v = self._reconstruct_payload(value_payload)
+        k = self.reconstruct_payload(key_payload)
+        v = self.reconstruct_payload(value_payload)
         return k, v
 
-    def _build_payload(
+    def build_payload(
         self,
         original: torch.Tensor,
         svd_res: Any,
@@ -110,7 +110,7 @@ class LowRankCompressor(KVCompressor):
             ),
         )
 
-    def _reconstruct_payload(self, payload: CompressedPayload) -> torch.Tensor:
+    def reconstruct_payload(self, payload: CompressedPayload) -> torch.Tensor:
         u = payload.data["u"].to(torch.float32)
         s = payload.data["s"].to(torch.float32)
         vh = payload.data["vh"].to(torch.float32)

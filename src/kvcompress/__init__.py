@@ -34,7 +34,10 @@ _LAZY_EXPORTS = {
     "FlashJoLTCompressor": ("kvcompress.compressor.flashjolt", "FlashJoLTCompressor"),
     "IdentityCompressor": ("kvcompress.compressor.identity", "IdentityCompressor"),
     "LowRankCompressor": ("kvcompress.compressor.lowrank", "LowRankCompressor"),
-    "IntQuantOnlyCompressor": ("kvcompress.compressor.quantization_only", "IntQuantOnlyCompressor"),
+    "IntQuantOnlyCompressor": (
+        "kvcompress.compressor.quantization_only",
+        "IntQuantOnlyCompressor",
+    ),
     "JointAllocator": ("kvcompress.compressor.allocator", "JointAllocator"),
     "Allocation": ("kvcompress.compressor.allocator", "Allocation"),
     "Cell": ("kvcompress.compressor.allocator", "Cell"),

@@ -18,7 +18,9 @@ def small_kv() -> tuple[torch.Tensor, torch.Tensor]:
     return k, v
 
 
-def test_jolt_compress_decompress_roundtrip(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None:
+def test_jolt_compress_decompress_roundtrip(
+    small_kv: tuple[torch.Tensor, torch.Tensor],
+) -> None:
     k, v = small_kv
     comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 4, 8))
     k_p, v_p = comp.compress(k, v)
@@ -32,7 +34,9 @@ def test_jolt_compress_decompress_roundtrip(small_kv: tuple[torch.Tensor, torch.
     assert rel_err_v < 1.0
 
 
-def test_jolt_compression_ratio_metadata(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None:
+def test_jolt_compression_ratio_metadata(
+    small_kv: tuple[torch.Tensor, torch.Tensor],
+) -> None:
     k, v = small_kv
     comp = JoLTCompressor(compression_ratio=3.0)
     k_p, v_p = comp.compress(k, v)

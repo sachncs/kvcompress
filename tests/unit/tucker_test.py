@@ -59,7 +59,7 @@ def test_full_rank_is_identity(tensor: torch.Tensor) -> None:
     assert err < 1e-4
 
 
-def test_tail_mass_zero_at_full_rank(tensor: torch.Tensor) -> None:
+def testtail_mass_zero_at_full_rank(tensor: torch.Tensor) -> None:
     m, t, d = tensor.shape
     factors = partial_tucker_st_hosvd(tensor, r_token=t, r_feature=d)
     assert factors.token_tail_mass == 0.0

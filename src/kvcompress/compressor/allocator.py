@@ -33,7 +33,6 @@ import math
 from dataclasses import dataclass, field
 from typing import Sequence
 
-
 log = logging.getLogger(__name__)
 
 
@@ -188,15 +187,15 @@ class JointAllocator:
             )
 
         if original_bytes is None:
-            original_bytes = sum(_bytes_original(c.shape) for c in cells)
+            original_bytes = sum(bytes_original(c.shape) for c in cells)
         target_bytes = max(1, int(round(original_bytes / self.target_ratio)))
 
         # Per-cell candidate grid: (rT, rd, b).
         per_cell_grid: list[list[Allocation]] = []
         original_per_cell: list[int] = []
         for idx, cell in enumerate(cells):
-            original_per_cell.append(_bytes_original(cell.shape))
-            grid = self._build_cell_grid(cell, tau_table, idx)
+            original_per_cell.append(bytes_original(cell.shape))
+            grid = self.build_cell_grid(cell, tau_table, idx)
             per_cell_grid.append(grid)
             log.debug(
                 "allocator: cell %d (%s, shape=%s) grid_size=%d",
@@ -217,7 +216,7 @@ class JointAllocator:
         log_lambdas = [-12 + 0.1 * i for i in range(180)]  # 1e-12 .. 1e+6
         for log_lam in log_lambdas:
             lam = 10.0**log_lam
-            cand = self._argmin_per_cell(per_cell_grid, lam)
+            cand = self.argmin_per_cell(per_cell_grid, lam)
             total = sum(a.cost_bytes for a in cand)
             if total <= 0:
                 continue
@@ -232,8 +231,8 @@ class JointAllocator:
         # Refine with bisection around the closest candidate.
         lo = best_lam / 10 if best_lam > 0 else 1e-12
         hi = best_lam * 10 if best_lam > 0 else 1e-6
-        cand_lo = self._argmin_per_cell(per_cell_grid, lo)
-        cand_hi = self._argmin_per_cell(per_cell_grid, hi)
+        cand_lo = self.argmin_per_cell(per_cell_grid, lo)
+        cand_hi = self.argmin_per_cell(per_cell_grid, hi)
         cost_lo = sum(a.cost_bytes for a in cand_lo)
         cost_hi = sum(a.cost_bytes for a in cand_hi)
         if cost_lo > cost_hi:
@@ -247,25 +246,25 @@ class JointAllocator:
                 break
             if cost_lo < target_bytes:
                 lo /= 10
-                cand_lo = self._argmin_per_cell(per_cell_grid, lo)
+                cand_lo = self.argmin_per_cell(per_cell_grid, lo)
                 cost_lo = sum(a.cost_bytes for a in cand_lo)
             elif cost_hi > target_bytes:
                 hi *= 10
-                cand_hi = self._argmin_per_cell(per_cell_grid, hi)
+                cand_hi = self.argmin_per_cell(per_cell_grid, hi)
                 cost_hi = sum(a.cost_bytes for a in cand_hi)
             else:
                 break
 
         for _ in range(40):
             mid = (lo + hi) / 2
-            cand_mid = self._argmin_per_cell(per_cell_grid, mid)
+            cand_mid = self.argmin_per_cell(per_cell_grid, mid)
             cost_mid = sum(a.cost_bytes for a in cand_mid)
             if cost_mid > target_bytes:
                 lo, cost_lo = mid, cost_mid
             else:
                 hi, cost_hi = mid, cost_mid
 
-        cand_mid = self._argmin_per_cell(per_cell_grid, (lo + hi) / 2)
+        cand_mid = self.argmin_per_cell(per_cell_grid, (lo + hi) / 2)
         cost_mid = sum(a.cost_bytes for a in cand_mid)
         if cost_mid > 0:
             achieved_mid = original_bytes / cost_mid
@@ -274,13 +273,13 @@ class JointAllocator:
                 best_cand = cand_mid
                 best_lam = (lo + hi) / 2
 
-        return self._make_result(best_cand, original_per_cell, target_bytes, best_lam)
+        return self.make_result(best_cand, original_per_cell, target_bytes, best_lam)
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
-    def _build_cell_grid(
+    def build_cell_grid(
         self,
         cell: Cell,
         tau_table: dict[int, list[float]] | None,
@@ -297,14 +296,14 @@ class JointAllocator:
         bits_grid = self.bits_grid
 
         # Feature ranks: search over the full range.
-        candidate_rd = _candidate_feature_ranks(d)
+        candidate_rd = candidate_feature_ranks(d)
 
         # Token ranks: cap at min(T, max_token_rank) and step.
         if cell.candidate_token_ranks is not None:
             candidate_rt = sorted({int(r) for r in cell.candidate_token_ranks})
         else:
             rt_max = min(t, self.max_token_rank)
-            candidate_rt = _candidate_token_ranks(rt_max)
+            candidate_rt = candidate_token_ranks(rt_max)
 
         grid: list[Allocation] = []
         for rt in candidate_rt:
@@ -317,7 +316,7 @@ class JointAllocator:
                 # Tail mass for this (rT, rd). The simple model is
                 # max(1 - rT/T, 1 - rd/d); if tau_table is provided,
                 # use the empirical lookup.
-                tau = self._tau(tau_table, idx, rt, rd, t, d)
+                tau = self.tau_error(tau_table, idx, rt, rd, t, d)
                 for b in bits_grid:
                     residual_bytes = (b // 8) * m * t * d
                     cost = tucker_bytes + residual_bytes
@@ -334,7 +333,7 @@ class JointAllocator:
                     )
         return grid
 
-    def _tau(
+    def tau_error(
         self,
         tau_table: dict[int, list[float]] | None,
         idx: int,
@@ -367,7 +366,7 @@ class JointAllocator:
         rd_frac = 1.0 - rd / max(d, 1)
         return max(0.0, max(rt_frac, rd_frac))
 
-    def _argmin_per_cell(
+    def argmin_per_cell(
         self,
         per_cell_grid: list[list[Allocation]],
         lam: float,
@@ -385,7 +384,7 @@ class JointAllocator:
             result.append(best)
         return result
 
-    def _make_result(
+    def make_result(
         self,
         allocations: list[Allocation],
         original_per_cell: list[int],
@@ -441,7 +440,7 @@ class GreedyAllocator:
                 achieved_ratio=1.0,
                 target_ratio=self.target_ratio,
             )
-        original = sum(_bytes_original(c.shape) for c in cells)
+        original = sum(bytes_original(c.shape) for c in cells)
         target = max(1, int(round(original / self.target_ratio)))
         # Initial: largest rank, no bits.
         current: list[Allocation] = []
@@ -531,14 +530,14 @@ class GreedyAllocator:
 # ---------------------------------------------------------------------------
 
 
-def _bytes_original(shape: tuple[int, int, int]) -> int:
+def bytes_original(shape: tuple[int, int, int]) -> int:
     n = 1
     for d in shape:
         n *= d
     return n * 2  # fp16
 
 
-def _candidate_feature_ranks(d: int) -> list[int]:
+def candidate_feature_ranks(d: int) -> list[int]:
     """Discrete set of feature ranks to search over.
 
     For small ``d`` (≤ 32) we enumerate all values; for larger ``d`` we use
@@ -550,7 +549,7 @@ def _candidate_feature_ranks(d: int) -> list[int]:
     return [c for c in candidates if c <= d]
 
 
-def _candidate_token_ranks(t_max: int) -> list[int]:
+def candidate_token_ranks(t_max: int) -> list[int]:
     """Discrete token ranks. Cap at ``t_max``; use logarithmic spacing above 32."""
     if t_max <= 32:
         return list(range(1, t_max + 1))

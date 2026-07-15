@@ -95,7 +95,7 @@ class FlashJoLTCompressor(JoLTCompressor):
         )
         self.auto_cap: int | None = cap
 
-    def _compress_cell(  # type: ignore[override]
+    def compress_cell(  # type: ignore[override]
         self,
         x: torch.Tensor,
         allocation: Any,
@@ -115,7 +115,7 @@ class FlashJoLTCompressor(JoLTCompressor):
         # partial_tucker_st_hosvd uses SVD.__call__, we need to ensure the
         # cap is applied at the call site. We do this by passing a thin
         # wrapper that intercepts rank=rt and adds cap.
-        svd_capped = _CapWrapper(self.svd, cap_int)
+        svd_capped = CapWrapper(self.svd, cap_int)
 
         tucker = partial_tucker_st_hosvd(
             x,
@@ -148,7 +148,7 @@ class FlashJoLTCompressor(JoLTCompressor):
         return _JoLTFactors(tucker=tucker, residual=residual, allocation=allocation)
 
 
-class _CapWrapper:
+class CapWrapper:
     """Thin wrapper that forces the randomized SVD path with a cap.
 
     Implements the same ``__call__(a, rank=..., cap=...)`` interface as

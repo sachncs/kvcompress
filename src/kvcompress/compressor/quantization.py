@@ -91,9 +91,9 @@ class FloatCastQuantizer:
         elif self.name == "bf16":
             self._dtype = torch.bfloat16
         elif self.name == "fp8_e4m3":
-            self._dtype = _fp8_e4m3_dtype()
+            self._dtype = fp8_e4m3_dtype()
         elif self.name == "fp8_e5m2":
-            self._dtype = _fp8_e5m2_dtype()
+            self._dtype = fp8_e5m2_dtype()
         else:
             raise ValueError(f"FloatCastQuantizer does not support {self.name!r}")
 
@@ -120,11 +120,11 @@ class FloatCastQuantizer:
         return q.to(output_dtype or torch.float32)
 
 
-def _fp8_e4m3_dtype() -> torch.dtype:
+def fp8_e4m3_dtype() -> torch.dtype:
     return getattr(torch, "float8_e4m3fn", None) or torch.float32
 
 
-def _fp8_e5m2_dtype() -> torch.dtype:
+def fp8_e5m2_dtype() -> torch.dtype:
     return getattr(torch, "float8_e5m2", None) or torch.float32
 
 
@@ -133,7 +133,7 @@ def _fp8_e5m2_dtype() -> torch.dtype:
 # ---------------------------------------------------------------------------
 
 
-def _bit_packing_signed(
+def bit_packing_signed(
     q_int: torch.Tensor,
     bits: int,
     *,
@@ -193,7 +193,7 @@ def _bit_packing_signed(
     return out
 
 
-def _bit_unpacking_signed(
+def bit_unpacking_signed(
     packed: torch.Tensor,
     bits: int,
     original_last: int,
@@ -271,7 +271,7 @@ class IntQuantizer:
         zero_point: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if scale is None or zero_point is None:
-            scale, zero_point = self._compute_params(x)
+            scale, zero_point = self.compute_params(x)
 
         if scale.dim() == 0:
             scaled = x / scale + zero_point
@@ -291,7 +291,7 @@ class IntQuantizer:
             scaled = x / scale.view(view_shape) + zero_point.view(view_shape)
 
         q_int = torch.round(scaled).clamp(self._qmin, self._qmax).to(torch.int32)
-        packed = _bit_packing_signed(
+        packed = bit_packing_signed(
             q_int.to(torch.int8),
             self.bits,
             symmetric=self.symmetric,
@@ -306,8 +306,8 @@ class IntQuantizer:
         *,
         output_dtype: torch.dtype | None = None,
     ) -> torch.Tensor:
-        original_last = self._original_last(q)
-        q_int = _bit_unpacking_signed(q, self.bits, original_last, symmetric=self.symmetric)
+        original_last = self.original_last(q)
+        q_int = bit_unpacking_signed(q, self.bits, original_last, symmetric=self.symmetric)
         if scale.dim() == 0:
             x_hat = (q_int - zero_point) * scale
         elif self.group_size is not None:
@@ -322,12 +322,12 @@ class IntQuantizer:
             x_hat = (q_int - zero_point.view(view_shape)) * scale.view(view_shape)
         return x_hat.to(output_dtype or torch.float32)
 
-    def _original_last(self, q: torch.Tensor) -> int:
+    def original_last(self, q: torch.Tensor) -> int:
         # Sub-byte packing changes the last dim size; we store the original
         # last dim as metadata, but here we infer from the scale shape.
         return int(self._last_dim_hint)
 
-    def _compute_params(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def compute_params(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.per_channel:
             x_flat = x.reshape(-1, x.shape[-1])
             x_min = x_flat.min(dim=0).values
@@ -378,14 +378,14 @@ def get_quantizer(
     """Construct or fetch a cached quantizer."""
     if name in ("fp16", "bf16", "fp8_e4m3", "fp8_e5m2"):
         key = f"float:{name}"
-        return _get_or_create(
+        return get_or_create(
             key,
             lambda: FloatCastQuantizer(name=name),  # type: ignore[arg-type]
         )
     if name in ("int2", "int4", "int8"):
         bits = int(name[3:])
         key = f"int:{bits}:{symmetric}:{per_channel}:{group_size}"
-        return _get_or_create(
+        return get_or_create(
             key,
             lambda: IntQuantizer(
                 bits=bits,
@@ -397,7 +397,7 @@ def get_quantizer(
     raise ValueError(f"unknown quantizer name {name!r}")
 
 
-def _get_or_create(key: str, factory) -> Quantizer:
+def get_or_create(key: str, factory) -> Quantizer:
     """Get a cached quantizer or build + cache one."""
     cached = _QUANTIZER_REGISTRY.get(key)
     if cached is not None:

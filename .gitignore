@@ -1,4 +1,4 @@
-# Byte-compiled / optimized
+# Byte-compiled / optimised
 __pycache__/
 *.py[cod]
 *$py.class
@@ -21,14 +21,21 @@ env/
 *.swp
 *.swo
 
-# Test / coverage
+# Test / coverage artefacts
 .pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
 coverage.xml
+.cache/
+
+# Type / lint caches
 .mypy_cache/
 .ruff_cache/
+.vscode/.ruff_cache/
+
+# Property-based testing
+.hypothesis/
 
 # OS
 .DS_Store
@@ -38,15 +45,20 @@ Thumbs.db
 *.pyc
 *.pyd
 
-# Benchmark artefacts
+# Benchmark artefacts (we keep docs/**/*.png)
 benchmarks/output/
 benchmarks/plots/
+results/
 *.png
 !docs/**/*.png
 
-# Model cache
+# Model caches (HF, vLLM, etc.)
 models/
 .cache/
 *.bin
 *.safetensors
 !tests/fixtures/**
+
+# venv scratch
+.python-version
+*.log

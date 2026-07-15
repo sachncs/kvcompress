@@ -63,7 +63,7 @@ from kvcompress.compressor.jolt import JoLTCompressor
 log = logging.getLogger(__name__)
 
 
-def _build_compressor(method: str, **kwargs: Any) -> KVCompressor:
+def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
     """Construct the named compressor from the public API string.
 
     Args:
@@ -99,7 +99,7 @@ class HuggingFaceAdapter:
     * It owns a :class:`CacheManager` which holds the compressed payloads
       (created lazily by :meth:`enable`).
     * It remembers which ``transformers.*`` modules it patched
-      (``self._patched_modules``) so :meth:`disable` can put them back.
+      (``self.patched_modules``) so :meth:`disable` can put them back.
 
     Args:
         model: HF ``PreTrainedModel`` returned by ``AutoModelForCausalLM``.
@@ -145,7 +145,7 @@ class HuggingFaceAdapter:
         self.cache_implementation = cache_implementation
         self.seed = int(seed)
 
-        compressor = _build_compressor(
+        compressor = build_compressor(
             method,
             compression_ratio=compression_ratio,
             bits=bits,
@@ -158,13 +158,13 @@ class HuggingFaceAdapter:
         # ``_stats`` is wired by kvcompress.api.enable_compression after
         # the CompressionHandle is built. We keep it as an untyped
         # attribute to avoid an import cycle with kvcompress.api.
-        self._manager: CacheManager | None = None
-        self._enabled = False
-        self._original_cache_implementation: str | None = None
-        self._original_dynamic_cache_cls: type | None = None
-        self._patched_cache_cls: type | None = None
-        self._patched_modules: dict[str, type] = {}
-        self._stats: Any = None
+        self.manager: CacheManager | None = None
+        self.enabled = False
+        self.original_cache_implementation: str | None = None
+        self.original_dynamic_cache_cls: type | None = None
+        self.patched_cache_cls: type | None = None
+        self.patched_modules: dict[str, type] = {}
+        self.stats_ref: Any = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -188,7 +188,7 @@ class HuggingFaceAdapter:
         doesn't leave the user in a broken state — the worst case is
         a cache that doesn't get compressed.
         """
-        if self._enabled:
+        if self.enabled:
             log.warning("kvcompress: enable() called twice; ignoring")
             return
         log.info(
@@ -196,62 +196,48 @@ class HuggingFaceAdapter:
             self.method,
             type(self.model).__name__,
         )
-        self._manager = CacheManager(compressor=self.compressor)
+        self.manager = CacheManager(compressor=self.compressor)
 
         if hasattr(self.model, "generation_config"):
-            self._original_cache_implementation = getattr(
+            self.original_cache_implementation = getattr(
                 self.model.generation_config, "cache_implementation", None
             )
             self.model.generation_config.cache_implementation = self.cache_implementation
 
-        try:
-            from transformers.cache_utils import DynamicCache
+        from transformers.cache_utils import DynamicCache
 
-            self._original_dynamic_cache_cls = DynamicCache
-            self._install_dynamic_cache(DynamicCache)
-        except Exception as e:  # pragma: no cover
-            log.warning("kvcompress: failed to patch DynamicCache: %s", e)
+        self.original_dynamic_cache_cls = DynamicCache
+        self.install_dynamic_cache(DynamicCache)
 
         model_type = getattr(getattr(self.model, "config", None), "model_type", None)
         if model_type is not None:
-            try:
-                self._family_install = registry_install(
-                    model_type=model_type,
-                    model=self.model,
-                    cache_manager=self._manager,
-                )
-                log.info("kvcompress: installed family shim for %s", model_type)
-            except Exception as e:  # pragma: no cover
-                log.warning("kvcompress: family install failed: %s", e)
+            self.family_install = registry_install(
+                model_type=model_type,
+                model=self.model,
+                cache_manager=self.manager,
+            )
+            log.info("kvcompress: installed family shim for %s", model_type)
 
-        self._enabled = True
+        self.enabled = True
 
     def disable(self) -> None:
         """Restore the original ``DynamicCache`` symbol and revert the
-        generation_config.
-
-        Errors are caught and logged because the most common case is
-        ``disable`` being called after the model has been GC'd, in
-        which case ``sys.modules`` lookups fail — that's fine.
-        """
-        if not self._enabled:
+        generation_config."""
+        if not self.enabled:
             return
         if (
             hasattr(self.model, "generation_config")
-            and self._original_cache_implementation is not None
+            and self.original_cache_implementation is not None
         ):
-            self.model.generation_config.cache_implementation = self._original_cache_implementation
-        try:
-            self._uninstall_dynamic_cache()
-        except Exception:  # pragma: no cover
-            pass
-        self._enabled = False
+            self.model.generation_config.cache_implementation = self.original_cache_implementation
+        self.uninstall_dynamic_cache()
+        self.enabled = False
 
     # ------------------------------------------------------------------
     # DynamicCache patching
     # ------------------------------------------------------------------
 
-    def _install_dynamic_cache(self, dynamic_cache_cls: type) -> None:
+    def install_dynamic_cache(self, dynamic_cache_cls: type) -> None:
         """Patch DynamicCache everywhere it has been imported.
 
         The subclass intercepts two methods:
@@ -261,7 +247,7 @@ class HuggingFaceAdapter:
         * ``__getitem__`` — reconstructs the layer's K/V before the
           attention layer reads past keys.
 
-        Both also bump ``cache._stats`` (the CompressionStats on the
+        Both also bump ``cache.stats_ref`` (the CompressionStats on the
         handle) so users can read cumulative counts via
         :meth:`~kvcompress.api.CompressionHandle.stats_dict`.
 
@@ -273,7 +259,7 @@ class HuggingFaceAdapter:
 
         # ``type: ignore[misc, valid-type]`` — subclassing a class we
         # only have a dynamic handle to. mypy can't see the metaclass.
-        class _KvCompressCache(dynamic_cache_cls):  # type: ignore[misc, valid-type]
+        class KvCompressCache(dynamic_cache_cls):  # type: ignore[misc, valid-type]
             """DynamicCache subclass that compresses on every update."""
 
             def update(  # type: ignore[override]  -- overrides HF's update with a richer signature
@@ -284,40 +270,40 @@ class HuggingFaceAdapter:
                 cache_kwargs: dict | None = None,
             ):
                 out = super().update(key_states, value_states, layer_idx, cache_kwargs)
-                if cache._manager is not None:
+                if cache.manager is not None:
                     # ``type: ignore[attr-defined]`` — ``layers`` is set
                     # by the parent class lazily, so static analysers
                     # don't see it.
                     layer_obj = self.layers[layer_idx]  # type: ignore[attr-defined]
                     k = layer_obj.keys
                     v = layer_obj.values
-                    cache._manager.store(layer_idx, k, v)
-                    if cache._stats is not None:
-                        cache._stats.compress_calls += 1
-                        cache._stats.bytes_original += (
+                    cache.manager.store(layer_idx, k, v)
+                    if cache.stats_ref is not None:
+                        cache.stats_ref.compress_calls += 1
+                        cache.stats_ref.bytes_original += (
                             k.numel() * k.element_size() + v.numel() * v.element_size()
                         )
                         # Update bytes_compressed by reading from manager.
-                        cache._stats.bytes_compressed = cache._manager.memory_used()
+                        cache.stats_ref.bytes_compressed = cache.manager.memory_used()
                 return out
 
             def __getitem__(self, layer_idx: int):  # type: ignore[override]
                 # ``type: ignore[override]`` — the parent's __getitem__
                 # signature varies across HF versions; we accept any.
                 if (
-                    cache._manager is not None
-                    and layer_idx in cache._manager
+                    cache.manager is not None
+                    and layer_idx in cache.manager
                     and getattr(self, "layers", None) is not None
                     and layer_idx < len(self.layers)
                 ):
-                    k, v = cache._manager.retrieve(layer_idx)
+                    k, v = cache.manager.retrieve(layer_idx)
                     self.layers[layer_idx].keys = k
                     self.layers[layer_idx].values = v
-                    if cache._stats is not None:
-                        cache._stats.decompress_calls += 1
+                    if cache.stats_ref is not None:
+                        cache.stats_ref.decompress_calls += 1
                 return super().__getitem__(layer_idx)
 
-        self._patched_cache_cls = _KvCompressCache
+        self.patched_cache_cls = KvCompressCache
 
         # Patch the symbol in transformers.cache_utils.
         # ``type: ignore[misc]`` — HF types DynamicCache as a frozen
@@ -325,31 +311,25 @@ class HuggingFaceAdapter:
         # ``module-level override`` that mypy warns about.
         import transformers.cache_utils as cu
 
-        cu.DynamicCache = _KvCompressCache  # type: ignore[misc]
+        cu.DynamicCache = KvCompressCache  # type: ignore[misc]
 
         # Patch transformers.generation.utils.
-        try:
-            import transformers.generation.utils as gu
+        import transformers.generation.utils as gu
 
-            if hasattr(gu, "DynamicCache"):
-                gu.DynamicCache = _KvCompressCache  # type: ignore[misc]
-                self._patched_modules["transformers.generation.utils"] = _KvCompressCache
-        except Exception:  # pragma: no cover
-            pass
+        if hasattr(gu, "DynamicCache"):
+            gu.DynamicCache = KvCompressCache  # type: ignore[misc]
+            self.patched_modules["transformers.generation.utils"] = KvCompressCache
 
         # Patch any other transformers module that imported DynamicCache.
         # ``type: ignore[misc]`` — same module-attribute reassignment.
         for mod_name, mod in list(sys.modules.items()):
             if mod is None or not mod_name.startswith("transformers"):
                 continue
-            try:
-                if getattr(mod, "DynamicCache", None) is dynamic_cache_cls:
-                    mod.DynamicCache = _KvCompressCache  # type: ignore[misc]
-                    self._patched_modules[mod_name] = _KvCompressCache
-            except Exception:  # pragma: no cover
-                pass
+            if getattr(mod, "DynamicCache", None) is dynamic_cache_cls:
+                mod.DynamicCache = KvCompressCache  # type: ignore[misc]
+                self.patched_modules[mod_name] = KvCompressCache
 
-    def _uninstall_dynamic_cache(self) -> None:
+    def uninstall_dynamic_cache(self) -> None:
         """Restore ``DynamicCache`` in every module we patched.
 
         We restore the *original* class captured in :attr:`_original_dynamic_cache_cls`
@@ -359,19 +339,16 @@ class HuggingFaceAdapter:
         """
         import transformers.cache_utils as cu
 
-        if self._original_dynamic_cache_cls is not None:
-            cu.DynamicCache = self._original_dynamic_cache_cls  # type: ignore[misc]
-        for mod_name in list(self._patched_modules.keys()):
+        if self.original_dynamic_cache_cls is not None:
+            cu.DynamicCache = self.original_dynamic_cache_cls  # type: ignore[misc]
+        for mod_name in list(self.patched_modules.keys()):
             mod = sys.modules.get(mod_name)
             if mod is not None:
-                try:
-                    mod.DynamicCache = self._original_dynamic_cache_cls  # type: ignore[misc]
-                except Exception:  # pragma: no cover
-                    pass
-        self._patched_modules.clear()
+                mod.DynamicCache = self.original_dynamic_cache_cls  # type: ignore[misc]
+        self.patched_modules.clear()
 
 
-def _generic_install(model: object, cache_manager: CacheManager) -> None:
+def generic_install(model: object, cache_manager: CacheManager) -> None:
     """Default install for unrecognized model types.
 
     Returns ``None`` so the registry's ``install`` dispatch knows the

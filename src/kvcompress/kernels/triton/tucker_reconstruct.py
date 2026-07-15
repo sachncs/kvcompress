@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 _KERNEL = None
 
 
-def _try_compile():
+def try_compile_triton():
     """Attempt to JIT-compile the Triton kernel.
 
     Returns the compiled kernel if Triton is available; ``None`` otherwise.
@@ -46,7 +46,7 @@ def _try_compile():
         return None
 
     @triton.jit
-    def _tucker_reconstruct_kernel(
+    def tucker_reconstruct_kernel(
         core_ptr,
         u_token_ptr,
         u_feature_ptr,
@@ -91,7 +91,7 @@ def _try_compile():
         out = tl.sum(acc * u_d, axis=0)
         tl.store(out_ptr + pid_m * T * d + pid_t * d + pid_d, out)
 
-    return _tucker_reconstruct_kernel
+    return tucker_reconstruct_kernel
 
 
 def triton_tucker_reconstruct(
@@ -104,7 +104,7 @@ def triton_tucker_reconstruct(
 
     global _KERNEL
     if _KERNEL is None:
-        _KERNEL = _try_compile()
+        _KERNEL = try_compile_triton()
     if _KERNEL is None:
         # Fallback.
         return torch.einsum("mar,ta,dr->mtd", core, u_token, u_feature)

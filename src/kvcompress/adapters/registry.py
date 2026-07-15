@@ -72,7 +72,7 @@ def install(model: object, cache_manager: object, model_type: str) -> Callable[[
     """Dispatch to the right family shim and invoke its ``install``.
 
     If ``model_type`` isn't registered, falls through to the generic
-    path (``_generic_install``) which is a no-op — the DynamicCache
+    path (``generic_install``) which is a no-op — the DynamicCache
     subclass does the real work.
 
     Args:
@@ -90,9 +90,9 @@ def install(model: object, cache_manager: object, model_type: str) -> Callable[[
             "kvcompress: no shim for model_type=%s; using generic interception",
             model_type,
         )
-        from kvcompress.adapters.huggingface import _generic_install
+        from kvcompress.adapters.huggingface import generic_install
 
-        _generic_install(model, cache_manager)
+        generic_install(model, cache_manager)
         return None
     import importlib
 

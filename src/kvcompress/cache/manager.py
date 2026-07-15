@@ -45,11 +45,11 @@ class CacheManager:
     compressor: KVCompressor
     max_layers: int | None = None
     device: torch.device | str | None = None
-    _cache: CompressedKVCache = field(init=False)
-    _live_layers: list[int] = field(default_factory=list, init=False)
+    cache: CompressedKVCache = field(init=False)
+    live_layers: list[int] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
-        self._cache = CompressedKVCache(
+        self.cache = CompressedKVCache(
             compressor=self.compressor,
             max_layers=self.max_layers,
             device=self.device,
@@ -72,26 +72,26 @@ class CacheManager:
         store, ``layer`` is added to the ``live_layers`` list (used by
         the HF adapter's ``__getitem__`` path).
         """
-        self._cache.store(layer, key, value, **kwargs)
-        if layer not in self._live_layers:
-            self._live_layers.append(layer)
+        self.cache.store(layer, key, value, **kwargs)
+        if layer not in self.live_layers:
+            self.live_layers.append(layer)
 
     def retrieve(
         self,
         layer: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Reconstruct and return the K/V pair for ``layer``."""
-        return self._cache.retrieve(layer)
+        return self.cache.retrieve(layer)
 
     def clear(self) -> None:
         """Drop every entry and reset the ``live_layers`` list."""
-        self._cache.clear()
-        self._live_layers.clear()
+        self.cache.clear()
+        self.live_layers.clear()
 
     def evict(self, layer: int) -> None:
         """Remove ``layer`` from the cache and the ``live_layers`` list."""
-        self._cache.evict_layer(layer)
-        self._live_layers = [entry for entry in self._live_layers if entry != layer]
+        self.cache.evict_layer(layer)
+        self.live_layers = [entry for entry in self.live_layers if entry != layer]
 
     # ------------------------------------------------------------------
     # Memory
@@ -99,25 +99,25 @@ class CacheManager:
 
     def memory_used(self) -> int:
         """Bytes occupied by all stored payloads."""
-        return self._cache.memory_used()
+        return self.cache.memory_used()
 
     def memory_original(self) -> int:
         """Sum of uncompressed bytes across all stored payloads."""
-        return self._cache.memory_original()
+        return self.cache.memory_original()
 
     def compression_ratio(self) -> float:
         """Achieved ratio (original / compressed) across all stored payloads."""
-        return self._cache.compression_ratio()
+        return self.cache.compression_ratio()
 
     def stats(self) -> dict[str, Any]:
         """Aggregate stats including the live-layer list."""
-        s = self._cache.stats()
-        s["live_layers"] = list(self._live_layers)
+        s = self.cache.stats()
+        s["live_layers"] = list(self.live_layers)
         return s
 
     def metadata(self) -> CompressionMetadata:
         """Return the live :class:`CompressionMetadata`."""
-        return self._cache.metadata()
+        return self.cache.metadata()
 
     # ------------------------------------------------------------------
     # Iteration
@@ -125,15 +125,12 @@ class CacheManager:
 
     def layers(self) -> Iterator[int]:
         """Iterate over live layer indices in insertion order."""
-        return self._cache.layers()
+        return self.cache.layers()
 
     def __len__(self) -> int:
         """Number of layers currently stored."""
-        return len(self._cache)
+        return len(self.cache)
 
     def __contains__(self, layer: int) -> bool:
         """``layer in manager`` is ``True`` when the layer has an entry."""
-        return layer in self._cache
-
-
-__all__ = ["CacheManager"]
+        return layer in self.cache

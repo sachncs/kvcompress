@@ -80,7 +80,7 @@ class SVDResult:
         return float(num / den)
 
 
-def _tail_mass(s: torch.Tensor, r: int) -> float:
+def tail_mass(s: torch.Tensor, r: int) -> float:
     """Relative Frobenius tail mass past the top-``r`` singular values.
 
     Returns 0.0 if ``r`` covers the full spectrum or the spectrum is all
@@ -179,7 +179,7 @@ class SVD:
             tail = 0.0
             u_out, s_out, vh_out = u, s, vh
         else:
-            tail = _tail_mass(s, rank)
+            tail = tail_mass(s, rank)
             u_out, s_out, vh_out = u[:, :rank], s[:rank], vh[:rank, :]
         return SVDResult(
             u=u_out.contiguous(),

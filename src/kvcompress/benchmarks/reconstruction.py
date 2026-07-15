@@ -111,7 +111,7 @@ class ReconstructionResult:
     compression_ratio: float
 
 
-def _rel_err(x: torch.Tensor, x_hat: torch.Tensor) -> float:
+def rel_err(x: torch.Tensor, x_hat: torch.Tensor) -> float:
     """Relative Frobenius error ``||x - x_hat|| / ||x||``."""
     return float(torch.linalg.norm(x - x_hat) / torch.linalg.norm(x))
 
@@ -149,8 +149,8 @@ def run_table2(
         ReconstructionResult(
             method="jolt",
             bits=None,
-            rel_err_K=_rel_err(K, k_hat),
-            rel_err_V=_rel_err(V, v_hat),
+            rel_err_K=rel_err(K, k_hat),
+            rel_err_V=rel_err(V, v_hat),
             bytes_K=kp.bytes_compressed,
             bytes_V=vp.bytes_compressed,
             compression_ratio=(K.numel() * K.element_size() * 2)
@@ -166,8 +166,8 @@ def run_table2(
         ReconstructionResult(
             method="flashjolt",
             bits=None,
-            rel_err_K=_rel_err(K, k_hat),
-            rel_err_V=_rel_err(V, v_hat),
+            rel_err_K=rel_err(K, k_hat),
+            rel_err_V=rel_err(V, v_hat),
             bytes_K=kp.bytes_compressed,
             bytes_V=vp.bytes_compressed,
             compression_ratio=(K.numel() * K.element_size() * 2)
@@ -183,8 +183,8 @@ def run_table2(
         ReconstructionResult(
             method="lowrank-64",
             bits=None,
-            rel_err_K=_rel_err(K, k_hat),
-            rel_err_V=_rel_err(V, v_hat),
+            rel_err_K=rel_err(K, k_hat),
+            rel_err_V=rel_err(V, v_hat),
             bytes_K=kp.bytes_compressed,
             bytes_V=vp.bytes_compressed,
             compression_ratio=(K.numel() * K.element_size() * 2)
@@ -200,8 +200,8 @@ def run_table2(
         ReconstructionResult(
             method="int4-per-channel",
             bits=4,
-            rel_err_K=_rel_err(K, k_hat),
-            rel_err_V=_rel_err(V, v_hat),
+            rel_err_K=rel_err(K, k_hat),
+            rel_err_V=rel_err(V, v_hat),
             bytes_K=kp.bytes_compressed,
             bytes_V=vp.bytes_compressed,
             compression_ratio=(K.numel() * K.element_size() * 2)

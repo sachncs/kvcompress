@@ -9,8 +9,8 @@ import torch
 from kvcompress.compressor.jolt import JoLTCompressor
 from kvcompress.compressor.quantization import (
     IntQuantizer,
-    _bit_packing_signed,
-    _bit_unpacking_signed,
+    bit_packing_signed,
+    bit_unpacking_signed,
 )
 
 
@@ -48,8 +48,8 @@ def test_packing_unpacking_roundtrip_property(seed: int, bits: int) -> None:
     n = 32
     last = n
     q_int = torch.randint(-(1 << (bits - 1)), 1 << (bits - 1), (last,))
-    packed = _bit_packing_signed(q_int, bits, symmetric=True)
-    unpacked = _bit_unpacking_signed(packed, bits, last, symmetric=True)
+    packed = bit_packing_signed(q_int, bits, symmetric=True)
+    unpacked = bit_unpacking_signed(packed, bits, last, symmetric=True)
     assert torch.equal(q_int.to(torch.int32), unpacked)
 
 

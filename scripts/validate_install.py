@@ -55,7 +55,10 @@ def main() -> None:
             ids = tok.encode("Hello", return_tensors="pt")
             with torch.no_grad():
                 out = model.generate(
-                    ids, max_new_tokens=5, do_sample=False, pad_token_id=tok.eos_token_id
+                    ids,
+                    max_new_tokens=5,
+                    do_sample=False,
+                    pad_token_id=tok.eos_token_id,
                 )
             log.info("HF smoke test output: %s", tok.decode(out[0]))
         finally:

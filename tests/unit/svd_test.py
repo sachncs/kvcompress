@@ -111,14 +111,14 @@ def test_non_2d_raises() -> None:
         svd.exact(torch.randn(3, 4, 5))
 
 
-def test_tail_mass_full_rank_zero() -> None:
+def testtail_mass_full_rank_zero() -> None:
     svd = SVD()
     a = torch.randn(20, 20)
     res = svd.exact(a, rank=20)
     assert res.tail_mass == 0.0
 
 
-def test_tail_mass_decreases_with_rank() -> None:
+def testtail_mass_decreases_with_rank() -> None:
     svd = SVD()
     a = torch.randn(40, 30)
     res_low = svd.exact(a, rank=2)

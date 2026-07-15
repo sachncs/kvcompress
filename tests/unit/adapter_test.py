@@ -95,17 +95,17 @@ def test_enable_compression_requires_target_or_ratio() -> None:
 
 
 def test_target_memory_parses() -> None:
-    from kvcompress.api import _parse_target_memory
+    from kvcompress.api import parse_target_memory
 
-    assert _parse_target_memory("25%") == 4.0
-    assert _parse_target_memory("50%") == 2.0
-    assert _parse_target_memory(0.25) == 4.0
+    assert parse_target_memory("25%") == 4.0
+    assert parse_target_memory("50%") == 2.0
+    assert parse_target_memory(0.25) == 4.0
     with pytest.raises(ValueError):
-        _parse_target_memory("abc")
+        parse_target_memory("abc")
     with pytest.raises(ValueError):
-        _parse_target_memory(0)
+        parse_target_memory(0)
     with pytest.raises(ValueError):
-        _parse_target_memory("150%")
+        parse_target_memory("150%")
 
 
 def test_handle_stats_dict() -> None:

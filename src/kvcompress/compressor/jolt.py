@@ -168,11 +168,11 @@ class JoLTCompressor(KVCompressor):
 
         k_alloc, v_alloc = alloc_result.allocations
 
-        k_factors = self._compress_cell(key, k_alloc)
-        v_factors = self._compress_cell(value, v_alloc)
+        k_factors = self.compress_cell(key, k_alloc)
+        v_factors = self.compress_cell(value, v_alloc)
 
-        k_payload = self._build_payload(key, k_factors)
-        v_payload = self._build_payload(value, v_factors)
+        k_payload = self.build_payload(key, k_factors)
+        v_payload = self.build_payload(value, v_factors)
 
         elapsed = (time.perf_counter() - t0) * 1000
         self._last_stats = CompressorStats(
@@ -200,8 +200,8 @@ class JoLTCompressor(KVCompressor):
         value_payload: CompressedPayload,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         t0 = time.perf_counter()
-        k = self._reconstruct_payload(key_payload)
-        v = self._reconstruct_payload(value_payload)
+        k = self.reconstruct_payload(key_payload)
+        v = self.reconstruct_payload(value_payload)
         elapsed = (time.perf_counter() - t0) * 1000
         # Update stats; don't overwrite compress stats.
         if self._last_stats.decompress_time_ms == 0.0:
@@ -219,7 +219,7 @@ class JoLTCompressor(KVCompressor):
     # Internals
     # ------------------------------------------------------------------
 
-    def _compress_cell(
+    def compress_cell(
         self,
         x: torch.Tensor,
         allocation: Any,
@@ -256,7 +256,7 @@ class JoLTCompressor(KVCompressor):
             )
         return _JoLTFactors(tucker=tucker, residual=residual, allocation=allocation)
 
-    def _build_payload(self, original: torch.Tensor, factors: _JoLTFactors) -> CompressedPayload:
+    def build_payload(self, original: torch.Tensor, factors: _JoLTFactors) -> CompressedPayload:
         # Cast factors to storage dtype.
         core = factors.tucker.core.to(self.factor_dtype).contiguous()
         u_token = factors.tucker.u_token.to(self.factor_dtype).contiguous()
@@ -310,7 +310,7 @@ class JoLTCompressor(KVCompressor):
             ),
         )
 
-    def _reconstruct_payload(self, payload: CompressedPayload) -> torch.Tensor:
+    def reconstruct_payload(self, payload: CompressedPayload) -> torch.Tensor:
         if payload.method != "jolt":
             raise ValueError(f"JoLT cannot decode payload with method={payload.method!r}")
         core = payload.data["core"].to(torch.float32)
