@@ -55,8 +55,9 @@ def test_handler_instantiation_with_real_vllm() -> None:
     assert handler.base_class is not None
 
 
-def test_handler_instantiation_raises_without_vllm() -> None:
-    """On systems without vLLM, instantiation should fail cleanly."""
+def test_handler_instantiation_without_vllm() -> None:
+    """Data-path construction succeeds without vLLM; only base-class
+    forwarding methods raise when vLLM is absent."""
     import builtins
 
     from kvcompress import JoLTCompressor
@@ -71,8 +72,10 @@ def test_handler_instantiation_raises_without_vllm() -> None:
     comp = JoLTCompressor(compression_ratio=3.0)
     builtins.__import__ = fake_import
     try:
-        with pytest.raises(ImportError):
-            JoLTOffloadHandler(compressor=comp)
+        handler = JoLTOffloadHandler(compressor=comp)
+        assert handler.base_class is None
+        with pytest.raises(AttributeError):
+            handler.some_vllm_only_method()
     finally:
         builtins.__import__ = real_import
 

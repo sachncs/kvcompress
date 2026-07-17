@@ -181,14 +181,12 @@ class JoLTOffloadHandler:
         **kwargs: Any,
     ) -> None:
         base_cls = import_vllm_base()
-        if base_cls is None:
-            raise ImportError(
-                "JoLTOffloadHandler requires vllm>=0.19,<1.0; install with `pip install vllm`."
-            )
-        # Verify OffloadingHandler is actually an ABC we can extend;
-        # if the import succeeded but the class isn't what we expect,
-        # bail out rather than silently mangling the MRO.
-        if not isinstance(base_cls, type) or not hasattr(base_cls, "transfer_async"):
+        # ponytail: data-path methods are vllm-version-agnostic and must
+        # work without vllm installed. Only fail loudly when the runtime
+        # import succeeded but the class is the wrong shape (API drift).
+        if base_cls is not None and (
+            not isinstance(base_cls, type) or not hasattr(base_cls, "transfer_async")
+        ):
             raise ImportError(
                 f"JoLTOffloadHandler: vLLM OffloadingHandler at {base_cls!r} "
                 "does not expose transfer_async; vLLM API drift."

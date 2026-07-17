@@ -2,7 +2,7 @@
   <h1 align="center">kvcompress</h1>
   <p align="center">Universal plug-and-play KV cache compression for decoder-only LLMs.</p>
   <p align="center">
-    <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python"></a>
+    <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green" alt="License"></a>
     <a href="https://arxiv.org/abs/2607.12550"><img src="https://img.shields.io/badge/arXiv-2607.12550-red" alt="Paper"></a>
     <a href="https://github.com/sachncs/kvcompress/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachncs/kvcompress/ci.yaml?branch=master" alt="CI"></a>
@@ -54,7 +54,7 @@ pip install kvcompress
 
 ```bash
 git clone https://github.com/sachncs/kvcompress.git
-cd jolt
+cd kvcompress
 pip install -e .
 ```
 
@@ -294,8 +294,10 @@ docs/
 pip install -e ".[dev]"
 ruff check kvcompress tests examples scripts
 ruff format --check kvcompress tests examples scripts
-pytest tests/unit tests/property         # 233 tests, ~4s on CPU
+mypy kvcompress
+pytest tests/unit tests/property         # 353 tests, ~35s on CPU
 pytest --cov=kvcompress --cov-report=term-missing
+coverage report --fail-under=90
 ```
 
 ### Commit conventions
@@ -353,7 +355,7 @@ mkdocs serve                            # live-reload at http://127.0.0.1:8000
 
 | Category | Technology |
 |---|---|
-| Language | Python 3.12+ |
+| Language | Python 3.11+ |
 | Deep learning | PyTorch 2.x |
 | Integrations | transformers, (optional) vLLM, (optional) Triton |
 | Lint / format | ruff (`ruff check`, `ruff format`) |

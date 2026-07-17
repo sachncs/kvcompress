@@ -62,6 +62,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **CI mypy on Python 3.11:** `pyproject.toml` pinned `numpy<2` (was
+  `>=1.26`). Numpy 2.x `.pyi` stubs use 3.12-only `type` syntax, which
+  mypy could not parse on the 3.11 matrix entry. Local gate now green.
+- **vLLM unit tests on machines without vLLM:** 9 tests in
+  `tests/unit/vllm_kv_offload_test.py` were failing because
+  `JoLTOffloadHandler.__init__` raised `ImportError` when vllm was
+  absent, even though the data-path methods (`compress_block`,
+  `decompress_block`, `transfer_async`, `wait`) are version-agnostic.
+  `__init__` now succeeds with `base_class = None`; `__getattr__`
+  already raised `AttributeError` for unbound names. The single test
+  asserting `ImportError` on instantiation was rewritten to assert the
+  new contract: construction succeeds, base-class attribute forwarding
+  raises. `test_handler_instantiation_with_real_vllm` still gates on
+  vllm via `pytest.importorskip`.
 - **Allocator internals docs:** `optimize`, `build_cell_grid`,
   `argmin_per_cell`, `make_result`, and `GreedyAllocator.optimize` had
   inline inner-function comments but no docstrings; those are now
@@ -102,7 +116,7 @@ the JoLT algorithm.
 
 - **Author:** sachin <sachncs@gmail.com>
 - **License:** Apache-2.0
-- **Python:** 3.12+
+- **Python:** 3.11+
 - **Branch:** `master`
 
 ### Tooling gate (run before every commit)
@@ -110,23 +124,27 @@ the JoLT algorithm.
 ```bash
 ruff check kvcompress tests examples scripts
 ruff format --check kvcompress tests examples scripts
-pytest tests/unit tests/property
+mypy kvcompress
+python -m pytest --cov=kvcompress --cov-report=term-missing \
+                 -m "not slow and not integration and not gpu"
+coverage report --fail-under=90
 ```
 
-The gate excludes `mypy`, `black`, `vulture` from CI: `mypy` is configured
-to ignore missing imports (vendored stubs aren't worth the noise),
-`black` is shadowed by `ruff format`, and `vulture`'s 80% confidence floor
-catches the genuinely-dead symbols already.
+The local gate mirrors CI: lint, format, type-check, unit tests with
+coverage, and the 90% coverage floor. CI adds an OS × Python matrix
+(ubuntu/macos × 3.11/3.12/3.13).
 
 ### Quality numbers at HEAD
 
-- **233 tests pass** (4 skipped: 3 are `bits=0` no-op cases, 1 is the
-  vLLM-not-installed case).
-- **72% line coverage** of `kvcompress/`.
+- **353 tests pass** (4 skipped: 3 are `bits=0` no-op cases, 1 is the
+  vLLM-not-installed gate).
+- **90% line coverage** of `kvcompress/` (CI gate met).
 - **0 ruff warnings** across `kvcompress/`, `tests/`, `examples/`,
   `scripts/`.
 - **17 files** touched in the docstring sweep (no algorithm or API
   changes).
+- **Repo rename:** GitHub repository renamed `jolt` → `kvcompress`;
+  remote URL updated; PyPI name already matched.
 
 ### Algorithm attribution
 
