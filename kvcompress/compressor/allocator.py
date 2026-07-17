@@ -206,9 +206,7 @@ class JointAllocator:
             )
 
         if original_bytes is None:
-            original_bytes = sum(
-                bytes_original(c.shape, self.element_size_bytes) for c in cells
-            )
+            original_bytes = sum(bytes_original(c.shape, self.element_size_bytes) for c in cells)
         target_bytes = max(1, int(round(original_bytes / self.target_ratio)))
 
         # Per-cell candidate grid: (rT, rd, b).

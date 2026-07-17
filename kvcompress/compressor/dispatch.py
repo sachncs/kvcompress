@@ -105,9 +105,7 @@ METHODS: dict[str, dict[str, Any]] = {
     "fp8": {
         "class_path": ("kvcompress.compressor.identity", "IdentityCompressor"),
         "allowed_kwargs": IDENTITY_KWARGS,
-        "dtype_override": torch.float8_e4m3fn
-        if hasattr(torch, "float8_e4m3fn")
-        else torch.float16,
+        "dtype_override": torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.float16,
     },
     "fp16": {
         "class_path": ("kvcompress.compressor.identity", "IdentityCompressor"),
@@ -153,8 +151,7 @@ def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
     if spec is None:
         supported = ", ".join(repr(m) for m in METHODS)
         raise NotImplementedError(
-            f"compressor method {method!r} is not supported; "
-            f"supported methods: {supported}."
+            f"compressor method {method!r} is not supported; supported methods: {supported}."
         )
 
     allowed = spec["allowed_kwargs"]
@@ -172,7 +169,11 @@ def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
 
     module_name, attr = spec["class_path"]
     cls = getattr(importlib.import_module(module_name), attr)
-    return cls(**kwargs)
+    result = cls(**kwargs)
+    # ponytail: cast away the Any introduced by `**kwargs`.
+    if not isinstance(result, KVCompressor):
+        raise TypeError(f"{cls.__name__} did not return a KVCompressor")
+    return result
 
 
 __all__ = ["METHODS", "build_compressor", "supported_methods"]

@@ -138,7 +138,7 @@ def test_compress_decompress_round_trip_separates_kv(monkeypatch: pytest.MonkeyP
     worker = JoLTOffloadWorker(compressor=comp, block_shape=(2, 2, 4, 8))
     # vLLM's standard layout: (num_layers, num_kv, T, dh).
     torch.manual_seed(0)
-    num_layers, num_kv, T, dh = 2, 2, 4, 8
+    num_layers, _num_kv, T, dh = 2, 2, 4, 8
     K_orig = torch.randn(num_layers, T, dh)
     V_orig = torch.randn(num_layers, T, dh)
     block = torch.stack([K_orig, V_orig], dim=1)  # (num_layers, 2, T, dh)

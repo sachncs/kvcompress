@@ -172,6 +172,9 @@ exclude_patterns = [
 [tool.coverage.run]
 source = ["kvcompress"]
 branch = true
+omit = [
+    "kvcompress/benchmarks/*",
+]
 
 [tool.coverage.report]
 show_missing = true

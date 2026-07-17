@@ -58,7 +58,7 @@ import torch
 from kvcompress.adapters.registry import install as registry_install
 from kvcompress.cache.manager import CacheManager
 from kvcompress.compressor.base import KVCompressor
-from kvcompress.compressor.dispatch import build_compressor
+from kvcompress.compressor.dispatch import build_compressor as _build_compressor
 
 log = logging.getLogger(__name__)
 
@@ -85,9 +85,7 @@ def is_compression_active(model: object) -> bool:
 
 def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
     """Backwards-compat shim — dispatch lives in ``kvcompress.compressor.dispatch``."""
-    from kvcompress.compressor.dispatch import build_compressor as _dispatch
-
-    return _dispatch(method, **kwargs)
+    return _build_compressor(method, **kwargs)
 
 
 class HuggingFaceAdapter:
@@ -157,7 +155,7 @@ class HuggingFaceAdapter:
                 device = "cpu"
         self.device = torch.device(device) if isinstance(device, str) else device
 
-        compressor = build_compressor(
+        compressor = _build_compressor(
             method,
             compression_ratio=compression_ratio,
             bits=bits,
@@ -285,13 +283,8 @@ class HuggingFaceAdapter:
         generation_config."""
         if not self.enabled:
             return
-        if (
-            hasattr(self.model, "generation_config")
-            and self._cache_implementation_existed
-        ):
-            self.model.generation_config.cache_implementation = (
-                self._original_cache_implementation
-            )
+        if hasattr(self.model, "generation_config") and self._cache_implementation_existed:
+            self.model.generation_config.cache_implementation = self._original_cache_implementation
         elif hasattr(self.model, "generation_config") and hasattr(
             self.model.generation_config, "cache_implementation"
         ):

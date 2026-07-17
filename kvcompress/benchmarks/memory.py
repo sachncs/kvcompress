@@ -103,7 +103,7 @@ def run_memory_sweep(
     return rows
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     """CLI entry point. Parses ``--m --T --dh --ratios --methods --seed --output``."""
     parser = argparse.ArgumentParser(description="Memory benchmark")
     parser.add_argument("--m", type=int, default=8)

@@ -109,16 +109,39 @@ def validate(
     typer.echo("kvcompress validate: OK")
 
 
+def _run_subprocess(args: list[str], label: str, timeout: float = 600.0) -> bool:
+    """Run a benchmark subprocess; return True on success, False on failure.
+
+    Ponytail: docstring says "a failure in one doesn't take down the
+    others" but the original implementation used
+    ``subprocess.check_call`` which aborts the whole orchestration.
+    We catch ``CalledProcessError`` and return False; the orchestration
+    continues so the user gets a partial report.
+    """
+    typer.echo(f"== {label} ==")
+    try:
+        subprocess.check_call(args, timeout=timeout)
+        return True
+    except subprocess.CalledProcessError as e:
+        typer.echo(f"  {label} FAILED with exit code {e.returncode}", err=True)
+        return False
+    except subprocess.TimeoutExpired:
+        typer.echo(f"  {label} TIMED OUT after {timeout}s", err=True)
+        return False
+
+
 @app.command()
 def benchmark(
     suite: str = typer.Option("all", help="which benchmark suite to run"),
     output_dir: Path = typer.Option(Path("benchmarks/output"), help="output directory"),
+    timeout: float = typer.Option(600.0, help="per-suite timeout in seconds"),
 ) -> None:
     """Run the benchmark suite (memory / speed / reconstruction).
 
     Args:
         suite: one of ``all``, ``memory``, ``speed``, ``reconstruction``.
         output_dir: directory for JSON + PNG outputs.
+        timeout: per-suite timeout in seconds; default 600.
 
     Each sub-suite is spawned as a subprocess so a failure in one
     doesn't take down the others. JSON files land in ``output_dir``;
@@ -126,67 +149,90 @@ def benchmark(
     installed.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    results: list[tuple[str, bool]] = []
 
     if suite in ("all", "memory"):
-        typer.echo("== memory benchmark ==")
-        subprocess.check_call(
-            [
-                sys.executable,
-                "-m",
-                "kvcompress.benchmarks.memory",
-                "--T",
-                "1024",
-                "--dh",
-                "128",
-                "--ratios",
-                "2",
-                "3",
-                "4",
-                "5",
-                "8",
-                "--methods",
-                "jolt",
-                "flashjolt",
-                "lowrank",
-                "--output",
-                str(output_dir / "memory.json"),
-            ]
+        results.append(
+            (
+                "memory",
+                _run_subprocess(
+                    [
+                        sys.executable,
+                        "-m",
+                        "kvcompress.benchmarks.memory",
+                        "--T",
+                        "1024",
+                        "--dh",
+                        "128",
+                        "--ratios",
+                        "2",
+                        "3",
+                        "4",
+                        "5",
+                        "8",
+                        "--methods",
+                        "jolt",
+                        "flashjolt",
+                        "lowrank",
+                        "--output",
+                        str(output_dir / "memory.json"),
+                    ],
+                    "memory",
+                    timeout=timeout,
+                ),
+            )
         )
 
     if suite in ("all", "speed"):
-        typer.echo("== speed benchmark ==")
-        subprocess.check_call(
-            [
-                sys.executable,
-                "-m",
-                "kvcompress.benchmarks.throughput",
-                "--T",
-                "1024",
-                "--dh",
-                "128",
-                "--ratio",
-                "3",
-                "--output",
-                str(output_dir / "speed.json"),
-            ]
+        results.append(
+            (
+                "speed",
+                _run_subprocess(
+                    [
+                        sys.executable,
+                        "-m",
+                        "kvcompress.benchmarks.throughput",
+                        "--T",
+                        "1024",
+                        "--dh",
+                        "128",
+                        "--ratio",
+                        "3",
+                        "--output",
+                        str(output_dir / "speed.json"),
+                    ],
+                    "speed",
+                    timeout=timeout,
+                ),
+            )
         )
 
     if suite in ("all", "reconstruction"):
-        typer.echo("== reconstruction benchmark ==")
-        subprocess.check_call(
-            [
-                sys.executable,
-                "-m",
-                "kvcompress.benchmarks.reconstruction",
-                "--T",
-                "1024",
-                "--ratio",
-                "2",
-                "--output",
-                str(output_dir / "reconstruction.json"),
-            ]
+        results.append(
+            (
+                "reconstruction",
+                _run_subprocess(
+                    [
+                        sys.executable,
+                        "-m",
+                        "kvcompress.benchmarks.reconstruction",
+                        "--T",
+                        "1024",
+                        "--ratio",
+                        "2",
+                        "--output",
+                        str(output_dir / "reconstruction.json"),
+                    ],
+                    "reconstruction",
+                    timeout=timeout,
+                ),
+            )
         )
 
+    failed = [label for label, ok in results if not ok]
+    if failed:
+        typer.echo(f"benchmark failures: {', '.join(failed)}", err=True)
+        raise typer.Exit(code=1)
     typer.echo(f"benchmark outputs in {output_dir}")
 
 
@@ -195,9 +241,13 @@ def profile(
     model: str = typer.Option("gpt2", help="HF model id"),
     ratio: float = typer.Option(3.0, help="compression ratio"),
     max_new: int = typer.Option(20, help="tokens to generate"),
+    method: str = typer.Option("flashjolt", help="compression method"),
+    seed: int = typer.Option(0, help="RNG seed"),
+    bits: str = typer.Option("0,2,4,8", help="comma-separated bit-widths"),
+    layer_groups: int = typer.Option(1, help="number of layer groups"),
 ) -> None:
     """Profile a model with compression enabled and print cumulative stats."""
-    subprocess.check_call(
+    _run_subprocess(
         [
             sys.executable,
             "-m",
@@ -208,7 +258,16 @@ def profile(
             str(ratio),
             "--max-new",
             str(max_new),
-        ]
+            "--method",
+            method,
+            "--seed",
+            str(seed),
+            "--bits",
+            bits,
+            "--layer-groups",
+            str(layer_groups),
+        ],
+        "profile",
     )
 
 
@@ -219,11 +278,18 @@ def compress(
     target: str = typer.Option("33%", help="target memory fraction (e.g. 33%)"),
     prompt: str = typer.Option("Hello, my name is", help="prompt text"),
     max_new: int = typer.Option(20, help="tokens to generate"),
+    seed: int = typer.Option(0, help="RNG seed"),
+    bits: str = typer.Option("0,2,4,8", help="comma-separated residual bit-widths"),
+    layer_groups: int = typer.Option(1, help="number of layer groups"),
+    cache_implementation: str = typer.Option(
+        "kvcompress",
+        help="HF cache_implementation value (always overridden to 'dynamic' under the hood)",
+    ),
 ) -> None:
     """Run a one-shot compression pass on a prompt and print the output.
 
-    The compression handle is enabled for the duration of ``model.generate``
-    and disabled before returning.
+    Mirrors :func:`kvcompress.api.enable_compression` kwarg-for-kwarg so
+    CLI users get the same surface as the Python API.
     """
     try:
         import torch
@@ -233,7 +299,16 @@ def compress(
         tok = AutoTokenizer.from_pretrained(model)
         mdl = AutoModelForCausalLM.from_pretrained(model)
         mdl.eval()
-        handle = enable_compression(mdl, method=method, target_memory=target)
+        bits_tuple = tuple(int(b) for b in bits.split(",") if b)
+        handle = enable_compression(
+            mdl,
+            method=method,
+            target_memory=target,
+            seed=seed,
+            bits=bits_tuple,
+            layer_groups=layer_groups,
+            cache_implementation=cache_implementation,
+        )
         try:
             ids = tok.encode(prompt, return_tensors="pt")
             with torch.no_grad():

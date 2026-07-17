@@ -98,7 +98,7 @@ def run_speed_sweep(
     return rows
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     """CLI entry point. Parses ``--m --T --dh --ratio --seed --output``."""
     parser = argparse.ArgumentParser(description="Compression speed benchmark")
     parser.add_argument("--m", type=int, default=8)

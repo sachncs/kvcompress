@@ -321,12 +321,8 @@ def import_kv(
                 quant_dtype = f"int{quant_dtype_int}" if quant_dtype_int > 0 else "int0"
                 res = ResidualPayload(
                     projection_seed=seed_val,
-                    projection_distribution=payload_meta.get(
-                        "residual_distribution", "gaussian"
-                    ),
-                    projection_sparsity=float(
-                        payload_meta.get("residual_sparsity", 1.0)
-                    ),
+                    projection_distribution=payload_meta.get("residual_distribution", "gaussian"),
+                    projection_sparsity=float(payload_meta.get("residual_sparsity", 1.0)),
                     quant_dtype=quant_dtype,
                     symmetric=bool(payload_meta.get("residual_symmetric", True)),
                     per_channel=bool(payload_meta.get("residual_per_channel", True)),
@@ -334,9 +330,7 @@ def import_kv(
                     packed=data["residual_packed"],
                     scale=data["residual_scale"],
                     zero_point=data["residual_zero_point"],
-                    original_shape=tuple(
-                        int(d) for d in data["residual_original_shape"].tolist()
-                    ),
+                    original_shape=tuple(int(d) for d in data["residual_original_shape"].tolist()),
                     original_last=int(data["residual_original_last"].item()),
                 )
                 recon = recon + decode_residual(res)

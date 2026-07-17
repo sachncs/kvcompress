@@ -71,6 +71,7 @@ class Quantizer(Protocol):
         scale: torch.Tensor,
         zero_point: torch.Tensor,
         *,
+        original_last: int | None = None,
         output_dtype: torch.dtype | None = None,
     ) -> torch.Tensor: ...
 

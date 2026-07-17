@@ -249,20 +249,12 @@ def test_quant_per_group_smaller_error_than_per_tensor() -> None:
     q_per_tensor = IntQuantizer(bits=4, symmetric=True, per_channel=False)
     q_per_group = IntQuantizer(bits=4, symmetric=True, per_channel=False, group_size=20)
     p1_t = quantize_tensor(x, dtype="int4", symmetric=True, per_channel=False)
-    p2_g = quantize_tensor(
-        x, dtype="int4", symmetric=True, per_channel=False, group_size=20
-    )
+    p2_g = quantize_tensor(x, dtype="int4", symmetric=True, per_channel=False, group_size=20)
     err_t = (
-        x
-        - q_per_tensor.dequantize(
-            p1_t["q"], p1_t["scale"], p1_t["zero_point"], original_last=100
-        )
+        x - q_per_tensor.dequantize(p1_t["q"], p1_t["scale"], p1_t["zero_point"], original_last=100)
     ).norm() / x.norm()
     err_g = (
-        x
-        - q_per_group.dequantize(
-            p2_g["q"], p2_g["scale"], p2_g["zero_point"], original_last=100
-        )
+        x - q_per_group.dequantize(p2_g["q"], p2_g["scale"], p2_g["zero_point"], original_last=100)
     ).norm() / x.norm()
     # Per-group should be at least as good as per-tensor (often better).
     assert err_g <= err_t + 1e-9, f"per-group {err_g} > per-tensor {err_t}"

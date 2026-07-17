@@ -24,7 +24,24 @@ def __getattr__(name: str) -> Any:
         from kvcompress.adapters.huggingface import HuggingFaceAdapter
 
         return HuggingFaceAdapter
+    if name in ("export_kv", "import_kv", "is_vllm_available", "resolve_cache"):
+        from kvcompress.adapters import vllm
+
+        return getattr(vllm, name)
+    if name in ("JoLTOffloadWorker", "ThreadSafeEvictionPool", "is_vllm_kv_offload_available"):
+        from kvcompress.adapters import vllm_kv_offload
+
+        return getattr(vllm_kv_offload, name)
     raise AttributeError(f"module 'kvcompress.adapters' has no attribute {name!r}")
 
 
-__all__ = ["HuggingFaceAdapter"]
+__all__ = [
+    "HuggingFaceAdapter",
+    "export_kv",
+    "import_kv",
+    "is_vllm_available",
+    "is_vllm_kv_offload_available",
+    "JoLTOffloadWorker",
+    "ThreadSafeEvictionPool",
+    "resolve_cache",
+]

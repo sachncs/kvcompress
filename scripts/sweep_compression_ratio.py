@@ -15,6 +15,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Sweep compression ratios")
     parser.add_argument("--model", type=str, default="gpt2")
     parser.add_argument("--ratios", type=float, nargs="+", default=[1.5, 2.0, 3.0, 4.0])
+    parser.add_argument(
+        "--methods",
+        type=str,
+        nargs="+",
+        default=["flashjolt"],
+        help="Compression methods to sweep. Defaults to flashjolt.",
+    )
     parser.add_argument("--max-new", type=int, default=20)
     parser.add_argument("--prompt-tokens", type=int, default=64)
     args = parser.parse_args()
@@ -32,10 +39,10 @@ def main() -> None:
     prompt_ids = torch.randint(0, tok.vocab_size, (1, args.prompt_tokens))
     from kvcompress import enable_compression
 
-    print(f"{'method':<10} {'ratio':>8} {'tokens':>10} {'ms/tok':>10}")
+    print(f"{'method':<12} {'ratio':>8} {'tokens':>10} {'ms/tok':>10}")
     print("-" * 50)
     for ratio in args.ratios:
-        for method in ("flashjolt",):
+        for method in args.methods:
             handle = enable_compression(model, method=method, compression_ratio=ratio)
             try:
                 with torch.no_grad():
@@ -49,7 +56,7 @@ def main() -> None:
                     elapsed = (time.perf_counter() - t0) * 1000
                 tokens = out.shape[1] - prompt_ids.shape[1]
                 ms_per_tok = elapsed / max(1, tokens)
-                print(f"{method:<10} {ratio:>8.2f} {tokens:>10} {ms_per_tok:>9.2f}")
+                print(f"{method:<12} {ratio:>8.2f} {tokens:>10} {ms_per_tok:>9.2f}")
             finally:
                 handle.disable()
 

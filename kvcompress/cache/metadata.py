@@ -108,6 +108,13 @@ class CompressionMetadata:
     layer_groups: int = 1
     bits_allowed: tuple[int, ...] = (0, 2, 4, 8)
     extras: dict[str, Any] = field(default_factory=dict)
+    # Ponytail: O(1) (layer, kind) -> index lookup alongside the list.
+    # The list stays the source of truth for ordering; the dict shadows
+    # it for membership checks. ``_rebuild_index`` resyncs after bulk
+    # operations that mutate the list directly (tests, deserialise).
+    _index: dict[tuple[int, str], int] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
 
     def layer(self, idx: int) -> LayerCompression:
         """Return the first :class:`LayerCompression` for ``idx``.
@@ -127,11 +134,20 @@ class CompressionMetadata:
         (layer, kind) pair updates the metadata in place rather than
         accumulating duplicates.
         """
-        for i, existing in enumerate(self.layers):
-            if existing.layer == entry.layer and existing.kind == entry.kind:
-                self.layers[i] = entry
-                return
+        key = (entry.layer, entry.kind)
+        if key in self._index:
+            self.layers[self._index[key]] = entry
+            return
+        self._index[key] = len(self.layers)
         self.layers.append(entry)
+
+    def _rebuild_index(self) -> None:
+        """Resync the ``(layer, kind) -> index`` dict from ``layers``.
+
+        Call this after bulk-mutating ``self.layers`` directly (e.g. in
+        ``__post_init__`` after deserialisation).
+        """
+        self._index = {(entry.layer, entry.kind): i for i, entry in enumerate(self.layers)}
 
     def bytes_original(self) -> int:
         """Sum of uncompressed bytes across all layer entries."""
@@ -161,7 +177,7 @@ class CompressionMetadata:
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "CompressionMetadata":
         """Inverse of :meth:`to_dict`."""
-        return cls(
+        meta = cls(
             method=d["method"],
             dtype=d["dtype"],
             layers=[LayerCompression.from_dict(x) for x in d.get("layers", [])],
@@ -169,3 +185,5 @@ class CompressionMetadata:
             bits_allowed=tuple(d.get("bits_allowed", (0, 2, 4, 8))),
             extras=d.get("extras", {}),
         )
+        meta._rebuild_index()
+        return meta

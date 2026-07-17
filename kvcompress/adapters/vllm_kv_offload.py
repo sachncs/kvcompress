@@ -305,14 +305,10 @@ class JoLTOffloadWorker:
             raise AttributeError(name)
         base = self._vllm_base()
         if base is None:
-            raise AttributeError(
-                f"JoLTOffloadWorker.{name}: vLLM base class unavailable"
-            )
+            raise AttributeError(f"JoLTOffloadWorker.{name}: vLLM base class unavailable")
         attr = getattr(base, name, None)
         if attr is None:
-            raise AttributeError(
-                f"JoLTOffloadWorker.{name}: not present on vLLM base"
-            )
+            raise AttributeError(f"JoLTOffloadWorker.{name}: not present on vLLM base")
         return attr
 
     # ------------------------------------------------------------------
@@ -383,8 +379,7 @@ class JoLTOffloadWorker:
             v_payload = self.pool.get(layer_idx, "value")
             if k_payload is None or v_payload is None:
                 log.warning(
-                    "JoLTOffloadWorker: missing payload for layer %d "
-                    "(key=%s, value=%s)",
+                    "JoLTOffloadWorker: missing payload for layer %d (key=%s, value=%s)",
                     layer_idx,
                     k_payload is not None,
                     v_payload is not None,

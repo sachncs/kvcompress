@@ -143,8 +143,8 @@ def test_import_round_trip_recovers_kv_separately(fake_model: Any, tmp_path: Pat
     # K and V should be different (K must not be a copy of V).
     for layer_idx, (k_new, v_new, k_orig, v_orig) in enumerate(
         zip(
-            [l.keys for l in new_model.past_key_values.layers],
-            [l.values for l in new_model.past_key_values.layers],
+            [layer.keys for layer in new_model.past_key_values.layers],
+            [layer.values for layer in new_model.past_key_values.layers],
             original_k,
             original_v,
         )

@@ -72,9 +72,7 @@ def test_int_per_group() -> None:
     torch.manual_seed(0)
     x = torch.randn(2, 8)
     q = IntQuantizer(bits=4, symmetric=True, per_channel=False, group_size=4)
-    payload = quantize_tensor(
-        x, dtype="int4", symmetric=True, per_channel=False, group_size=4
-    )
+    payload = quantize_tensor(x, dtype="int4", symmetric=True, per_channel=False, group_size=4)
     packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
     # group_size=4 → 2 groups per row → scale shape (2, 2).
     assert scale.shape == (2, 2)

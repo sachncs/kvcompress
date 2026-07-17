@@ -40,31 +40,41 @@ def main() -> None:
         float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K)),
     )
 
-    # 3. HF adapter smoke test.
+    # 3. HF adapter smoke test. Distinguish network/import errors (which
+    # are user-environment failures and should be loud) from genuine
+    # smoke-test skips.
     try:
         from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
         log.info("transformers available; loading GPT-2 for HF smoke test")
+    except ImportError as e:
+        log.error("HF smoke test failed: transformers not importable: %s", e)
+        return 1
+    try:
         tok = GPT2Tokenizer.from_pretrained("gpt2")
         model = GPT2LMHeadModel.from_pretrained("gpt2")
-        model.eval()
-        from kvcompress import enable_compression
-
-        handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
-        try:
-            ids = tok.encode("Hello", return_tensors="pt")
-            with torch.no_grad():
-                out = model.generate(
-                    ids,
-                    max_new_tokens=5,
-                    do_sample=False,
-                    pad_token_id=tok.eos_token_id,
-                )
-            log.info("HF smoke test output: %s", tok.decode(out[0]))
-        finally:
-            handle.disable()
     except Exception as e:
-        log.warning("HF smoke test skipped: %s", e)
+        log.error("HF smoke test failed: cannot load GPT-2: %s", e)
+        return 1
+    model.eval()
+    from kvcompress import enable_compression
+
+    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    try:
+        ids = tok.encode("Hello", return_tensors="pt")
+        with torch.no_grad():
+            out = model.generate(
+                ids,
+                max_new_tokens=5,
+                do_sample=False,
+                pad_token_id=tok.eos_token_id,
+            )
+        log.info("HF smoke test output: %s", tok.decode(out[0]))
+    except Exception as e:
+        log.error("HF smoke test failed: %s", e)
+        return 1
+    finally:
+        handle.disable()
 
     log.info("kvcompress validate: OK")
     return 0
