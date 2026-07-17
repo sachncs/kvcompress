@@ -1,0 +1,72 @@
+[
+  {
+    "method": "identity",
+    "ratio_target": 1.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 524288,
+    "ratio_achieved": 2.0
+  },
+  {
+    "method": "jolt",
+    "ratio_target": 2.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "jolt",
+    "ratio_target": 3.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "jolt",
+    "ratio_target": 4.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "flashjolt",
+    "ratio_target": 2.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "flashjolt",
+    "ratio_target": 3.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "flashjolt",
+    "ratio_target": 4.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "lowrank",
+    "ratio_target": 2.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 270464,
+    "ratio_achieved": 3.876952200662565
+  },
+  {
+    "method": "lowrank",
+    "ratio_target": 3.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 177492,
+    "ratio_achieved": 5.907736686723909
+  },
+  {
+    "method": "lowrank",
+    "ratio_target": 4.0,
+    "bytes_original": 1048576,
+    "bytes_compressed": 135232,
+    "ratio_achieved": 7.75390440132513
+  }
+]

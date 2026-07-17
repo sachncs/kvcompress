@@ -45,10 +45,9 @@ Thumbs.db
 *.pyc
 *.pyd
 
-# Benchmark artefacts (we keep docs/**/*.png)
+# Benchmark artefacts (we keep docs/**/*.png and results/)
 benchmarks/output/
 benchmarks/plots/
-results/
 *.png
 !docs/**/*.png
 

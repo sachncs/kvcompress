@@ -1,0 +1,34 @@
+[
+  {
+    "method": "jolt",
+    "rel_err_K": 0.234859898686409,
+    "rel_err_V": 0.2152555286884308,
+    "bytes_K": 275476,
+    "bytes_V": 275476,
+    "compression_ratio": 3.8064150779015233
+  },
+  {
+    "method": "flashjolt",
+    "rel_err_K": 0.2348586618900299,
+    "rel_err_V": 0.21564914286136627,
+    "bytes_K": 275476,
+    "bytes_V": 275476,
+    "compression_ratio": 3.8064150779015233
+  },
+  {
+    "method": "lowrank-64",
+    "rel_err_K": 0.012738250195980072,
+    "rel_err_V": 0.013721811585128307,
+    "bytes_K": 278656,
+    "bytes_V": 278656,
+    "compression_ratio": 3.7629765732659624
+  },
+  {
+    "method": "int4-per-channel",
+    "rel_err_K": 0.20009486377239227,
+    "rel_err_V": 0.18625286221504211,
+    "bytes_K": 132100,
+    "bytes_V": 132100,
+    "compression_ratio": 7.9377441332324
+  }
+]
