@@ -1,0 +1,117 @@
+> """Compression profiler — instrument compress / decompress calls.
+  
+> A tiny per-call recorder that captures timing and size statistics. Useful
+> for the benchmark suite and for inspecting a real generation's KV cache
+> behaviour.
+  
+> The profiler is *passive*: it doesn't change the algorithm's runtime
+> behaviour beyond the per-call wall-clock measurement. Disabling it via
+> the private ``enabled`` flag removes the cost entirely.
+> """
+  
+! from __future__ import annotations
+  
+! import logging
+! import time
+! from contextlib import contextmanager
+! from dataclasses import dataclass, field
+! from typing import Any
+  
+! log = logging.getLogger(__name__)
+  
+  
+! @dataclass
+! class CallRecord:
+!     """One profiled call.
+  
+!     Attributes:
+!         name: human-readable label.
+!         duration_ms: wall time of the call.
+!         bytes_in: optional logical-input size.
+!         bytes_out: optional logical-output size.
+!     """
+  
+!     name: str
+!     duration_ms: float
+!     bytes_in: int = 0
+!     bytes_out: int = 0
+  
+!     def to_dict(self) -> dict[str, Any]:
+!         """Serialise the record (used by ``summary()`` and JSON output)."""
+!         return {
+!             "name": self.name,
+!             "duration_ms": self.duration_ms,
+!             "bytes_in": self.bytes_in,
+!             "bytes_out": self.bytes_out,
+!         }
+  
+  
+! @dataclass
+! class CompressionProfiler:
+!     """Records timings of named calls.
+  
+!     Use as a context manager::
+  
+!         prof = CompressionProfiler()
+!         with prof.record("compress_one"):
+!             ...
+!         prof.summary()
+!     """
+  
+!     records: list[CallRecord] = field(default_factory=list)
+!     enabled: bool = True
+  
+!     @contextmanager
+!     def record(self, name: str, *, bytes_in: int = 0, bytes_out: int = 0):
+!         """Context manager that times the wrapped block.
+  
+!         Args:
+!             name: human-readable label for this call site.
+!             bytes_in: optional logical-input size attached to the record.
+!             bytes_out: optional logical-output size attached to the record.
+  
+!         The ``finally`` block always appends the record (even on
+!         exceptions) so failed calls show up in the summary too.
+!         """
+!         if not self.enabled:
+!             yield
+!             return
+!         t0 = time.perf_counter()
+!         try:
+!             yield
+!         finally:
+!             elapsed_ms = (time.perf_counter() - t0) * 1000
+!             self.records.append(
+!                 CallRecord(
+!                     name=name,
+!                     duration_ms=elapsed_ms,
+!                     bytes_in=bytes_in,
+!                     bytes_out=bytes_out,
+!                 )
+!             )
+  
+!     def summary(self) -> dict[str, dict[str, Any]]:
+!         """Aggregate records by ``name``.
+  
+!         For each name: ``count``, ``total_ms``, ``mean_ms``, ``bytes_in``,
+!         ``bytes_out``.
+!         """
+!         out: dict[str, dict[str, Any]] = {}
+!         for r in self.records:
+!             agg = out.setdefault(
+!                 r.name, {"count": 0, "total_ms": 0.0, "bytes_in": 0, "bytes_out": 0}
+!             )
+!             agg["count"] += 1
+!             agg["total_ms"] += r.duration_ms
+!             agg["bytes_in"] += r.bytes_in
+!             agg["bytes_out"] += r.bytes_out
+!         for name, agg in out.items():
+!             agg["mean_ms"] = agg["total_ms"] / agg["count"]
+!         return out
+  
+!     def reset(self) -> None:
+!         """Drop every recorded call. Useful between test cases."""
+!         self.records.clear()
+  
+  
+! __all__ = ["CompressionProfiler"]

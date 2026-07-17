@@ -1,0 +1,213 @@
+> """Low-rank matrix SVD compressor.
+  
+> Baseline compressor that stores K and V as a matrix SVD: ``K ≈ U_K S_K V_Kᵀ``,
+> ``V ≈ U_V S_V V_Vᵀ`` with rank truncation. Used for ablation against JoLT.
+  
+> Why this baseline exists:
+  
+> * JoLT compresses along two axes (token and feature). The natural
+>   comparison is a method that compresses along one axis — the matrix SVD
+>   here compresses the (m·T, dh) matrix, which keeps all ``T`` tokens but
+>   reduces the per-head dim. This isolates the contribution of the
+>   two-axis Tucker vs. the residual path.
+> * Same byte accounting as JoLT, so cross-method comparisons are direct.
+  
+> This is the natural ``RankCompression`` baseline against which
+> ``TuckerCompression`` was shown to win by ~5-10× in the paper's
+> Table 2.
+  
+> Algorithm (per side)
+> --------------------
+  
+> For each ``X ∈ R^{m·T × dh}`` we form the unfold ``X̄ = X.reshape(m·T, dh)``
+> and compute a truncated SVD::
+  
+>     X̄ ≈ U · diag(S) · Vh      with U ∈ R^{m·T×r}, Vh ∈ R^{r×dh}
+  
+> We store ``U`` and ``Vh`` plus the singular values ``S``. Storage::
+  
+>     B = (m·T·r + r + r·dh) · c     (c = sizeof(factor_dtype) in bytes)
+  
+> vs. raw ``B_raw = m·T·dh · sizeof(dtype)`` — so the achieved ratio is
+> roughly ``(m·T·dh) / (m·T·r + r·dh)`` for ``c=1``, dropping further when
+> ``c`` is fp16. Reconstruction is::
+  
+>     X̂ = (U · diag(S)) @ Vh      reshaped back to (m, T, dh)
+  
+> Unlike JoLT, **all** compression is on the feature axis: the rank-``r``
+> factor forces every token to share the same ``r``-dim feature subspace,
+> which is a poor fit for attention heads that care about different
+> tokens. That's the gap TuckerClosing exploits.
+> """
+  
+! from __future__ import annotations
+  
+! import logging
+! from typing import Any
+  
+! import torch
+  
+! from kvcompress.compressor.base import (
+!     CompressedPayload,
+!     CompressorStats,
+!     KVCompressor,
+! )
+! from kvcompress.compressor.svd import SVD
+  
+! log = logging.getLogger(__name__)
+  
+  
+! class LowRankCompressor(KVCompressor):
+!     """Low-rank matrix SVD compressor.
+  
+!     Treats each K/V tensor as a 2-D matrix ``(m·T, dh)`` and applies a
+!     truncated SVD at the requested rank.
+  
+!     Args:
+!         rank: target rank.
+!         factor_dtype: stored factor dtype (``fp16`` or ``fp32``).
+!     """
+  
+!     name = "lowrank"
+  
+!     def __init__(
+!         self,
+!         *,
+!         rank: int = 64,
+!         factor_dtype: torch.dtype = torch.float16,
+!         seed: int = 0,
+!         **unused: Any,
+!     ) -> None:
+!         super().__init__()
+!         self.rank = int(rank)
+!         self.factor_dtype = factor_dtype
+!         self.svd = SVD(method="exact", seed=seed)
+  
+!     def compress(
+!         self,
+!         key: torch.Tensor,
+!         value: torch.Tensor,
+!     ) -> tuple[CompressedPayload, CompressedPayload]:
+!         """Truncated-SVD compress K and V at the given rank.
+  
+!         Reshapes each side to ``(m·T, dh)`` and computes the rank-``r``
+!         SVD via :class:`~kvcompress.compressor.svd.SVD`. The reconstruction
+!         error is bounded by the discarded tail Frobenius mass::
+  
+!             ||X - X̂||_F / ||X||_F ≤ sqrt(Σ_{k>r} s_k² / Σ s²)
+  
+!         Args:
+!             key: input K tensor of shape ``(m, T, dh)``.
+!             value: input V tensor of the same shape.
+  
+!         Returns:
+!             Two :class:`CompressedPayload` carrying ``{u, s, vh}`` plus
+!             the shape metadata.
+  
+!         Raises:
+!             ValueError: if ``key`` and ``value`` don't share shape.
+!         """
+!         if key.shape != value.shape:
+!             raise ValueError(f"K/V shape mismatch: {key.shape} vs {value.shape}")
+          # Collapse the (head, token) axes into one row axis -- the SVD is
+          # computed once per side, not per-token.
+!         m, T, dh = key.shape
+!         K_flat = key.reshape(m * T, dh)
+!         V_flat = value.reshape(m * T, dh)
+!         k_res = self.svd(K_flat, rank=self.rank)
+!         v_res = self.svd(V_flat, rank=self.rank)
+!         kp = self.build_payload(key, k_res, m, T, dh)
+!         vp = self.build_payload(value, v_res, m, T, dh)
+!         return kp, vp
+  
+!     def decompress(
+!         self,
+!         key_payload: CompressedPayload,
+!         value_payload: CompressedPayload,
+!     ) -> tuple[torch.Tensor, torch.Tensor]:
+!         """Inverse of :meth:`compress`.
+  
+!         Performs ``(U · diag(S)) @ Vh`` in fp32 then casts back to
+!         ``payload.dtype``. The fp32 promotion avoids ``factor_dtype``'s
+!         rounding compounding across a long chain of ops.
+  
+!         Args:
+!             key_payload: payload produced by :meth:`compress`.
+!             value_payload: payload produced by :meth:`compress`.
+  
+!         Returns:
+!             ``(K, V)`` reconstructed to the original dtype and shape.
+!         """
+!         k = self.reconstruct_payload(key_payload)
+!         v = self.reconstruct_payload(value_payload)
+!         return k, v
+  
+!     def build_payload(
+!         self,
+!         original: torch.Tensor,
+!         svd_res: Any,
+!         m: int,
+!         T: int,
+!         dh: int,
+!     ) -> CompressedPayload:
+!         """Wrap a single-side SVD result into a serialisable payload.
+  
+!         Stores ``u``, ``s``, ``vh`` as ``factor_dtype`` along with the
+!         metadata required to reconstruct the original shape (``m``,
+!         ``T``, ``dh``) and the rank chosen by the allocator.
+  
+!         Args:
+!             original: the unmodified input tensor (its ``dtype`` and
+!                 ``shape`` are preserved verbatim).
+!             svd_res: object returned by ``SVD(...)`` with attributes
+!                 ``u``, ``s``, ``vh``, ``rank``.
+!             m: head × layer count.
+!             T: token count.
+!             dh: per-head feature dim.
+  
+!         Returns:
+!             A :class:`CompressedPayload` ready for storage in
+!             :class:`~kvcompress.cache.compress.CompressedKVCache`.
+!         """
+!         u = svd_res.u.to(self.factor_dtype).contiguous()
+!         s = svd_res.s.to(self.factor_dtype).contiguous()
+!         vh = svd_res.vh.to(self.factor_dtype).contiguous()
+!         return CompressedPayload(
+!             method="lowrank",
+!             shape=tuple(original.shape),
+!             dtype=original.dtype,
+!             metadata={"rank": svd_res.rank, "m": m, "T": T, "dh": dh},
+!             data={"u": u, "s": s, "vh": vh},
+!             stats=CompressorStats(
+!                 bytes_original=original.numel() * original.element_size(),
+!                 bytes_compressed=u.numel() * u.element_size()
+!                 + s.numel() * s.element_size()
+!                 + vh.numel() * vh.element_size(),
+!             ),
+!         )
+  
+!     def reconstruct_payload(self, payload: CompressedPayload) -> torch.Tensor:
+!         """Reconstruct a single side from a :class:`CompressedPayload`.
+  
+!         Promotes ``u``, ``s``, ``vh`` to fp32, computes
+!         ``X̄ = (u * s) @ vh``, reshapes to ``(m, T, dh)``, and casts back
+!         to ``payload.dtype``. The fp32 promotion prevents ``factor_dtype``'s
+!         rounding from compounding through the matmul.
+  
+!         Args:
+!             payload: payload produced by :meth:`build_payload`.
+  
+!         Returns:
+!             The reconstructed tensor, dtype ``payload.dtype``, shape
+!             ``payload.shape``.
+!         """
+!         u = payload.data["u"].to(torch.float32)
+!         s = payload.data["s"].to(torch.float32)
+!         vh = payload.data["vh"].to(torch.float32)
+!         flat = (u * s) @ vh
+!         m = int(payload.metadata["m"])
+!         T = int(payload.metadata["T"])
+!         return flat.reshape(m, T, -1).to(payload.dtype)  # type: ignore[no-any-return]
+  
+  
+! __all__ = ["LowRankCompressor"]

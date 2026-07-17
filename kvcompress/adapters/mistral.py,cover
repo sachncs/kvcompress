@@ -1,0 +1,21 @@
+> """Mistral family adapter.
+  
+> Mistral uses sliding-window attention with grouped-query attention. The
+> default DynamicCache subclass handles standard K/V; the sliding-window
+> behaviour is managed by HF's cache layer, which we do not interfere with.
+> """
+  
+! from __future__ import annotations
+  
+! from typing import Any
+  
+  
+! def install(model: Any, cache_manager: Any) -> None:
+!     """No-op for Mistral.
+  
+!     The DynamicCache subclass installed by :class:`HuggingFaceAdapter` is
+!     sufficient. If you need explicit sliding-window semantics, do not
+!     override here — instead, use ``model.generation_config`` with the
+!     appropriate sliding-window config before calling ``enable_compression``.
+!     """
+!     return None

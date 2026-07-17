@@ -1,0 +1,10 @@
+> """Reconstruction / quantization / JL kernels.
+  
+> The package is intentionally thin: it ships a PyTorch reference path
+> that is always available, and an optional Triton path that is used when
+> ``triton`` is importable. The Triton kernels live under
+> :mod:`.triton.compression` (the entry points) and
+> :mod:`.triton.tucker_reconstruct` (the fused Tucker reconstruction).
+> """
+  
+! __all__: list[str] = []
