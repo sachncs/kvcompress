@@ -181,7 +181,7 @@ def test_invalid_bits() -> None:
 def test_int_group_size_not_divisible() -> None:
     x = torch.randn(2, 7)  # 7 not divisible by 4
     q = IntQuantizer(bits=4, group_size=4, per_channel=False)
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="not divisible"):
         q.quantize(x)
 
 

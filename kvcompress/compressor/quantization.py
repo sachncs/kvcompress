@@ -420,9 +420,10 @@ class IntQuantizer:
         elif self.group_size is not None:
             # Per-group scales.
             last = x.shape[-1]
-            assert last % self.group_size == 0, (
-                f"last dim {last} not divisible by group_size {self.group_size}"
-            )
+            if last % self.group_size != 0:
+                raise ValueError(
+                    f"last dim {last} not divisible by group_size {self.group_size}"
+                )
             x_g = x.reshape(*x.shape[:-1], last // self.group_size, self.group_size)
             x_min = x_g.min(dim=-1).values
             x_max = x_g.max(dim=-1).values
