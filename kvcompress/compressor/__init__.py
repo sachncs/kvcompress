@@ -34,24 +34,62 @@ from typing import Any  # noqa: F401
 if False:  # TYPE_CHECKING
     from kvcompress.compressor.allocator import (  # noqa: F401
         Allocation,
+        AllocationResult,
         Cell,
         JointAllocator,
     )
     from kvcompress.compressor.base import (  # noqa: F401
+        CompressedPayload,
         CompressorStats,
         KVCompressor,
     )
+    from kvcompress.compressor.dispatch import (  # noqa: F401
+        METHODS,
+        build_compressor,
+        supported_methods,
+    )
     from kvcompress.compressor.flashjolt import FlashJoLTCompressor  # noqa: F401
+    from kvcompress.compressor.identity import IdentityCompressor  # noqa: F401
     from kvcompress.compressor.jolt import JoLTCompressor  # noqa: F401
+    from kvcompress.compressor.lowrank import LowRankCompressor  # noqa: F401
+    from kvcompress.compressor.quantization_only import (  # noqa: F401
+        IntQuantOnlyCompressor,
+    )
 
 LAZY_EXPORTS = {
     "Allocation": ("kvcompress.compressor.allocator", "Allocation"),
+    "AllocationResult": (
+        "kvcompress.compressor.allocator",
+        "AllocationResult",
+    ),
     "Cell": ("kvcompress.compressor.allocator", "Cell"),
     "JointAllocator": ("kvcompress.compressor.allocator", "JointAllocator"),
+    "CompressedPayload": ("kvcompress.compressor.base", "CompressedPayload"),
     "CompressorStats": ("kvcompress.compressor.base", "CompressorStats"),
     "KVCompressor": ("kvcompress.compressor.base", "KVCompressor"),
-    "FlashJoLTCompressor": ("kvcompress.compressor.flashjolt", "FlashJoLTCompressor"),
+    "METHODS": ("kvcompress.compressor.dispatch", "METHODS"),
+    "build_compressor": (
+        "kvcompress.compressor.dispatch",
+        "build_compressor",
+    ),
+    "supported_methods": (
+        "kvcompress.compressor.dispatch",
+        "supported_methods",
+    ),
+    "FlashJoLTCompressor": (
+        "kvcompress.compressor.flashjolt",
+        "FlashJoLTCompressor",
+    ),
+    "IdentityCompressor": (
+        "kvcompress.compressor.identity",
+        "IdentityCompressor",
+    ),
     "JoLTCompressor": ("kvcompress.compressor.jolt", "JoLTCompressor"),
+    "LowRankCompressor": ("kvcompress.compressor.lowrank", "LowRankCompressor"),
+    "IntQuantOnlyCompressor": (
+        "kvcompress.compressor.quantization_only",
+        "IntQuantOnlyCompressor",
+    ),
 }
 
 
