@@ -59,6 +59,8 @@ from kvcompress.compressor.tucker import (
     reconstruct_partial_tucker,
 )
 
+__all__ = ["JoLTCompressor"]
+
 log = logging.getLogger(__name__)
 
 
@@ -459,6 +461,3 @@ class JoLTCompressor(KVCompressor):
             x = x + recovered
 
         return x.to(payload.dtype)
-
-
-__all__ = ["JoLTCompressor"]

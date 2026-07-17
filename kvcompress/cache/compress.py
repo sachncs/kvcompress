@@ -50,6 +50,9 @@ import torch
 from kvcompress.cache.metadata import CompressionMetadata, LayerCompression
 from kvcompress.compressor.base import CompressedPayload, KVCompressor
 
+__all__ = ["CompressedKVCache", "LayerEntry", "normalize_kv", "payload_to_meta"]
+
+
 log = logging.getLogger(__name__)
 
 
@@ -376,6 +379,3 @@ def payload_to_meta(
         group_id=group_id,
         group_size=group_size,
     )
-
-
-__all__ = ["CompressedKVCache", "LayerEntry", "normalize_kv", "payload_to_meta"]

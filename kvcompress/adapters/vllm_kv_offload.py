@@ -59,6 +59,13 @@ from typing import Any
 
 from kvcompress.compressor.base import KVCompressor
 
+__all__ = [
+    "JoLTOffloadHandler",
+    "ThreadSafeEvictionPool",
+    "is_vllm_kv_offload_available",
+    "import_vllm_base",
+]
+
 log = logging.getLogger(__name__)
 
 
@@ -176,8 +183,7 @@ class JoLTOffloadHandler:
         base_cls = import_vllm_base()
         if base_cls is None:
             raise ImportError(
-                "JoLTOffloadHandler requires vllm>=0.19,<1.0; install with "
-                "`pip install vllm`."
+                "JoLTOffloadHandler requires vllm>=0.19,<1.0; install with `pip install vllm`."
             )
         # Verify OffloadingHandler is actually an ABC we can extend;
         # if the import succeeded but the class isn't what we expect,
@@ -222,9 +228,7 @@ class JoLTOffloadHandler:
                 e,
             )
             with self.lock:
-                self.finished_jobs.append(
-                    self.make_result(job_id, success=False)
-                )
+                self.finished_jobs.append(self.make_result(job_id, success=False))
             return False
 
         with self.lock:
@@ -326,9 +330,7 @@ class JoLTOffloadHandler:
             raise AttributeError(f"JoLTOffloadHandler.{name}: base class unbound")
         attr = getattr(base, name, None)
         if attr is None:
-            raise AttributeError(
-                f"JoLTOffloadHandler.{name}: not present on vLLM base"
-            )
+            raise AttributeError(f"JoLTOffloadHandler.{name}: not present on vLLM base")
         return attr
 
     # ------------------------------------------------------------------
@@ -356,7 +358,9 @@ class JoLTOffloadHandler:
         """
         # Stash the call so integration tests can assert it ran.
         self.eviction_pool.put(
-            -1, "key", ("transfer", getattr(src_spec, "blocks", None), getattr(dst_spec, "blocks", None))
+            -1,
+            "key",
+            ("transfer", getattr(src_spec, "blocks", None), getattr(dst_spec, "blocks", None)),
         )
 
     def store_block(
@@ -376,12 +380,8 @@ class JoLTOffloadHandler:
             K_layer = K_block[layer_idx].unsqueeze(0)
             V_layer = V_block[layer_idx].unsqueeze(0)
             mgr.store(layer_idx, K_layer, V_layer)
-            self.eviction_pool.put(
-                layer_idx, "key", mgr.cache.payload(layer_idx, "key")
-            )
-            self.eviction_pool.put(
-                layer_idx, "value", mgr.cache.payload(layer_idx, "value")
-            )
+            self.eviction_pool.put(layer_idx, "key", mgr.cache.payload(layer_idx, "key"))
+            self.eviction_pool.put(layer_idx, "value", mgr.cache.payload(layer_idx, "value"))
 
     def decompress_from_dict(
         self,
@@ -406,8 +406,7 @@ class JoLTOffloadHandler:
             v_payload = self.eviction_pool.get(layer_idx, "value")
             if k_payload is None or v_payload is None:
                 log.warning(
-                    "JoLTOffloadHandler: missing payload for layer %d "
-                    "(key=%s, value=%s)",
+                    "JoLTOffloadHandler: missing payload for layer %d (key=%s, value=%s)",
                     layer_idx,
                     k_payload is not None,
                     v_payload is not None,
@@ -420,11 +419,3 @@ class JoLTOffloadHandler:
                 V = V.squeeze(0)
             out.append((K, V))
         return out
-
-
-__all__ = [
-    "JoLTOffloadHandler",
-    "ThreadSafeEvictionPool",
-    "is_vllm_kv_offload_available",
-    "import_vllm_base",
-]

@@ -54,6 +54,9 @@ from kvcompress.compressor.base import (
 )
 from kvcompress.compressor.svd import SVD
 
+__all__ = ["LowRankCompressor"]
+
+
 log = logging.getLogger(__name__)
 
 
@@ -208,6 +211,3 @@ class LowRankCompressor(KVCompressor):
         m = int(payload.metadata["m"])
         T = int(payload.metadata["T"])
         return flat.reshape(m, T, -1).to(payload.dtype)  # type: ignore[no-any-return]
-
-
-__all__ = ["LowRankCompressor"]

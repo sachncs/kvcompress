@@ -58,7 +58,7 @@ def test_compressor_submodule_exports_base_classes() -> None:
 
 
 def test_compressor_submodule_exports_dispatch_helpers() -> None:
-    from kvcompress.compressor import METHODS, build_compressor, supported_methods
+    from kvcompress.compressor import METHODS, supported_methods
 
     methods = supported_methods()
     assert "jolt" in methods

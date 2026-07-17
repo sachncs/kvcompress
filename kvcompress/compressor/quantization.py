@@ -41,11 +41,21 @@ from typing import Literal, Protocol
 
 import torch
 
+__all__ = [
+    "FloatCastQuantizer",
+    "IntQuantizer",
+    "QuantDType",
+    "Quantizer",
+    "dequantize_tensor",
+    "estimate_int_bytes",
+    "get_quantizer",
+    "quantize_tensor",
+]
+
+
 log = logging.getLogger(__name__)
 
-
 QuantDType = Literal["fp16", "bf16", "fp8_e4m3", "fp8_e5m2", "int8", "int4", "int2"]
-
 
 # ---------------------------------------------------------------------------
 # Protocol
@@ -421,9 +431,7 @@ class IntQuantizer:
             # Per-group scales.
             last = x.shape[-1]
             if last % self.group_size != 0:
-                raise ValueError(
-                    f"last dim {last} not divisible by group_size {self.group_size}"
-                )
+                raise ValueError(f"last dim {last} not divisible by group_size {self.group_size}")
             x_g = x.reshape(*x.shape[:-1], last // self.group_size, self.group_size)
             x_min = x_g.min(dim=-1).values
             x_max = x_g.max(dim=-1).values
@@ -447,7 +455,6 @@ class IntQuantizer:
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
-
 
 QUANTIZER_REGISTRY: dict[str, Quantizer] = {}
 QUANTIZER_REGISTRY_LOCK = threading.Lock()
@@ -593,15 +600,3 @@ def dequantize_tensor(
 def estimate_int_bytes(numel: int, bits: int) -> int:
     """Bytes required to store ``numel`` packed signed integers of width ``bits``."""
     return (numel * bits + 7) // 8
-
-
-__all__ = [
-    "FloatCastQuantizer",
-    "IntQuantizer",
-    "QuantDType",
-    "Quantizer",
-    "dequantize_tensor",
-    "estimate_int_bytes",
-    "get_quantizer",
-    "quantize_tensor",
-]

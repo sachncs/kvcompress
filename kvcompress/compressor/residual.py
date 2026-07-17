@@ -38,6 +38,13 @@ from kvcompress.compressor.quantization import (
     quantize_tensor,
 )
 
+__all__ = [
+    "ResidualPayload",
+    "decode_residual",
+    "encode_residual",
+    "estimate_residual_bytes",
+]
+
 log = logging.getLogger(__name__)
 
 
@@ -306,11 +313,3 @@ def estimate_residual_bytes(
     else:
         scale_bytes = 8
     return packed_bytes + proj_bytes + scale_bytes
-
-
-__all__ = [
-    "ResidualPayload",
-    "decode_residual",
-    "encode_residual",
-    "estimate_residual_bytes",
-]

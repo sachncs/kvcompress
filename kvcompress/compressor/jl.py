@@ -29,8 +29,17 @@ from typing import Literal
 
 import torch
 
-log = logging.getLogger(__name__)
+__all__ = [
+    "JLDistribution",
+    "JLProjection",
+    "cached_projection",
+    "clear_projection_cache",
+    "gaussian_projection",
+    "rademacher_projection",
+]
 
+
+log = logging.getLogger(__name__)
 
 JLDistribution = Literal["gaussian", "rademacher"]
 
@@ -169,7 +178,6 @@ def rademacher_projection(
 # Cache
 # ---------------------------------------------------------------------------
 
-
 PROJECTION_CACHE: dict[tuple[int, int, str, int, str], JLProjection] = {}
 PROJECTION_CACHE_LOCK = threading.Lock()
 
@@ -225,13 +233,3 @@ def clear_projection_cache() -> None:
     """Empty the global JL projection cache (test utility)."""
     with PROJECTION_CACHE_LOCK:
         PROJECTION_CACHE.clear()
-
-
-__all__ = [
-    "JLDistribution",
-    "JLProjection",
-    "cached_projection",
-    "clear_projection_cache",
-    "gaussian_projection",
-    "rademacher_projection",
-]

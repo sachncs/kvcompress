@@ -45,6 +45,15 @@ from kvcompress.compressor.base import KVCompressor
 from kvcompress.compressor.dispatch import build_compressor
 from kvcompress.runtime.profiler import CompressionProfiler
 
+__all__ = [
+    "build_compressor",
+    "export_kv",
+    "import_kv",
+    "is_vllm_available",
+    "resolve_cache",
+]
+
+
 log = logging.getLogger(__name__)
 
 
@@ -394,12 +403,3 @@ def is_vllm_available() -> bool:
         return True
     except ImportError:
         return False
-
-
-__all__ = [
-    "build_compressor",
-    "export_kv",
-    "import_kv",
-    "is_vllm_available",
-    "resolve_cache",
-]

@@ -48,6 +48,8 @@ from kvcompress.compressor.quantization import (
     quantize_tensor,
 )
 
+__all__ = ["IntQuantOnlyCompressor"]
+
 log = logging.getLogger(__name__)
 
 
@@ -194,6 +196,3 @@ class IntQuantOnlyCompressor(KVCompressor):
             output_dtype=payload.dtype,
         )
         return flat.reshape(payload.shape)
-
-
-__all__ = ["IntQuantOnlyCompressor"]

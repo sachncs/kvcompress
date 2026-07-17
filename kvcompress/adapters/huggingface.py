@@ -60,15 +60,14 @@ from kvcompress.cache.manager import CacheManager
 from kvcompress.compressor.base import KVCompressor
 from kvcompress.compressor.dispatch import build_compressor as _build_compressor
 
-log = logging.getLogger(__name__)
+__all__ = ["HuggingFaceAdapter", "build_compressor", "is_compression_active"]
 
+
+log = logging.getLogger(__name__)
 
 # Re-export so existing callers (``from kvcompress.adapters.huggingface
 # import build_compressor``) keep working. New code should import from
 # ``kvcompress.compressor.dispatch`` directly.
-__all__ = ["HuggingFaceAdapter", "build_compressor", "is_compression_active"]
-
-
 # ponytail: weak-keyed registry of installed adapters keyed by id(model).
 # ``weakref.WeakValueDictionary`` lets GC reclaim adapters when the model
 # goes out of scope (e.g. between test cases) without us having to thread
@@ -283,13 +282,8 @@ class HuggingFaceAdapter:
         generation_config."""
         if not self.enabled:
             return
-        if (
-            hasattr(self.model, "generation_config")
-            and self.cache_implementation_existed
-        ):
-            self.model.generation_config.cache_implementation = (
-                self.original_cache_implementation
-            )
+        if hasattr(self.model, "generation_config") and self.cache_implementation_existed:
+            self.model.generation_config.cache_implementation = self.original_cache_implementation
         elif hasattr(self.model, "generation_config") and hasattr(
             self.model.generation_config, "cache_implementation"
         ):

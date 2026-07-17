@@ -23,6 +23,8 @@ from kvcompress.compressor.base import (
     KVCompressor,
 )
 
+__all__ = ["IdentityCompressor"]
+
 log = logging.getLogger(__name__)
 
 
@@ -114,6 +116,3 @@ class IdentityCompressor(KVCompressor):
         k = key_payload.data["value"].to(key_payload.dtype)
         v = value_payload.data["value"].to(value_payload.dtype)
         return k, v
-
-
-__all__ = ["IdentityCompressor"]

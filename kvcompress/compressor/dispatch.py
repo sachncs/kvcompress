@@ -26,8 +26,10 @@ import torch
 
 from kvcompress.compressor.base import KVCompressor
 
-log = logging.getLogger(__name__)
+__all__ = ["METHODS", "build_compressor", "supported_methods"]
 
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Per-method keyword argument allow-list
@@ -68,7 +70,6 @@ JOLT_KWARGS = frozenset(
 )
 
 IDENTITY_KWARGS = frozenset({"factor_dtype"})
-
 
 # ---------------------------------------------------------------------------
 # Method catalog
@@ -174,6 +175,3 @@ def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
     if not isinstance(result, KVCompressor):
         raise TypeError(f"{cls.__name__} did not return a KVCompressor")
     return result
-
-
-__all__ = ["METHODS", "build_compressor", "supported_methods"]

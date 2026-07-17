@@ -33,8 +33,16 @@ import math
 from dataclasses import dataclass, field
 from typing import Sequence
 
-log = logging.getLogger(__name__)
+__all__ = [
+    "Allocation",
+    "AllocationResult",
+    "Cell",
+    "GreedyAllocator",
+    "JointAllocator",
+]
 
+
+log = logging.getLogger(__name__)
 
 # ε²(b) calibration table. Default values are calibrated on a Gaussian
 # round-trip: 0 → 1 (no residual), 2 → 0.30, 4 → 0.10, 8 → 0.04.
@@ -644,12 +652,3 @@ def candidate_token_ranks(t_max: int) -> list[int]:
     base = list(range(1, 33))
     extras = sorted({48, 64, 96, 128, 192, 256, 384, 512, t_max})
     return base + [e for e in extras if e <= t_max]
-
-
-__all__ = [
-    "Allocation",
-    "AllocationResult",
-    "Cell",
-    "GreedyAllocator",
-    "JointAllocator",
-]

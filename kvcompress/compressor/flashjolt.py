@@ -39,6 +39,10 @@ from kvcompress.compressor.tucker import (
     reconstruct_partial_tucker,
 )
 
+
+__all__ = ["FlashJoLTCompressor", "flashjolt_cap"]
+
+
 log = logging.getLogger(__name__)
 
 
@@ -204,6 +208,3 @@ class CapWrapper:
             cap: ignored; the FlashJoLT cap is authoritative.
         """
         return self.base.randomise(a, rank=rank, cap=self.cap)
-
-
-__all__ = ["FlashJoLTCompressor", "flashjolt_cap"]

@@ -32,6 +32,9 @@ from typing import Literal
 
 import torch
 
+__all__ = ["SVD", "SVDResult"]
+
+
 log = logging.getLogger(__name__)
 
 
@@ -311,6 +314,3 @@ class SVD:
             method="randomised",
             full_s=None,
         )
-
-
-__all__ = ["SVD", "SVDResult"]

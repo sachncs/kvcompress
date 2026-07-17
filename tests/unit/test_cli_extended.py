@@ -123,11 +123,10 @@ def test_validate_hf_smoke_test_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     # resolves via LAZY_EXPORTS. Patch the upstream module and clear the
     # cache so the lazy resolution picks up our stub.
     import kvcompress
+
     kvcompress.__dict__.pop("enable_compression", None)
     fake_handle = mock.MagicMock()
-    with mock.patch(
-        "kvcompress.api.enable_compression", return_value=fake_handle
-    ) as m_enable:
+    with mock.patch("kvcompress.api.enable_compression", return_value=fake_handle) as m_enable:
         from kvcompress.cli import validate as validate_fn
 
         validate_fn(skip_hf=False)
@@ -301,9 +300,7 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
             return self
 
         def generate(self, ids, **kwargs):
-            return torch.cat(
-                [ids, ids.new_zeros((1, kwargs["max_new_tokens"]))], dim=1
-            )
+            return torch.cat([ids, ids.new_zeros((1, kwargs["max_new_tokens"]))], dim=1)
 
     def fake_automodel(*args, **kwargs):
         return _StubModel()
@@ -314,12 +311,8 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
         tok.decode = lambda ids, **kw: "ok"
         return tok
 
-    monkeypatch.setattr(
-        "transformers.AutoModelForCausalLM.from_pretrained", fake_automodel
-    )
-    monkeypatch.setattr(
-        "transformers.AutoTokenizer.from_pretrained", fake_autotokenizer
-    )
+    monkeypatch.setattr("transformers.AutoModelForCausalLM.from_pretrained", fake_automodel)
+    monkeypatch.setattr("transformers.AutoTokenizer.from_pretrained", fake_autotokenizer)
     # Don't let the JSON stats echo spam test output.
     with mock.patch.object(echo, "__call__", return_value=None):
         compress_fn(
@@ -348,8 +341,6 @@ def test_benchmark_swallows_per_suite_failure(tmp_path: Path) -> None:
     exit 1 (orchestration-level failure) but report both.
     """
     from subprocess import CalledProcessError
-
-    from kvcompress.cli import run_subprocess as real_run
 
     calls: list[str] = []
 
@@ -425,6 +416,7 @@ def test_compress_requires_hf_dependencies(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_compress_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """End-to-end compress with a stubbed AutoModelForCausalLM."""
+
     class _StubModel:
         class _Config:
             model_type = "gpt2"
@@ -450,12 +442,8 @@ def test_compress_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
         tok.decode = lambda ids, **kw: "ok"
         return tok
 
-    monkeypatch.setattr(
-        "transformers.AutoModelForCausalLM.from_pretrained", fake_automodel
-    )
-    monkeypatch.setattr(
-        "transformers.AutoTokenizer.from_pretrained", fake_autotokenizer
-    )
+    monkeypatch.setattr("transformers.AutoModelForCausalLM.from_pretrained", fake_automodel)
+    monkeypatch.setattr("transformers.AutoTokenizer.from_pretrained", fake_autotokenizer)
 
     result = runner.invoke(
         app,
