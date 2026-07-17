@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-vllm = ["vllm>=1.0"]
+vllm = ["vllm>=0.7,<2"]
 triton = ["triton>=2.2"]
 bench = [
     "matplotlib>=3.7",

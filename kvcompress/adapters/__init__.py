@@ -28,7 +28,7 @@ def __getattr__(name: str) -> Any:
         from kvcompress.adapters import vllm
 
         return getattr(vllm, name)
-    if name in ("JoLTOffloadWorker", "ThreadSafeEvictionPool", "is_vllm_kv_offload_available"):
+    if name in ("JoLTOffloadHandler", "ThreadSafeEvictionPool", "is_vllm_kv_offload_available"):
         from kvcompress.adapters import vllm_kv_offload
 
         return getattr(vllm_kv_offload, name)
@@ -41,7 +41,7 @@ __all__ = [
     "import_kv",
     "is_vllm_available",
     "is_vllm_kv_offload_available",
-    "JoLTOffloadWorker",
+    "JoLTOffloadHandler",
     "ThreadSafeEvictionPool",
     "resolve_cache",
 ]
