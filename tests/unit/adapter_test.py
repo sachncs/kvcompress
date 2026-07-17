@@ -16,7 +16,7 @@ from kvcompress.api import enable_compression, CompressionHandle
 class FakeModel:
     """Minimal model-like object for adapter testing."""
 
-    def __init__(self, model_type: str = "llama") -> None:
+    def __init__(self, model_type: str = "llama", has_cache_impl: bool = True) -> None:
         class Config:
             pass
 
@@ -24,9 +24,11 @@ class FakeModel:
         self.config.model_type = model_type
 
         class GenConfig:
-            cache_implementation = None
+            pass
 
         self.generation_config = GenConfig()
+        if has_cache_impl:
+            self.generation_config.cache_implementation = None
 
 
 def test_registry_known_types() -> None:
@@ -130,3 +132,105 @@ def test_enable_compression_unknown_method_raises() -> None:
     model = FakeModel("llama")
     with pytest.raises(NotImplementedError, match="not supported"):
         enable_compression(model, method="not-a-method", compression_ratio=2.0)
+
+
+def test_enable_disables_leak_free_when_no_prior_attr() -> None:
+    """``disable()`` must not leave ``cache_implementation="dynamic"``
+    behind on a generation_config that didn't have the attribute.
+    """
+    model = FakeModel("llama", has_cache_impl=False)
+    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    assert model.generation_config.cache_implementation == "dynamic"
+    handle.disable()
+    assert not hasattr(model.generation_config, "cache_implementation")
+
+
+def test_enable_restores_prior_cache_implementation() -> None:
+    """When the user pre-set ``cache_implementation``, ``disable()``
+    must restore it exactly."""
+
+    class GenConfig:
+        cache_implementation = "static"
+
+    class Model:
+        class Config:
+            model_type = "llama"
+
+        config = Config()
+        generation_config = GenConfig()
+
+    model = Model()
+    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    assert model.generation_config.cache_implementation == "dynamic"
+    handle.disable()
+    assert model.generation_config.cache_implementation == "static"
+
+
+def test_double_enable_raises_runtime_error() -> None:
+    """A second ``enable_compression`` on the same model raises
+    ``RuntimeError`` instead of silently no-oping.
+    """
+    model = FakeModel("llama")
+    h1 = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    try:
+        with pytest.raises(RuntimeError, match="already"):
+            enable_compression(model, method="jolt", compression_ratio=3.0)
+    finally:
+        h1.disable()
+
+
+def test_handle_is_active_property() -> None:
+    model = FakeModel("llama")
+    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    assert handle.is_active is True
+    handle.disable()
+    assert handle.is_active is False
+
+
+def test_disable_is_idempotent() -> None:
+    """Calling ``disable()`` twice doesn't raise."""
+    model = FakeModel("llama")
+    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    handle.disable()
+    handle.disable()  # no-op
+    assert handle.is_active is False
+
+
+def test_enable_rolls_back_on_failure() -> None:
+    """If ``enable()`` raises after a partial mutation, the runtime is
+    restored to its pre-enable state.
+
+    We force a failure by monkey-patching ``registry_install`` to raise
+    after the DynamicCache has already been patched. After the
+    exception, ``generation_config.cache_implementation`` must not have
+    been left set and the DynamicCache symbol in ``transformers.cache_utils``
+    must be the original class.
+    """
+    import transformers.cache_utils as cu
+    from kvcompress.adapters import huggingface as hf_module
+    from kvcompress.adapters.huggingface import HuggingFaceAdapter
+
+    original_dynamic_cache = cu.DynamicCache
+    original_install = hf_module.registry_install
+
+    def boom(**_kwargs):
+        raise RuntimeError("simulated family-shim install failure")
+
+    hf_module.registry_install = boom
+    model = FakeModel("llama", has_cache_impl=False)
+    adapter = HuggingFaceAdapter(
+        model=model,
+        method="flashjolt",
+        compression_ratio=2.0,
+    )
+    try:
+        with pytest.raises(RuntimeError, match="simulated"):
+            adapter.enable()
+        # generation_config was mutated then rolled back.
+        assert not hasattr(model.generation_config, "cache_implementation")
+        # DynamicCache is back to the original symbol.
+        assert cu.DynamicCache is original_dynamic_cache
+        # Adapter didn't latch "enabled".
+        assert adapter.enabled is False
+    finally:
+        hf_module.registry_install = original_install

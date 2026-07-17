@@ -94,6 +94,11 @@ class CompressionHandle:
     model: Any
     stats: CompressionStats = field(default_factory=CompressionStats)
 
+    @property
+    def is_active(self) -> bool:
+        """``True`` if compression is still active on the model."""
+        return bool(self.adapter.enabled)
+
     def disable(self) -> None:
         """Disable compression and restore the original behaviour."""
         self.adapter.disable()

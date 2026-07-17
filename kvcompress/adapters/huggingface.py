@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import weakref
 from typing import Any
 
 import torch
@@ -62,10 +63,31 @@ from kvcompress.compressor.dispatch import build_compressor
 log = logging.getLogger(__name__)
 
 
-# Re-export so existing callers (`from kvcompress.adapters.huggingface
-# import build_compressor`) keep working. New code should import from
+# Re-export so existing callers (``from kvcompress.adapters.huggingface
+# import build_compressor``) keep working. New code should import from
 # ``kvcompress.compressor.dispatch`` directly.
-__all__ = ["HuggingFaceAdapter", "build_compressor"]
+__all__ = ["HuggingFaceAdapter", "build_compressor", "is_compression_active"]
+
+
+# ponytail: weak-keyed registry of installed adapters keyed by id(model).
+# ``weakref.WeakValueDictionary`` lets GC reclaim adapters when the model
+# goes out of scope (e.g. between test cases) without us having to thread
+# teardown through every call site.
+_INSTALLED_ADAPTERS: "weakref.WeakValueDictionary[int, HuggingFaceAdapter]" = (
+    weakref.WeakValueDictionary()
+)
+
+
+def is_compression_active(model: object) -> bool:
+    """Return ``True`` if a :class:`HuggingFaceAdapter` is active on ``model``."""
+    return id(model) in _INSTALLED_ADAPTERS
+
+
+def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
+    """Backwards-compat shim — dispatch lives in ``kvcompress.compressor.dispatch``."""
+    from kvcompress.compressor.dispatch import build_compressor as _dispatch
+
+    return _dispatch(method, **kwargs)
 
 
 class HuggingFaceAdapter:
@@ -89,6 +111,8 @@ class HuggingFaceAdapter:
             ``"dynamic"`` under the hood; any other value is silently
             ignored.
         seed: seed for randomized components.
+        device: device tensors should live on. ``None`` infers from the
+            model's first parameter.
         **kwargs: forwarded to the compressor.
     """
 
@@ -102,6 +126,7 @@ class HuggingFaceAdapter:
         bits: tuple[int, ...] = (0, 2, 4, 8),
         cache_implementation: str = "dynamic",
         seed: int = 0,
+        device: torch.device | str | None = None,
         **kwargs: Any,
     ) -> None:
         self.model = model
@@ -122,6 +147,16 @@ class HuggingFaceAdapter:
         self.cache_implementation = cache_implementation
         self.seed = int(seed)
 
+        # Resolve device: explicit > model parameter > cpu.
+        if device is None:
+            try:
+                param = next(model.parameters(), None)
+                if param is not None:
+                    device = param.device
+            except (StopIteration, AttributeError):
+                device = "cpu"
+        self.device = torch.device(device) if isinstance(device, str) else device
+
         compressor = build_compressor(
             method,
             compression_ratio=compression_ratio,
@@ -137,7 +172,12 @@ class HuggingFaceAdapter:
         # attribute to avoid an import cycle with kvcompress.api.
         self.manager: CacheManager | None = None
         self.enabled = False
-        self.original_cache_implementation: str | None = None
+        self._enable_rolled_back = False
+        # Snapshot of state we mutated during enable(); populated as we
+        # mutate so :meth:`disable` can restore verbatim. Cleared on
+        # successful disable.
+        self._original_cache_implementation: str | None = None
+        self._cache_implementation_existed: bool = False
         self.original_dynamic_cache_cls: type | None = None
         self.patched_cache_cls: type | None = None
         self.patched_modules: dict[str, type] = {}
@@ -150,33 +190,48 @@ class HuggingFaceAdapter:
     def enable(self) -> None:
         """Install the patches and create the cache manager.
 
-        Idempotency: calling :meth:`enable` twice is a no-op with a
-        warning. Disable first if you want to switch methods.
+        Idempotency: a second call raises :class:`RuntimeError` instead
+        of silently no-oping (matches the docstring contract in
+        ``api.py``).
 
-        Side effects:
-            * Constructs :attr:`manager`.
-            * Sets ``model.generation_config.cache_implementation``.
-            * Patches ``DynamicCache`` in every loaded ``transformers.*``
-              module.
-            * Installs the family-specific shim (if any) via
-              :mod:`kvcompress.adapters.registry`.
-
-        Errors are caught and logged (warnings) so a partial install
-        doesn't leave the user in a broken state — the worst case is
-        a cache that doesn't get compressed.
+        Errors are caught and rolled back: every side effect is recorded
+        so :meth:`disable` can put the runtime back to its pre-enable
+        state, even if enable() blew up halfway through.
         """
         if self.enabled:
-            log.warning("kvcompress: enable() called twice; ignoring")
-            return
+            raise RuntimeError(
+                "kvcompress: enable() called twice on the same adapter; "
+                "call handle.disable() first."
+            )
+        if is_compression_active(self.model):
+            raise RuntimeError(
+                "kvcompress: a different adapter is already installed on this model; "
+                "call its handle.disable() first."
+            )
         log.info(
             "kvcompress: enabling %s on %s",
             self.method,
             type(self.model).__name__,
         )
-        self.manager = CacheManager(compressor=self.compressor)
+        try:
+            self._enable_inner()
+        except BaseException:
+            # Roll back any side effects already applied.
+            self._rollback_partial_enable()
+            raise
+
+    def _enable_inner(self) -> None:
+        """Inner enable; assumes caller handles rollback on failure."""
+        self.manager = CacheManager(
+            compressor=self.compressor,
+            device=self.device,
+        )
 
         if hasattr(self.model, "generation_config"):
-            self.original_cache_implementation = getattr(
+            self._cache_implementation_existed = hasattr(
+                self.model.generation_config, "cache_implementation"
+            )
+            self._original_cache_implementation = getattr(
                 self.model.generation_config, "cache_implementation", None
             )
             self.model.generation_config.cache_implementation = self.cache_implementation
@@ -196,6 +251,34 @@ class HuggingFaceAdapter:
             log.info("kvcompress: installed family shim for %s", model_type)
 
         self.enabled = True
+        _INSTALLED_ADAPTERS[id(self.model)] = self
+
+    def _rollback_partial_enable(self) -> None:
+        """Undo whatever side effects :meth:`enable` completed before failing."""
+        if self._enable_rolled_back:
+            return
+        self._enable_rolled_back = True
+        # Undo DynamicCache patches if installed.
+        if self.original_dynamic_cache_cls is not None:
+            try:
+                self.uninstall_dynamic_cache()
+            except Exception:  # noqa: BLE001 -- best-effort rollback
+                log.exception("kvcompress: rollback failed during uninstall_dynamic_cache")
+        # Undo generation_config mutation.
+        if hasattr(self.model, "generation_config"):
+            try:
+                if self._cache_implementation_existed:
+                    self.model.generation_config.cache_implementation = (
+                        self._original_cache_implementation
+                    )
+                else:
+                    try:
+                        delattr(self.model.generation_config, "cache_implementation")
+                    except AttributeError:
+                        pass
+            except Exception:  # noqa: BLE001
+                log.exception("kvcompress: rollback failed for cache_implementation")
+        self.manager = None
 
     def disable(self) -> None:
         """Restore the original ``DynamicCache`` symbol and revert the
@@ -204,11 +287,24 @@ class HuggingFaceAdapter:
             return
         if (
             hasattr(self.model, "generation_config")
-            and self.original_cache_implementation is not None
+            and self._cache_implementation_existed
         ):
-            self.model.generation_config.cache_implementation = self.original_cache_implementation
+            self.model.generation_config.cache_implementation = (
+                self._original_cache_implementation
+            )
+        elif hasattr(self.model, "generation_config") and hasattr(
+            self.model.generation_config, "cache_implementation"
+        ):
+            # Generation config had no cache_implementation before enable;
+            # remove the attribute we added so we don't leak a side effect.
+            try:
+                delattr(self.model.generation_config, "cache_implementation")
+            except AttributeError:
+                pass
         self.uninstall_dynamic_cache()
         self.enabled = False
+        _INSTALLED_ADAPTERS.pop(id(self.model), None)
+        log.info("kvcompress: disabled compression on %s", type(self.model).__name__)
 
     # ------------------------------------------------------------------
     # DynamicCache patching
