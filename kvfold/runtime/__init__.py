@@ -3,11 +3,11 @@
 Imports are lazy so the package can be imported even when individual modules
 are still stubbed out.
 
-* :mod:`.memory` defines :class:`~kvfold.runtime.memory.MemoryPool`,
+* :mod:`.memory` defines :class:`~kvfold.runtime.memory.Pool`,
   a small object pool that reuses contiguous tensors across compress /
   decompress calls to reduce allocator pressure during long-context
   generation.
-* :mod:`.profiler` defines :class:`~kvfold.runtime.profiler.CompressionProfiler`,
+* :mod:`.profiler` defines :class:`~kvfold.runtime.profiler.Profile`,
   a context-manager-style timer used by the benchmark suite.
 """
 
@@ -16,12 +16,12 @@ from __future__ import annotations
 from typing import Any  # noqa: F401
 
 if False:  # TYPE_CHECKING
-    from kvfold.runtime.memory import MemoryPool  # noqa: F401
-    from kvfold.runtime.profiler import CompressionProfiler  # noqa: F401
+    from kvfold.runtime.pool import Pool  # noqa: F401
+    from kvfold.runtime.profile import Profile  # noqa: F401
 
 LAZY_EXPORTS = {
-    "MemoryPool": ("kvfold.runtime.memory", "MemoryPool"),
-    "CompressionProfiler": ("kvfold.runtime.profiler", "CompressionProfiler"),
+    "Pool": ("kvfold.runtime.memory", "Pool"),
+    "Profile": ("kvfold.runtime.profiler", "Profile"),
 }
 
 

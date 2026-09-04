@@ -59,15 +59,15 @@ def test_core_submodule_unknown_name_raises() -> None:
 
 
 def test_runtime_submodule_exports_memory_pool() -> None:
-    from kvfold.runtime import MemoryPool
+    from kvfold.runtime import Pool
 
-    assert MemoryPool.__name__ == "MemoryPool"
+    assert Pool.__name__ == "Pool"
 
 
 def test_runtime_submodule_exports_profiler() -> None:
-    from kvfold.runtime import CompressionProfiler
+    from kvfold.runtime import Profile
 
-    assert CompressionProfiler.__name__ == "CompressionProfiler"
+    assert Profile.__name__ == "Profile"
 
 
 def test_runtime_submodule_exports_seed() -> None:

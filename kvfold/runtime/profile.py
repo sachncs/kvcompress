@@ -47,12 +47,12 @@ class CallRecord:
 
 
 @dataclass
-class CompressionProfiler:
+class Profile:
     """Records timings of named calls.
 
     Use as a context manager::
 
-        prof = CompressionProfiler()
+        prof = Profile()
         with prof.record("compress_one"):
             ...
         prof.summary()
@@ -114,4 +114,4 @@ class CompressionProfiler:
         self.records.clear()
 
 
-__all__ = ["CompressionProfiler"]
+__all__ = ["Profile"]

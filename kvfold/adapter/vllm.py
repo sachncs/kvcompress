@@ -43,7 +43,7 @@ from kvfold.cache.compress import CompressedKVCache
 from kvfold.cache.metadata import Meta
 from kvfold.core.base import Compressor
 from kvfold.core.dispatch import build_compressor
-from kvfold.runtime.profiler import CompressionProfiler
+from kvfold.runtime.profile import Profile
 
 __all__ = [
     "build_compressor",
@@ -134,7 +134,7 @@ def export_kv(
         )
 
     tmp_cache = CompressedKVCache(compressor=compressor)
-    profiler = CompressionProfiler()
+    profiler = Profile()
 
     # Walk the layers of the source cache. DynamicCache exposes
     # ``layers[layer_idx].keys`` and ``.values``.

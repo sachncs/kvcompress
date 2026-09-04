@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import torch
 
-from kvfold.runtime.memory import MemoryPool
-from kvfold.runtime.profiler import CompressionProfiler
+from kvfold.runtime.pool import Pool
+from kvfold.runtime.profile import Profile
 
 
 def test_memory_pool_acquire() -> None:
-    pool = MemoryPool()
+    pool = Pool()
     t = pool.acquire((4, 8), dtype=torch.float32)
     assert t.shape == (4, 8)
     assert t.dtype == torch.float32
 
 
 def test_memory_pool_reuse() -> None:
-    pool = MemoryPool()
+    pool = Pool()
     t1 = pool.acquire((4, 8), dtype=torch.float32)
     pool.release(t1)
     t2 = pool.acquire((4, 8), dtype=torch.float32)
@@ -25,14 +25,14 @@ def test_memory_pool_reuse() -> None:
 
 
 def test_memory_pool_separates_keys() -> None:
-    pool = MemoryPool()
+    pool = Pool()
     t1 = pool.acquire((4, 8), dtype=torch.float32)
     t2 = pool.acquire((4, 4), dtype=torch.float32)
     assert t1.shape != t2.shape
 
 
 def test_memory_pool_caps_per_key() -> None:
-    pool = MemoryPool(max_per_key=2)
+    pool = Pool(max_per_key=2)
     ts = [pool.acquire((4,)) for _ in range(5)]
     for t in ts:
         pool.release(t)
@@ -41,7 +41,7 @@ def test_memory_pool_caps_per_key() -> None:
 
 
 def test_memory_pool_clear() -> None:
-    pool = MemoryPool()
+    pool = Pool()
     t = pool.acquire((4,))
     pool.release(t)
     pool.clear()
@@ -49,7 +49,7 @@ def test_memory_pool_clear() -> None:
 
 
 def test_profiler_records() -> None:
-    p = CompressionProfiler()
+    p = Profile()
     with p.record("compress", bytes_in=100):
         pass
     s = p.summary()
@@ -59,7 +59,7 @@ def test_profiler_records() -> None:
 
 
 def test_profiler_aggregate() -> None:
-    p = CompressionProfiler()
+    p = Profile()
     for _ in range(3):
         with p.record("op", bytes_in=10):
             pass
@@ -69,7 +69,7 @@ def test_profiler_aggregate() -> None:
 
 
 def test_profiler_disabled() -> None:
-    p = CompressionProfiler()
+    p = Profile()
     p.enabled = False
     with p.record("op"):
         pass
@@ -77,7 +77,7 @@ def test_profiler_disabled() -> None:
 
 
 def test_profiler_reset() -> None:
-    p = CompressionProfiler()
+    p = Profile()
     with p.record("op"):
         pass
     p.reset()

@@ -23,7 +23,7 @@ import torch
 log = logging.getLogger(__name__)
 
 
-class MemoryPool:
+class Pool:
     """Pool of reusable torch tensors keyed by (shape, dtype, device).
 
     Args:
@@ -84,4 +84,4 @@ class MemoryPool:
         }
 
 
-__all__ = ["MemoryPool"]
+__all__ = ["Pool"]
