@@ -261,14 +261,16 @@ class Int8Config(IntConfig):
     bits: int = 8
 
 
+@dataclasses.dataclass(frozen=True)
 class Fp16Config(FloatConfig):
     method: ClassVar[Method] = "fp16"
-    dtype: torch.dtype = torch.float16
+    dtype: torch.dtype = dataclasses.field(default=torch.float16, init=False)
 
 
+@dataclasses.dataclass(frozen=True)
 class Bf16Config(FloatConfig):
     method: ClassVar[Method] = "bf16"
-    dtype: torch.dtype = torch.bfloat16
+    dtype: torch.dtype = dataclasses.field(default=torch.bfloat16, init=False)
 
 
 class MethodConfigRegistry:
