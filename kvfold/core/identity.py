@@ -1,13 +1,15 @@
-"""Identity compressor — passthrough with no actual compression.
+"""Passthrough compressor — stores K/V with optional dtype cast, no real compression.
 
-Useful as a baseline for ablation studies: it stores K and V in fp16
-(half the size of fp32, same as fp16 model weights) so memory accounting
-is realistic but no JoLT-specific operations are performed.
+:class:`Pass` writes the input tensor (cast to ``dtype``) into the payload
+verbatim. The bytes_compressed figure reflects the cast dtype, so a
+fp16 cast halves the on-disk size; this is the same effect as casting
+the cache to fp16 globally. There is no algorithmic compression.
 
-The "identity" name is misleading: this compressor does halve the cache
-size by casting to fp16. Use ``raw`` semantics (no cast) only if your
-model's weights are already in fp32 and you genuinely want the baseline
-to be byte-equivalent to the uncompressed cache.
+For real compression use :class:`Jolt`, :class:`Flash`, :class:`Low`, or
+:class:`IntQuant`. For dtype-only halving use :class:`FloatCast` directly.
+
+The kwarg is named ``dtype`` (was ``factor_dtype`` in the previous
+revision). Other compressors use ``dtype`` to mean the same thing.
 """
 
 from __future__ import annotations
@@ -17,102 +19,63 @@ from typing import Any
 
 import torch
 
-from kvfold.compressor.base import (
-    CompressedPayload,
-    CompressorStats,
-    KVCompressor,
-)
+from kvfold.config import PassConfig
+from kvfold.core.base import Compressor, Payload, Stats
 
-__all__ = ["IdentityCompressor"]
+__all__ = ["Pass"]
 
 log = logging.getLogger(__name__)
 
 
-class IdentityCompressor(KVCompressor):
-    """No-op compressor that stores K/V in fp16."""
+class Pass(Compressor):
+    """Passthrough with optional dtype cast.
 
-    name = "identity"
+    The name reflects semantics: nothing is changed beyond what the
+    storage dtype allows. This is a useful baseline for ablation studies
+    and for "disable compression cleanly" code paths.
 
-    def __init__(self, *, factor_dtype: torch.dtype = torch.float16, **unused: Any) -> None:
-        super().__init__()
-        self.factor_dtype = factor_dtype
+    Attributes:
+        dtype: storage dtype; tensors are cast to this on put.
+    """
 
-    def compress(
-        self,
-        key: torch.Tensor,
-        value: torch.Tensor,
-    ) -> tuple[CompressedPayload, CompressedPayload]:
-        """Store K and V verbatim (modulo a single dtype cast).
+    method: str = "pass"
 
-        Mathematically ``B_compressed = N · sizeof(factor_dtype)`` where
-        ``N = ∏ shape``. Both payloads share the same shape dict, so the
-        cache accounting matches the raw KV cache exactly modulo the
-        dtype.
+    def __init__(self, *, dtype: torch.dtype = torch.float16, **unused: Any) -> None:
+        self.dtype = dtype
 
-        Args:
-            key: input K tensor of shape ``(m, T, dh)``.
-            value: input V tensor of the same shape.
+    @classmethod
+    def default_config(cls) -> PassConfig:
+        return PassConfig()
 
-        Returns:
-            Two :class:`CompressedPayload` objects whose ``data['value']``
-            are fp16 (or whatever ``factor_dtype`` specifies) contiguous
-            copies of the inputs.
-
-        Notes:
-            No shape contract checks happen here because K and V are
-            forced to be the same shape anyway — callers (the HF
-            adapter) guarantee it before reaching this method.
-        """
-        # One contiguous() ensures the underlying tensor is coalesced so
-        # numel() × itemsize is a faithful lower bound on storage bytes.
-        kp = CompressedPayload(
-            method="identity",
+    def compress(self, key: torch.Tensor, value: torch.Tensor) -> tuple[Payload, Payload]:
+        """Store K and V verbatim (modulo a single dtype cast)."""
+        Compressor.validate(key, value)
+        kp = Payload(
+            method="pass",
             shape=tuple(key.shape),
             dtype=key.dtype,
             metadata={"r_token": 0, "r_feature": 0, "bits": 0},
-            data={"value": key.to(self.factor_dtype).contiguous()},
-            stats=CompressorStats(
+            data={"value": key.to(self.dtype).contiguous()},
+            stats=Stats(
                 bytes_original=key.numel() * key.element_size(),
-                bytes_compressed=key.numel() * self.factor_dtype.itemsize,
+                bytes_compressed=key.numel() * self.dtype.itemsize,
             ),
         )
-        vp = CompressedPayload(
-            method="identity",
+        vp = Payload(
+            method="pass",
             shape=tuple(value.shape),
             dtype=value.dtype,
             metadata={"r_token": 0, "r_feature": 0, "bits": 0},
-            data={"value": value.to(self.factor_dtype).contiguous()},
-            stats=CompressorStats(
+            data={"value": value.to(self.dtype).contiguous()},
+            stats=Stats(
                 bytes_original=value.numel() * value.element_size(),
-                bytes_compressed=value.numel() * self.factor_dtype.itemsize,
+                bytes_compressed=value.numel() * self.dtype.itemsize,
             ),
         )
         return kp, vp
 
-    def decompress(
-        self,
-        key_payload: CompressedPayload,
-        value_payload: CompressedPayload,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Reconstruct K and V from the cached fp16 buffers.
-
-        Performs a single dtype cast (``factor_dtype`` -> ``payload.dtype``).
-        No allocation beyond PyTorch's caching allocator, no shuffling.
-
-        Args:
-            key_payload: payload produced by :meth:`compress`.
-            value_payload: payload produced by :meth:`compress`.
-
-        Returns:
-            ``(K, V)`` -- two tensors of the original ``dtype`` and shape.
-
-        Notes:
-            Round-trip loss is bounded by ``factor_dtype``'s rounding
-            error only (``~1e-3`` for fp16). If your ``model.dtype`` is
-            already ``factor_dtype`` the round-trip is bit-exact.
-        """
-        # No copy or reshape needed -- payload.data['value'] already has
-        # the original shape.
+    def restore(self, key_payload: Payload, value_payload: Payload) -> tuple[torch.Tensor, torch.Tensor]:
+        """Reconstruct K and V from the cached buffers."""
         k = key_payload.data["value"].to(key_payload.dtype)
         v = value_payload.data["value"].to(value_payload.dtype)
         return k, v
