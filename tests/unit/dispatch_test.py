@@ -95,7 +95,8 @@ def test_jolt_forwards_ratio() -> None:
 
 
 def test_unknown_method_raises_with_actionable_message() -> None:
-    with pytest.raises(NotImplementedError, match="not supported"):
+    from kvfold.errors import UnsupportedMethodError
+    with pytest.raises(UnsupportedMethodError, match="not-a-method"):
         build_compressor("not-a-method")
 
 

@@ -84,10 +84,9 @@ def test_pass_stats_correct(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     assert kp.stats.bytes_original == k.numel() * k.element_size()
 
 
-def test_pass_extra_kwargs_are_dropped(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
-    """Unknown kwargs are silently dropped at the dispatch boundary;
-    the compressor itself doesn't validate."""
+def test_pass_extra_kwargs_rejected(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
+    """Unknown kwargs raise MethodConfigError at construction time."""
+    from kvfold.errors import MethodConfigError
     k, v = k_v
-    c = Pass(dtype=torch.float32, random_unused_arg=42)
-    kp, vp = c.compress(k, v)
-    assert kp.shape == k.shape
+    with pytest.raises(MethodConfigError, match="random_unused_arg"):
+        Pass(dtype=torch.float32, random_unused_arg=42)

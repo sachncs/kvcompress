@@ -139,18 +139,12 @@ class CompressorRegistry:
     def build(self, method: str, **kwargs: Any) -> Compressor:
         """Build a configured :class:`Compressor` from kwargs.
 
-        Kwargs not in the method's :class:`MethodConfig` schema are silently
-        dropped (they're typically adapter-level settings like
-        ``layer_groups`` that don't belong to the compressor). The factory
-        then receives the validated config.
+        Kwargs that aren't in the method's :class:`MethodConfig` schema raise
+        :class:`MethodConfigError` so a typo like ``per_chanel`` fails loud
+        instead of being silently dropped.
         """
         entry = self.resolve(method)
-        if entry.config_cls is not None and dataclasses.is_dataclass(entry.config_cls):
-            valid_fields = {f.name for f in dataclasses.fields(entry.config_cls)}
-            filtered = {k: v for k, v in kwargs.items() if k in valid_fields}
-        else:
-            filtered = dict(kwargs)
-        config = CONFIG_REGISTRY.build(method, **filtered)
+        config = CONFIG_REGISTRY.build(method, **kwargs)
         compressor = entry.factory(config)
         if not isinstance(compressor, Compressor):
             raise TypeError(

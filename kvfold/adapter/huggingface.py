@@ -172,7 +172,6 @@ class HF:
             ratio=ratio,
             bits=bits,
             seed=seed,
-            layer_groups=layer_groups,
             **kwargs,
         )
         self.compressor = compressor
