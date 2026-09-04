@@ -20,8 +20,8 @@ if False:  # TYPE_CHECKING
     from kvfold.runtime.profile import Profile  # noqa: F401
 
 LAZY_EXPORTS = {
-    "Pool": ("kvfold.runtime.memory", "Pool"),
-    "Profile": ("kvfold.runtime.profiler", "Profile"),
+    "Pool": ("kvfold.runtime.pool", "Pool"),
+    "Profile": ("kvfold.runtime.profile", "Profile"),
 }
 
 

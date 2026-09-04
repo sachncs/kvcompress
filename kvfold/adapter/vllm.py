@@ -88,8 +88,8 @@ def export_kv(
     model: Any,
     path: str,
     *,
-    method: str = "flashjolt",
-    compression_ratio: float = 3.0,
+    method: str = "flash",
+    ratio: float = 3.0,
     bits: tuple[int, ...] = (0, 2, 4, 8),
     seed: int = 0,
     compressor: Compressor | None = None,
@@ -104,11 +104,11 @@ def export_kv(
             attribute holding a :class:`DynamicCache`).
         path: destination safetensors path.
         method: compressor name.
-        compression_ratio: target ratio (passed to JoLT / Flash).
+        ratio: target ratio (passed to JoLT / Flash).
         bits: residual bit-widths.
         seed: RNG seed.
         compressor: pre-built compressor. If ``None``, one is constructed
-            from ``method``, ``compression_ratio``, ``bits``, ``seed``.
+            from ``method``, ``ratio``, ``bits``, ``seed``.
 
     Returns:
         The :class:`Meta` describing the saved cache.
@@ -128,7 +128,7 @@ def export_kv(
     if compressor is None:
         compressor = build_compressor(
             method,
-            compression_ratio=compression_ratio,
+            ratio=ratio,
             bits=bits,
             seed=seed,
         )
@@ -207,8 +207,8 @@ def import_kv(
     path: str,
     *,
     target_memory: str | None = "100%",
-    compression_ratio: float | None = None,
-    method: str = "flashjolt",
+    ratio: float | None = None,
+    method: str = "flash",
     bits: tuple[int, ...] = (0, 2, 4, 8),
     seed: int = 0,
 ) -> Meta:
@@ -226,7 +226,7 @@ def import_kv(
         target_memory: passed to :func:`kvfold.enable_compression`
             if the model hasn't been compressed yet (default ``"100%"``
             = identity).
-        compression_ratio: optional ratio override.
+        ratio: optional ratio override.
         method: compressor name to enable if needed.
         bits: residual bit-widths.
         seed: RNG seed.
@@ -254,18 +254,18 @@ def import_kv(
 
     # If target_memory="100%" was requested, build an identity compressor
     # for the temp cache; otherwise honour the user-specified ratio.
-    effective_ratio = compression_ratio
+    effective_ratio = ratio
     if effective_ratio is None and target_memory is not None:
         effective_ratio = parse_target_memory(target_memory)
     if effective_ratio == 1.0:
-        method = "identity"
+        method = "pass"
 
-    compressor = build_compressor(
-        method,
-        compression_ratio=effective_ratio or 3.0,
-        bits=bits,
-        seed=seed,
-    )
+    kwargs: dict[str, object] = {}
+    if method != "pass":
+        kwargs["ratio"] = effective_ratio or 3.0
+        kwargs["bits"] = bits
+        kwargs["seed"] = seed
+    compressor = build_compressor(method, **kwargs)
     tmp_cache = Cache(compressor=compressor)
 
     # Group tensors by (layer, kind). The key is the same `{layer}/{kind}/{name}`
@@ -291,10 +291,10 @@ def import_kv(
     reconstructed: dict[int, tuple[torch.Tensor | None, torch.Tensor | None]] = {}
 
     from kvfold.core.tucker import (
-        TuckerFactors,
+        Tucker,
         reconstruct_partial_tucker,
     )
-    from kvfold.core.residual import ResidualPayload, decode_residual
+    from kvfold.core.residual import Residual, decode_residual
 
     for (layer_idx, kind), data in by_cell.items():
         cell_key = f"{layer_idx}/{kind}"
@@ -310,7 +310,7 @@ def import_kv(
             # can validate against it.
             T = int(data["u_token"].shape[0])
             dh = int(data["u_feature"].shape[0])
-            factors = TuckerFactors(
+            factors = Tucker(
                 core=core.to(torch.float32),
                 u_token=data["u_token"].to(torch.float32),
                 u_feature=data["u_feature"].to(torch.float32),
@@ -328,7 +328,7 @@ def import_kv(
                 seed_val = int(payload_meta.get("residual_seed", 0))
                 quant_dtype_int = int(payload_meta.get("residual_dtype", 0))
                 quant_dtype = f"int{quant_dtype_int}" if quant_dtype_int > 0 else "int0"
-                res = ResidualPayload(
+                res = Residual(
                     projection_seed=seed_val,
                     projection_distribution=payload_meta.get("residual_distribution", "gaussian"),
                     projection_sparsity=float(payload_meta.get("residual_sparsity", 1.0)),
