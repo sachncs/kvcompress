@@ -14,13 +14,13 @@ log = logging.getLogger(__name__)
 def main() -> None:
     _ = argparse.ArgumentParser(description="Validate install").parse_args()
 
-    log.info("kvcompress validate: starting smoke test")
-    import kvcompress
+    log.info("kvfold validate: starting smoke test")
+    import kvfold
 
-    log.info("kvcompress version: %s", kvcompress.__version__)
+    log.info("kvfold version: %s", kvfold.__version__)
 
     # 1. Compress / decompress round-trip on synthetic K/V.
-    from kvcompress import JoLTCompressor, FlashJoLTCompressor
+    from kvfold import JoLTCompressor, FlashJoLTCompressor
 
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 32, 16)
@@ -57,7 +57,7 @@ def main() -> None:
         log.error("HF smoke test failed: cannot load GPT-2: %s", e)
         return 1
     model.eval()
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
     try:
@@ -76,7 +76,7 @@ def main() -> None:
     finally:
         handle.disable()
 
-    log.info("kvcompress validate: OK")
+    log.info("kvfold validate: OK")
     return 0
 
 

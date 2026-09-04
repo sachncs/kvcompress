@@ -37,6 +37,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+import kvfold.core.builtins  # noqa: F401 — populates the compressor registry
+
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
 

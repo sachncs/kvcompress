@@ -37,7 +37,7 @@ def main() -> None:
         return
 
     prompt_ids = torch.randint(0, tok.vocab_size, (1, args.prompt_tokens))
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     print(f"{'method':<12} {'ratio':>8} {'tokens':>10} {'ms/tok':>10}")
     print("-" * 50)

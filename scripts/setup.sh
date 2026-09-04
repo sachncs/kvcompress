@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — create a development venv and install kvcompress + optional extras.
+# setup.sh — create a development venv and install kvfold + optional extras.
 #
 # Idempotent: re-running with an existing .venv reuses it. Pass
 # --recreate to delete and rebuild from scratch. Pass --no-vllm to skip
@@ -64,7 +64,7 @@ PY_MAJOR="${PY_VERSION%%.*}"
 PY_MINOR="${PY_VERSION##*.}"
 
 if [[ "${PY_MAJOR}" -lt 3 || ( "${PY_MAJOR}" -eq 3 && "${PY_MINOR}" -lt 11 ) ]]; then
-    echo "error: python ${PY_VERSION} is too old; kvcompress requires 3.11+" >&2
+    echo "error: python ${PY_VERSION} is too old; kvfold requires 3.11+" >&2
     exit 1
 fi
 
@@ -107,7 +107,7 @@ if [[ "${INSTALL_VLLM}" -eq 1 ]]; then
     EXTRA="${EXTRA},vllm"
 fi
 
-echo "==> installing kvcompress with extras: ${EXTRA}"
+echo "==> installing kvfold with extras: ${EXTRA}"
 if ! "${PY_BIN}" -m pip install -e ".[${EXTRA}]"; then
     echo "error: pip install failed" >&2
     exit 3

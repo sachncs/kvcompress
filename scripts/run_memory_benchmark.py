@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 
-from kvcompress.benchmarks.memory import run_memory_sweep
+from kvfold.benchmarks.memory import run_memory_sweep
 
 log = logging.getLogger(__name__)
 

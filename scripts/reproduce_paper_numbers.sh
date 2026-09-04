@@ -24,8 +24,9 @@ python -m scripts.run_speed_benchmark \
     --T 1024 --dh 128 --ratio 3 \
     --output results/speed.json
 
-echo "== perplexity grid (skipped: run_table1_perplexity module not yet written) =="
-# python -m scripts.run_table1_perplexity --T 1024 --ratio 3 --output results/perplexity.json || true
-echo "    (table 1 perplexity sweeps belong in benchmarks/, not scripts/)"
+echo "== perplexity grid (Table 1) =="
+python -m scripts.run_table1_perplexity \
+    --length 1024 --ratios 1 2 3 4 5 8 --model gpt2 \
+    --output results/perplexity.json || true
 
 echo "== done. results in ./results/ =="

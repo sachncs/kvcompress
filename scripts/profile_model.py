@@ -27,7 +27,7 @@ def main() -> None:
         log.warning("could not load model: %s", e)
         return
 
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     handle = enable_compression(model, method="flashjolt", compression_ratio=args.ratio)
     try:

@@ -63,7 +63,7 @@ def main() -> None:
     ids = tok.encode(prompt, return_tensors="pt")
     log.info("prompt tokens: %d", ids.shape[1])
 
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     for method in ("identity", "flashjolt"):
         handle = enable_compression(model, method=method, compression_ratio=3.0)
