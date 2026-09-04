@@ -55,7 +55,7 @@ def test_validate_callable() -> None:
 
 
 def test_validate_reports_flashjolt_callable() -> None:
-    """Direct call: validate() runs both JoLT and FlashJoLT paths."""
+    """Direct call: validate() runs both JoLT and Flash paths."""
     from kvfold.cli import validate as validate_fn
 
     validate_fn(skip_hf=True)
@@ -74,10 +74,10 @@ def test_validate_runs_synthetic_round_trip() -> None:
 
 
 def test_validate_reports_flashjolt_error() -> None:
-    """The validate command runs FlashJoLT too and reports its rel_err."""
+    """The validate command runs Flash too and reports its rel_err."""
     result = runner.invoke(app, ["validate", "--skip-hf"])
     assert result.exit_code == 0
-    assert "FlashJoLT round-trip rel error" in result.stdout
+    assert "Flash round-trip rel error" in result.stdout
 
 
 def test_validate_hf_smoke_test_branch(monkeypatch: pytest.MonkeyPatch) -> None:

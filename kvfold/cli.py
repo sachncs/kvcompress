@@ -51,7 +51,7 @@ def validate(
 
     1. JoLT round-trip on synthetic K/V. Should report a small relative
        Frobenius error (typically < 0.5 for the default settings).
-    2. FlashJoLT round-trip on the same K/V.
+    2. Flash round-trip on the same K/V.
     3. End-to-end generation with GPT-2 (unless ``--skip-hf`` is given
        or ``transformers`` isn't installed).
     """
@@ -61,7 +61,7 @@ def validate(
     typer.echo(f"kvfold {kvfold.__version__}")
 
     # 1. JoLT round-trip.
-    from kvfold import JoLTCompressor, FlashJoLTCompressor
+    from kvfold import Jolt, Flash
 
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 32, 16)
@@ -74,12 +74,12 @@ def validate(
         typer.echo("  FAIL")
         raise typer.Exit(code=1)
 
-    # 2. FlashJoLT round-trip.
-    fj = FlashJoLTCompressor(compression_ratio=2.0)
+    # 2. Flash round-trip.
+    fj = Flash(compression_ratio=2.0)
     kp, vp = fj.compress(K, V)
     k_hat, v_hat = fj.decompress(kp, vp)
     rel_err = float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K))
-    typer.echo(f"  FlashJoLT round-trip rel error: {rel_err:.4f}")
+    typer.echo(f"  Flash round-trip rel error: {rel_err:.4f}")
 
     # 3. HF smoke test.
     if not skip_hf:

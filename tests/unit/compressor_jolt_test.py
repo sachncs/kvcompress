@@ -128,7 +128,7 @@ def test_flashjolt_method_name() -> None:
 
 
 def test_flashjolt_speedup_no_quality_loss() -> None:
-    """FlashJoLT and exact JoLT should give similar reconstructions."""
+    """Flash and exact JoLT should give similar reconstructions."""
     torch.manual_seed(0)
     k = torch.randn(4, 64, 16, dtype=torch.float32)
     v = torch.randn(4, 64, 16, dtype=torch.float32)
@@ -147,7 +147,7 @@ def test_flashjolt_speedup_no_quality_loss() -> None:
 
 
 def test_jolt_compressor_inheritance() -> None:
-    """FlashJoLT should be a Compressor subclass."""
+    """Flash should be a Compressor subclass."""
     from kvfold.core.base import Compressor
 
     assert issubclass(Flash, Compressor)

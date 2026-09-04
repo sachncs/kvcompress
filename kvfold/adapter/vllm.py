@@ -39,10 +39,10 @@ from typing import Any
 import torch
 
 from kvfold.api import parse_target_memory
-from kvfold.store.compress import CompressedKVCache
+from kvfold.store.compress import Cache
 from kvfold.store.metadata import Meta
 from kvfold.core.base import Compressor
-from kvfold.core.dispatch import build_compressor
+from kvfold.api import build_compressor
 from kvfold.runtime.profile import Profile
 
 __all__ = [
@@ -104,7 +104,7 @@ def export_kv(
             attribute holding a :class:`DynamicCache`).
         path: destination safetensors path.
         method: compressor name.
-        compression_ratio: target ratio (passed to JoLT / FlashJoLT).
+        compression_ratio: target ratio (passed to JoLT / Flash).
         bits: residual bit-widths.
         seed: RNG seed.
         compressor: pre-built compressor. If ``None``, one is constructed
@@ -133,7 +133,7 @@ def export_kv(
             seed=seed,
         )
 
-    tmp_cache = CompressedKVCache(compressor=compressor)
+    tmp_cache = Cache(compressor=compressor)
     profiler = Profile()
 
     # Walk the layers of the source cache. DynamicCache exposes
@@ -266,7 +266,7 @@ def import_kv(
         bits=bits,
         seed=seed,
     )
-    tmp_cache = CompressedKVCache(compressor=compressor)
+    tmp_cache = Cache(compressor=compressor)
 
     # Group tensors by (layer, kind). The key is the same `{layer}/{kind}/{name}`
     # written by export_kv.

@@ -70,5 +70,5 @@ def test_validate_skip_hf_runs_synthetic_check(runner: CliRunner) -> None:
     result = runner.invoke(cli.app, ["validate", "--skip-hf"])
     assert result.exit_code == 0, result.stdout
     assert "JoLT round-trip" in result.stdout
-    assert "FlashJoLT round-trip" in result.stdout
+    assert "Flash round-trip" in result.stdout
     assert "OK" in result.stdout

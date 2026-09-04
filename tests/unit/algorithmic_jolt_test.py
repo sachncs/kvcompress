@@ -1,4 +1,4 @@
-"""Algorithmic tests for JoLT and FlashJoLT end-to-end round-trips.
+"""Algorithmic tests for JoLT and Flash end-to-end round-trips.
 
 These tests verify the *combined* algorithm: partial Tucker + JL-residual.
 The test tensors have known spectra so we can check that the
@@ -85,7 +85,7 @@ def test_jolt_roundtrip_on_smooth_tensor() -> None:
 
 
 def test_flashjolt_short_context_matches_exact_jolt() -> None:
-    """At short contexts (T ≤ 1024), FlashJoLT's cap policy is a no-op
+    """At short contexts (T ≤ 1024), Flash's cap policy is a no-op
     so the algorithm should match exact JoLT closely (the only
     difference is the randomized SVD's random seed affecting the sketch).
     """
@@ -108,7 +108,7 @@ def test_flashjolt_short_context_matches_exact_jolt() -> None:
 
 
 def test_flashjolt_at_long_context_uses_cap() -> None:
-    """At long contexts (T > 1024), FlashJoLT's cap policy should
+    """At long contexts (T > 1024), Flash's cap policy should
     actually apply — verify the q_cap is bounded.
     """
     assert LinearCap().cap(2048, 3.0) == 64

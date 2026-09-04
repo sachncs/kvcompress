@@ -32,7 +32,7 @@ def test_gpt2_identity_matches_baseline(gpt2_model_with_pad) -> None:
 
 @pytest.mark.integration
 def test_gpt2_flashjolt_runs(gpt2_model_with_pad) -> None:
-    """FlashJoLT compression on GPT-2 should run without error."""
+    """Flash compression on GPT-2 should run without error."""
     from kvfold import enable_compression
 
     tok, model = gpt2_model_with_pad
