@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import torch
 
-from kvcompress.runtime.memory import MemoryPool
-from kvcompress.runtime.profiler import CompressionProfiler
+from kvfold.runtime.memory import MemoryPool
+from kvfold.runtime.profiler import CompressionProfiler
 
 
 def test_memory_pool_acquire() -> None:

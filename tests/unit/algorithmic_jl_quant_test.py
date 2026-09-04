@@ -10,13 +10,13 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.compressor.jl import (
-    cached_projection,
+from kvfold.core.jl import (
+    CACHE.get_or_build,
     clear_projection_cache,
     gaussian_projection,
     rademacher_projection,
 )
-from kvcompress.compressor.quantization import (
+from kvfold.core.quantization import (
     IntQuantizer,
     bit_packing_signed,
     bit_unpacking_signed,
@@ -85,20 +85,20 @@ def test_jl_projection_is_orthonormal_at_limit() -> None:
 
 
 def test_jl_cache_returns_same_object() -> None:
-    proj1 = cached_projection(8, 16, distribution="gaussian", seed=0)
-    proj2 = cached_projection(8, 16, distribution="gaussian", seed=0)
+    proj1 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
+    proj2 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
     assert proj1 is proj2
 
 
 def test_jl_cache_different_seeds_give_different_matrices() -> None:
-    a = cached_projection(8, 16, distribution="gaussian", seed=0)
-    b = cached_projection(8, 16, distribution="gaussian", seed=1)
+    a = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
+    b = CACHE.get_or_build(8, 16, distribution="gaussian", seed=1)
     assert not torch.allclose(a.matrix, b.matrix)
 
 
 def test_jl_distribution_switch_yields_different_matrices() -> None:
-    g = cached_projection(8, 16, distribution="gaussian", seed=0)
-    r = cached_projection(8, 16, distribution="rademacher", seed=0)
+    g = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
+    r = CACHE.get_or_build(8, 16, distribution="rademacher", seed=0)
     assert not torch.allclose(g.matrix, r.matrix)
 
 

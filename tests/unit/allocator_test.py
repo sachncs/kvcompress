@@ -6,11 +6,11 @@ import math
 
 import pytest
 
-from kvcompress.compressor.allocator import (
+from kvfold.core.allocator import (
     Allocation,
     Cell,
-    GreedyAllocator,
-    JointAllocator,
+    Greedy,
+    Bisect,
 )
 
 
@@ -23,7 +23,7 @@ def make_cells() -> list[Cell]:
 
 def test_joint_allocator_runs() -> None:
     cells = make_cells()
-    alloc = JointAllocator(target_ratio=3.0)
+    alloc = Bisect(target_ratio=3.0)
     res = alloc.optimize(cells)
     assert len(res.allocations) == 2
     assert res.total_bytes > 0
@@ -31,7 +31,7 @@ def test_joint_allocator_runs() -> None:
 
 def test_joint_allocator_hits_budget_3x() -> None:
     cells = make_cells()
-    alloc = JointAllocator(target_ratio=3.0)
+    alloc = Bisect(target_ratio=3.0)
     res = alloc.optimize(cells)
     score = abs(math.log(res.achieved_ratio) - math.log(3.0))
     assert score < 1.0
@@ -39,7 +39,7 @@ def test_joint_allocator_hits_budget_3x() -> None:
 
 def test_joint_allocator_hits_budget_2x() -> None:
     cells = make_cells()
-    alloc = JointAllocator(target_ratio=2.0)
+    alloc = Bisect(target_ratio=2.0)
     res = alloc.optimize(cells)
     score = abs(math.log(res.achieved_ratio) - math.log(2.0))
     assert score < 1.0
@@ -47,7 +47,7 @@ def test_joint_allocator_hits_budget_2x() -> None:
 
 def test_joint_allocator_hits_budget_4x() -> None:
     cells = make_cells()
-    alloc = JointAllocator(target_ratio=4.0)
+    alloc = Bisect(target_ratio=4.0)
     res = alloc.optimize(cells)
     score = abs(math.log(res.achieved_ratio) - math.log(4.0))
     assert score < 1.0
@@ -56,8 +56,8 @@ def test_joint_allocator_hits_budget_4x() -> None:
 def test_allocator_uses_residual_at_higher_ratio() -> None:
     """At higher ratios, allocator should prefer more residual bits."""
     cells = make_cells()
-    res_low = JointAllocator(target_ratio=2.0).optimize(cells)
-    res_high = JointAllocator(target_ratio=8.0).optimize(cells)
+    res_low = Bisect(target_ratio=2.0).optimize(cells)
+    res_high = Bisect(target_ratio=8.0).optimize(cells)
     bits_low = sum(a.bits for a in res_low.allocations)
     bits_high = sum(a.bits for a in res_high.allocations)
     # At 8x the budget is much smaller; either more bits OR very low ranks.
@@ -68,7 +68,7 @@ def test_allocator_uses_residual_at_higher_ratio() -> None:
 def test_allocator_keys_values_split() -> None:
     """Allocator should return one allocation per cell."""
     cells = make_cells()
-    res = JointAllocator(target_ratio=3.0).optimize(cells)
+    res = Bisect(target_ratio=3.0).optimize(cells)
     a_k, a_v = res.allocations
     # Just structural — the allocator decides freely.
     assert a_k.cost_bytes >= 0
@@ -77,7 +77,7 @@ def test_allocator_keys_values_split() -> None:
 
 def test_greedy_runs() -> None:
     cells = make_cells()
-    g = GreedyAllocator(target_ratio=3.0)
+    g = Greedy(target_ratio=3.0)
     res = g.optimize(cells)
     assert res.total_bytes > 0
     assert len(res.allocations) == 2
@@ -85,11 +85,11 @@ def test_greedy_runs() -> None:
 
 def test_invalid_target_ratio() -> None:
     with pytest.raises(ValueError, match="target_ratio"):
-        JointAllocator(target_ratio=0.5)
+        Bisect(target_ratio=0.5)
 
 
 def test_empty_cells() -> None:
-    res = JointAllocator(target_ratio=3.0).optimize([])
+    res = Bisect(target_ratio=3.0).optimize([])
     assert len(res.allocations) == 0
     assert res.target_bytes == 0
 
@@ -98,14 +98,14 @@ def test_allocator_extreme_budget_min_cost() -> None:
     """If minimum cost > budget, allocator returns minimum (warning)."""
     tiny = [Cell(shape=(2, 16, 8), kind="key")]
     # Target ratio > max possible.
-    alloc = JointAllocator(target_ratio=100.0)
+    alloc = Bisect(target_ratio=100.0)
     res = alloc.optimize(tiny)
     assert len(res.allocations) == 1
 
 
 def test_allocator_per_cell_grid_finite() -> None:
     cell = Cell(shape=(4, 128, 32))
-    alloc = JointAllocator(target_ratio=3.0)
+    alloc = Bisect(target_ratio=3.0)
     grid = alloc.build_cell_grid(cell, None, 0)
     # Grid size is candidate_rt × candidate_rd × bits.
     assert all(isinstance(a, Allocation) for a in grid)
@@ -115,7 +115,7 @@ def test_allocator_per_cell_grid_finite() -> None:
 def test_allocator_lambda_monotone() -> None:
     """Higher λ should produce lower total cost (monotone)."""
     cells = make_cells()
-    alloc = JointAllocator(target_ratio=3.0)
+    alloc = Bisect(target_ratio=3.0)
     grid = [alloc.build_cell_grid(c, None, i) for i, c in enumerate(cells)]
     cost_low = sum(a.cost_bytes for a in alloc.argmin_per_cell(grid, 0.0))
     cost_high = sum(a.cost_bytes for a in alloc.argmin_per_cell(grid, 100.0))
@@ -125,7 +125,7 @@ def test_allocator_lambda_monotone() -> None:
 def test_allocator_achieves_target_within_rounding() -> None:
     cells = make_cells()
     for ratio in [2.0, 3.0, 4.0, 5.0, 8.0]:
-        res = JointAllocator(target_ratio=ratio).optimize(cells)
+        res = Bisect(target_ratio=ratio).optimize(cells)
         # Discrete grid; log-space ratio distance to target ≤ 1.0 nat.
         score = abs(math.log(res.achieved_ratio) - math.log(ratio))
         assert score < 1.0, f"ratio={ratio}: achieved={res.achieved_ratio:.2f}, score={score:.2f}"
@@ -140,8 +140,8 @@ def test_allocator_respects_fp32_element_size() -> None:
     ratio reflects the fp32 cost model.
     """
     cells = [Cell(shape=(4, 64, 32), kind="key")]
-    alloc_fp32 = JointAllocator(target_ratio=2.0, element_size_bytes=4).optimize(cells)
-    alloc_fp16 = JointAllocator(target_ratio=2.0, element_size_bytes=2).optimize(cells)
+    alloc_fp32 = Bisect(target_ratio=2.0, element_size_bytes=4).optimize(cells)
+    alloc_fp16 = Bisect(target_ratio=2.0, element_size_bytes=2).optimize(cells)
     # The fp32 path sees a larger total_bytes budget (twice the bytes
     # available) and so its achieved_ratio should reflect the larger
     # cost model. We assert the budgets scale by 2x rather than poking

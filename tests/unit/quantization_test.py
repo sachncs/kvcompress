@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.compressor.quantization import (
+from kvfold.core.quantization import (
     IntQuantizer,
     dequantize_tensor,
     estimate_int_bytes,

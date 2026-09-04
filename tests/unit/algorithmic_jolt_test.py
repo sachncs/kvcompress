@@ -11,8 +11,8 @@ import math
 
 import torch
 
-from kvcompress.compressor.flashjolt import FlashJoLTCompressor, flashjolt_cap
-from kvcompress.compressor.jolt import JoLTCompressor
+from kvfold.core.flashjolt import FlashJolt, flashjolt_cap
+from kvfold.core.jolt import Jolt
 
 
 def make_smooth_tensor(
@@ -74,7 +74,7 @@ def test_jolt_roundtrip_on_smooth_tensor() -> None:
     torch.manual_seed(0)
     K = make_smooth_tensor(m=4, T=128, dh=32, sharp=False)
     V = make_smooth_tensor(m=4, T=128, dh=32, sharp=False)
-    comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 2, 4, 8))
+    comp = Jolt(compression_ratio=2.0, bits=(0, 2, 4, 8))
     kp, vp = comp.compress(K, V)
     K_hat, V_hat = comp.decompress(kp, vp)
     rel_err_K = float(torch.linalg.norm(K - K_hat) / torch.linalg.norm(K))
@@ -92,8 +92,8 @@ def test_flashjolt_short_context_matches_exact_jolt() -> None:
     torch.manual_seed(0)
     K = torch.randn(2, 256, 32)
     V = torch.randn(2, 256, 32)
-    jolt = JoLTCompressor(compression_ratio=3.0, bits=(0, 4, 8))
-    fjolt = FlashJoLTCompressor(compression_ratio=3.0, bits=(0, 4, 8))
+    jolt = Jolt(compression_ratio=3.0, bits=(0, 4, 8))
+    fjolt = FlashJolt(compression_ratio=3.0, bits=(0, 4, 8))
     kp_j, vp_j = jolt.compress(K, V)
     kp_f, vp_f = fjolt.compress(K, V)
     K_j, V_j = jolt.decompress(kp_j, vp_j)
@@ -128,7 +128,7 @@ def test_jolt_full_rank_reconstructs_input() -> None:
     torch.manual_seed(0)
     K = torch.randn(2, 32, 8)
     V = torch.randn(2, 32, 8)
-    comp = JoLTCompressor(compression_ratio=1.001, bits=(0,))
+    comp = Jolt(compression_ratio=1.001, bits=(0,))
     kp, vp = comp.compress(K, V)
     K_hat, V_hat = comp.decompress(kp, vp)
     rel_err_K = float(torch.linalg.norm(K - K_hat) / torch.linalg.norm(K))
@@ -150,7 +150,7 @@ def test_jolt_compression_actually_reduces_bytes() -> None:
     K = torch.randn(4, 256, 64)
     V = torch.randn(4, 256, 64)
     original_bytes = K.numel() * K.element_size() * 2
-    comp = JoLTCompressor(compression_ratio=3.0, bits=(0, 2, 4, 8))
+    comp = Jolt(compression_ratio=3.0, bits=(0, 2, 4, 8))
     kp, vp = comp.compress(K, V)
     compressed_bytes = kp.bytes_compressed + vp.bytes_compressed
     assert compressed_bytes < original_bytes, (
@@ -164,7 +164,7 @@ def test_jolt_shape_preservation_across_compress_decompress() -> None:
     for shape in [(1, 16, 8), (2, 64, 16), (4, 128, 32), (1, 1, 4)]:
         K = torch.randn(*shape)
         V = torch.randn(*shape)
-        comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 2, 4, 8))
+        comp = Jolt(compression_ratio=2.0, bits=(0, 2, 4, 8))
         kp, vp = comp.compress(K, V)
         K_hat, V_hat = comp.decompress(kp, vp)
         assert K_hat.shape == K.shape, f"shape mismatch: {shape} -> K_hat {K_hat.shape}"
@@ -184,7 +184,7 @@ def test_jolt_dtype_preservation() -> None:
     for dtype in (torch.float32, torch.float16):
         K = torch.randn(2, 32, 8, dtype=dtype)
         V = torch.randn(2, 32, 8, dtype=dtype)
-        comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 4, 8))
+        comp = Jolt(compression_ratio=2.0, bits=(0, 4, 8))
         kp, vp = comp.compress(K, V)
         K_hat, V_hat = comp.decompress(kp, vp)
         assert K_hat.dtype == dtype, f"dtype changed: {dtype} -> {K_hat.dtype}"
@@ -195,7 +195,7 @@ def test_jolt_actually_uses_tucker_when_ratio_above_one() -> None:
     shape (otherwise we'd be at ratio=1, not 2x)."""
     torch.manual_seed(0)
     K = torch.randn(8, 256, 64)
-    comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 4, 8))
+    comp = Jolt(compression_ratio=2.0, bits=(0, 4, 8))
     kp, vp = comp.compress(K, V := torch.randn_like(K))
     # The token rank should be < T (256).
     assert kp.metadata["r_token"] < 256

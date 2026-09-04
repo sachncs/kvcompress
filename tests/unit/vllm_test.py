@@ -56,7 +56,7 @@ def fake_model() -> Any:
 
 def test_export_writes_safetensors(fake_model: Any, tmp_path: Path) -> None:
     pytest.importorskip("safetensors")
-    from kvcompress.adapters.vllm import export_kv
+    from kvfold.adapters.vllm import export_kv
 
     out = tmp_path / "kv.safetensors"
     meta = export_kv(
@@ -76,7 +76,7 @@ def test_export_writes_safetensors(fake_model: Any, tmp_path: Path) -> None:
 
 def test_export_resolves_compressor_correctly(fake_model: Any, tmp_path: Path) -> None:
     pytest.importorskip("safetensors")
-    from kvcompress.adapters.vllm import export_kv
+    from kvfold.adapters.vllm import export_kv
 
     out = tmp_path / "kv2.safetensors"
     meta = export_kv(fake_model, str(out), method="jolt", compression_ratio=2.0)
@@ -86,10 +86,10 @@ def test_export_resolves_compressor_correctly(fake_model: Any, tmp_path: Path) -
 
 def test_export_uses_passed_compressor(fake_model: Any, tmp_path: Path) -> None:
     pytest.importorskip("safetensors")
-    from kvcompress import JoLTCompressor
-    from kvcompress.adapters.vllm import export_kv
+    from kvfold import Jolt
+    from kvfold.adapters.vllm import export_kv
 
-    comp = JoLTCompressor(compression_ratio=4.0)
+    comp = Jolt(compression_ratio=4.0)
     out = tmp_path / "kv3.safetensors"
     meta = export_kv(fake_model, str(out), compressor=comp)
     # Allocation decisions should reflect the 4x target.
@@ -97,7 +97,7 @@ def test_export_uses_passed_compressor(fake_model: Any, tmp_path: Path) -> None:
 
 
 def test_export_requires_cache() -> None:
-    from kvcompress.adapters.vllm import export_kv
+    from kvfold.adapters.vllm import export_kv
 
     class Bare:
         pass
@@ -107,7 +107,7 @@ def test_export_requires_cache() -> None:
 
 
 def test_is_vllm_available_returns_bool() -> None:
-    from kvcompress.adapters.vllm import is_vllm_available
+    from kvfold.adapters.vllm import is_vllm_available
 
     assert isinstance(is_vllm_available(), bool)
 
@@ -120,7 +120,7 @@ def test_import_round_trip_recovers_kv_separately(fake_model: Any, tmp_path: Pat
     which silently stored K under both slots.
     """
     pytest.importorskip("safetensors")
-    from kvcompress.adapters.vllm import export_kv, import_kv
+    from kvfold.adapters.vllm import export_kv, import_kv
 
     out = tmp_path / "kv.safetensors"
     export_kv(fake_model, str(out), method="flashjolt", compression_ratio=2.0)

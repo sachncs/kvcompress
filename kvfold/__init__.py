@@ -1,15 +1,14 @@
-"""kvcompress — universal plug-and-play KV cache compression for decoder-only LLMs.
+"""kvfold — universal plug-and-play KV cache compression for decoder-only LLMs.
 
 Implements the JoLT algorithm (partial Tucker decomposition + JL-rotated residual
-+ joint Lagrangian allocation) and the FlashJoLT fast variant.
++ joint Lagrangian allocation) and the Flash fast variant.
 
 Public API:
     enable_compression(model, method=..., ...) — monkey-patch an HF model
-    KVCompressor           — abstract base for all compressors
-    JoLTCompressor         — paper-faithful JoLT
-    FlashJoLTCompressor    — randomized-SVD JoLT
-    CompressedKVCache      — layer-indexed compressed cache
-    CacheManager           — high-level cache orchestration
+    build_compressor(method)        — construct a Compressor directly
+    supported_methods()             — tuple of every method name
+    MethodName                      — Literal of supported method names
+    CompressionHandle               — handle returned by enable_compression
 
 Imports are lazy so the package can be imported even when individual modules
 are still stubbed out during incremental development. The first attribute
@@ -20,34 +19,34 @@ from __future__ import annotations
 
 from typing import Any  # noqa: F401
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 LAZY_EXPORTS = {
-    "enable_compression": ("kvcompress.api", "enable_compression"),
-    "disable_compression": ("kvcompress.api", "disable_compression"),
-    "CompressionHandle": ("kvcompress.api", "CompressionHandle"),
-    "CompressionStats": ("kvcompress.api", "CompressionStats"),
-    "parse_target_memory": ("kvcompress.api", "parse_target_memory"),
-    "KVCompressor": ("kvcompress.compressor.base", "KVCompressor"),
-    "CompressorStats": ("kvcompress.compressor.base", "CompressorStats"),
-    "CompressedPayload": ("kvcompress.compressor.base", "CompressedPayload"),
-    "JoLTCompressor": ("kvcompress.compressor.jolt", "JoLTCompressor"),
-    "FlashJoLTCompressor": ("kvcompress.compressor.flashjolt", "FlashJoLTCompressor"),
-    "IdentityCompressor": ("kvcompress.compressor.identity", "IdentityCompressor"),
-    "LowRankCompressor": ("kvcompress.compressor.lowrank", "LowRankCompressor"),
+    "enable_compression": ("kvfold.api", "enable_compression"),
+    "disable_compression": ("kvfold.api", "disable_compression"),
+    "CompressionHandle": ("kvfold.api", "CompressionHandle"),
+    "CompressionStats": ("kvfold.api", "CompressionStats"),
+    "parse_target_memory": ("kvfold.api", "parse_target_memory"),
+    "KVCompressor": ("kvfold.core.base", "KVCompressor"),
+    "CompressorStats": ("kvfold.core.base", "CompressorStats"),
+    "CompressedPayload": ("kvfold.core.base", "CompressedPayload"),
+    "JoLTCompressor": ("kvfold.core.jolt", "JoLTCompressor"),
+    "FlashJoLTCompressor": ("kvfold.core.flashjolt", "FlashJoLTCompressor"),
+    "IdentityCompressor": ("kvfold.core.identity", "IdentityCompressor"),
+    "LowRankCompressor": ("kvfold.core.lowrank", "LowRankCompressor"),
     "IntQuantOnlyCompressor": (
-        "kvcompress.compressor.quantization_only",
+        "kvfold.core.quantization_only",
         "IntQuantOnlyCompressor",
     ),
-    "JointAllocator": ("kvcompress.compressor.allocator", "JointAllocator"),
-    "Allocation": ("kvcompress.compressor.allocator", "Allocation"),
-    "Cell": ("kvcompress.compressor.allocator", "Cell"),
-    "build_compressor": ("kvcompress.compressor.dispatch", "build_compressor"),
-    "supported_methods": ("kvcompress.compressor.dispatch", "supported_methods"),
-    "CompressedKVCache": ("kvcompress.cache.compress", "CompressedKVCache"),
-    "CacheManager": ("kvcompress.cache.manager", "CacheManager"),
-    "CompressionMetadata": ("kvcompress.cache.metadata", "CompressionMetadata"),
-    "LayerCompression": ("kvcompress.cache.metadata", "LayerCompression"),
+    "JointAllocator": ("kvfold.core.allocator", "JointAllocator"),
+    "Allocation": ("kvfold.core.allocator", "Allocation"),
+    "Cell": ("kvfold.core.allocator", "Cell"),
+    "build_compressor": ("kvfold.api", "build_compressor"),
+    "supported_methods": ("kvfold.api", "supported_methods"),
+    "CompressedKVCache": ("kvfold.cache.compress", "CompressedKVCache"),
+    "CacheManager": ("kvfold.cache.manager", "CacheManager"),
+    "CompressionMetadata": ("kvfold.cache.metadata", "CompressionMetadata"),
+    "LayerCompression": ("kvfold.cache.metadata", "LayerCompression"),
 }
 
 
@@ -60,7 +59,11 @@ def __getattr__(name: str) -> Any:
         value = getattr(module, attr)
         globals()[name] = value
         return value
-    raise AttributeError(f"module 'kvcompress' has no attribute {name!r}")
+    raise AttributeError(f"module 'kvfold' has no attribute {name!r}")
+
+
+_ = __getattr__("build_compressor")  # initialise the import-side-effect module
+del _
 
 
 __all__ = ["__version__", *LAZY_EXPORTS]

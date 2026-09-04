@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.compressor.residual import (
-    ResidualPayload,
+from kvfold.core.residual import (
+    Residual,
     decode_residual,
     encode_residual,
     estimate_residual_bytes,
@@ -52,7 +52,7 @@ def test_residual_payload_serialises_to_dict(residual: torch.Tensor) -> None:
     assert d["original_last"] == 8
     assert isinstance(d["packed"], torch.Tensor)
     # Round-trip.
-    payload2 = ResidualPayload.from_dict(d)
+    payload2 = Residual.from_dict(d)
     assert payload2.quant_dtype == payload.quant_dtype
     assert payload2.projection_seed == payload.projection_seed
     assert payload2.original_shape == payload.original_shape
@@ -71,7 +71,7 @@ def test_estimate_residual_bytes_higher_bits_more_bytes() -> None:
 
 def test_residual_bits_property() -> None:
     for bits, expected in [(0, 0), (2, 2), (4, 4), (8, 8)]:
-        payload = ResidualPayload(
+        payload = Residual(
             projection_seed=0,
             projection_distribution="gaussian",
             projection_sparsity=1.0,

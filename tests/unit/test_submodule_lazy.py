@@ -26,9 +26,9 @@ def test_core_submodule_exports_flash() -> None:
 
 
 def test_core_submodule_exports_budget_classes() -> None:
-    from kvfold.core import Cell, JointAllocator
+    from kvfold.core import Cell, Bisect
 
-    assert JointAllocator.__name__ == "JointAllocator"
+    assert Bisect.__name__ == "Bisect"
     assert Cell.__name__ == "Cell"
 
 

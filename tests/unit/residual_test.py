@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.compressor.residual import (
+from kvfold.core.residual import (
     decode_residual,
     encode_residual,
     estimate_residual_bytes,
@@ -67,9 +67,9 @@ def test_to_from_dict() -> None:
     p2 = decode_residual(type(payload).from_dict(d))
     # decode_residual reconstructs from a payload, so we use decode via a new
     # payload object created from the dict.
-    from kvcompress.compressor.residual import ResidualPayload
+    from kvfold.core.residual import Residual
 
-    p2 = ResidualPayload.from_dict(d)
+    p2 = Residual.from_dict(d)
     decoded = decode_residual(p2)
     assert decoded.shape == payload.original_shape
 

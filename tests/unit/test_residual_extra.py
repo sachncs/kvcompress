@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.compressor.residual import (
-    ResidualPayload,
+from kvfold.core.residual import (
+    Residual,
     decode_residual,
     encode_residual,
 )
@@ -14,7 +14,7 @@ from kvcompress.compressor.residual import (
 
 def test_residual_estimate_bytes_per_channel() -> None:
     """The ``estimate_residual_bytes`` helper covers the per_channel branch."""
-    from kvcompress.compressor.residual import estimate_residual_bytes
+    from kvfold.core.residual import estimate_residual_bytes
 
     n = estimate_residual_bytes(
         (4, 16, 8),
@@ -27,7 +27,7 @@ def test_residual_estimate_bytes_per_channel() -> None:
 
 
 def test_residual_estimate_bytes_per_group() -> None:
-    from kvcompress.compressor.residual import estimate_residual_bytes
+    from kvfold.core.residual import estimate_residual_bytes
 
     n = estimate_residual_bytes(
         (4, 16, 8),
@@ -39,7 +39,7 @@ def test_residual_estimate_bytes_per_group() -> None:
 
 
 def test_residual_estimate_bytes_per_tensor() -> None:
-    from kvcompress.compressor.residual import estimate_residual_bytes
+    from kvfold.core.residual import estimate_residual_bytes
 
     n = estimate_residual_bytes(
         (4, 16, 8),
@@ -52,7 +52,7 @@ def test_residual_estimate_bytes_per_tensor() -> None:
 
 
 def test_residual_estimate_bytes_bits_zero_returns_zero() -> None:
-    from kvcompress.compressor.residual import estimate_residual_bytes
+    from kvfold.core.residual import estimate_residual_bytes
 
     n = estimate_residual_bytes((4, 16, 8), bits=0)
     assert n == 0
@@ -60,7 +60,7 @@ def test_residual_estimate_bytes_bits_zero_returns_zero() -> None:
 
 def test_residual_payload_dataclass_construction() -> None:
     """Cover the dataclass __init__ and field defaults."""
-    payload = ResidualPayload(
+    payload = Residual(
         projection_seed=0,
         projection_distribution="gaussian",
         projection_sparsity=1.0,

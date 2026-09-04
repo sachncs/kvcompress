@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from kvcompress.adapters import registry
+from kvfold.adapters import registry
 
 
 def test_registry_lists_all_families() -> None:
@@ -35,7 +35,7 @@ def test_resolve_returns_module_path_for_known_family() -> None:
     for family in ("llama", "mistral", "qwen2", "deepseek"):
         module_path = registry.resolve(family)
         assert module_path is not None
-        assert module_path.startswith("kvcompress.adapters.")
+        assert module_path.startswith("kvfold.adapters.")
 
 
 def test_resolve_returns_none_for_unknown_family() -> None:
@@ -47,9 +47,9 @@ def test_register_adds_new_family() -> None:
     original = registry.known_model_types()
     original_set = set(registry.REGISTRY)
     try:
-        registry.register("test-family-xyz", "kvcompress.adapters.llama")
+        registry.register("test-family-xyz", "kvfold.adapters.llama")
         assert "test-family-xyz" in registry.known_model_types()
-        assert registry.resolve("test-family-xyz") == "kvcompress.adapters.llama"
+        assert registry.resolve("test-family-xyz") == "kvfold.adapters.llama"
     finally:
         # Restore registry by removing any keys we added.
         for k in list(registry.REGISTRY):
@@ -60,7 +60,7 @@ def test_register_adds_new_family() -> None:
 
 def test_register_duplicate_raises() -> None:
     with pytest.raises(ValueError, match="already registered"):
-        registry.register("llama", "kvcompress.adapters.llama")
+        registry.register("llama", "kvfold.adapters.llama")
 
 
 @pytest.mark.parametrize(
@@ -93,7 +93,7 @@ def test_every_family_shim_imports_and_installs(family: str) -> None:
 def test_install_unknown_model_type_falls_back_to_generic() -> None:
     """``install(model_type="nonexistent", ...)`` falls back to the
     generic path (a no-op) and doesn't raise."""
-    from kvcompress.adapters import registry
+    from kvfold.adapters import registry
 
     # The generic install returns None; the family install returns
     # the callable. Either way, the function didn't raise.

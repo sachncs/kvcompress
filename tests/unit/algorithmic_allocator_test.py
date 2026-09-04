@@ -22,9 +22,9 @@ import math
 
 import pytest
 
-from kvcompress.compressor.allocator import (
+from kvfold.core.allocator import (
     Cell,
-    JointAllocator,
+    Bisect,
 )
 
 
@@ -37,7 +37,7 @@ def test_allocator_respects_byte_budget() -> None:
         Cell(shape=(4, 64, 32), kind="value", layer_group=0),
     ]
     for ratio in (2.0, 3.0, 4.0):
-        alloc = JointAllocator(target_ratio=ratio, bits_grid=(0, 2, 4, 8))
+        alloc = Bisect(target_ratio=ratio, bits_grid=(0, 2, 4, 8))
         result = alloc.optimize(cells)
         # Achieved ratio should be within 2x of the target (either way).
         if result.achieved_ratio > 0:
@@ -53,13 +53,13 @@ def test_allocator_at_higher_ratio_uses_more_residual_bits() -> None:
     cells = [Cell(shape=(4, 128, 64), kind="key", layer_group=0)]
     bits_low = sum(
         a.bits
-        for a in JointAllocator(target_ratio=2.0, bits_grid=(0, 2, 4, 8))
+        for a in Bisect(target_ratio=2.0, bits_grid=(0, 2, 4, 8))
         .optimize(cells)
         .allocations
     )
     bits_high = sum(
         a.bits
-        for a in JointAllocator(target_ratio=4.0, bits_grid=(0, 2, 4, 8))
+        for a in Bisect(target_ratio=4.0, bits_grid=(0, 2, 4, 8))
         .optimize(cells)
         .allocations
     )
@@ -76,7 +76,7 @@ def test_allocator_error_model_is_monotone_in_tau() -> None:
     error surfaces.
     """
     cells = [Cell(shape=(4, 128, 64), kind="key", layer_group=0)]
-    alloc = JointAllocator(target_ratio=3.0, bits_grid=(4,))
+    alloc = Bisect(target_ratio=3.0, bits_grid=(4,))
     result = alloc.optimize(cells)
     a = result.allocations[0]
     # Re-derive τ for the chosen (rT, rd) and a slightly higher rank.
@@ -95,7 +95,7 @@ def test_allocator_error_model_is_monotone_in_tau() -> None:
 def test_allocator_allocations_match_grid() -> None:
     """Every returned ``(rT, rd, b)`` must be in the candidate grid."""
     cells = [Cell(shape=(4, 32, 16), kind="key", layer_group=0)]
-    alloc = JointAllocator(target_ratio=3.0, bits_grid=(0, 2, 4, 8))
+    alloc = Bisect(target_ratio=3.0, bits_grid=(0, 2, 4, 8))
     result = alloc.optimize(cells)
     a = result.allocations[0]
     # Token rank must be ≤ T (= 32), feature rank ≤ d (= 16), and bits
@@ -112,7 +112,7 @@ def test_allocator_target_ratio_2x_picks_substantial_compression() -> None:
     account for the discrete cost grid.
     """
     cells = [Cell(shape=(4, 256, 64), kind="key", layer_group=0)]
-    alloc = JointAllocator(target_ratio=2.0, bits_grid=(0, 2, 4, 8))
+    alloc = Bisect(target_ratio=2.0, bits_grid=(0, 2, 4, 8))
     result = alloc.optimize(cells)
     assert result.achieved_ratio >= 1.5, (
         f"achieved ratio {result.achieved_ratio:.2f} too low for 2x target"
@@ -120,7 +120,7 @@ def test_allocator_target_ratio_2x_picks_substantial_compression() -> None:
 
 
 def test_allocator_handles_empty_cell_list() -> None:
-    alloc = JointAllocator(target_ratio=3.0)
+    alloc = Bisect(target_ratio=3.0)
     result = alloc.optimize([])
     assert len(result.allocations) == 0
     assert result.target_bytes == 0
@@ -128,7 +128,7 @@ def test_allocator_handles_empty_cell_list() -> None:
 
 def test_allocator_invalid_target_ratio_raises() -> None:
     with pytest.raises(ValueError, match="target_ratio"):
-        JointAllocator(target_ratio=0.5)
+        Bisect(target_ratio=0.5)
 
 
 def test_allocator_layers_independent_when_layer_group_differs() -> None:
@@ -136,7 +136,7 @@ def test_allocator_layers_independent_when_layer_group_differs() -> None:
     (the Lagrangian is fully decoupled across cells)."""
     cells_a = [Cell(shape=(4, 32, 16), kind="key", layer_group=0)]
     cells_b = [Cell(shape=(4, 32, 16), kind="key", layer_group=1)]
-    alloc = JointAllocator(target_ratio=3.0, bits_grid=(0, 4, 8))
+    alloc = Bisect(target_ratio=3.0, bits_grid=(0, 4, 8))
     ra = alloc.optimize(cells_a).allocations[0]
     rb = alloc.optimize(cells_b).allocations[0]
     # Same shape, same target → same allocation. The test is structural:

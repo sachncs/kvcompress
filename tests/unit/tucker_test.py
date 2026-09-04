@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.compressor.svd import SVD
-from kvcompress.compressor.tucker import (
+from kvfold.core.svd import Exact
+from kvfold.core.tucker import (
     mode_n_fold,
     mode_n_unfold,
     partial_tucker_st_hosvd,

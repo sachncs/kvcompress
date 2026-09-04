@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from kvcompress.adapters.registry import (
+from kvfold.adapters.registry import (
     install,
     known_model_types,
     register,
     resolve,
 )
-from kvcompress.api import enable_compression, CompressionHandle
+from kvfold.api import enable_compression, CompressionHandle
 
 
 class FakeModel:
@@ -39,17 +39,17 @@ def test_registry_known_types() -> None:
 
 
 def test_registry_resolve() -> None:
-    assert resolve("llama") == "kvcompress.adapters.llama"
+    assert resolve("llama") == "kvfold.adapters.llama"
     assert resolve("unknown-type") is None
 
 
 def test_registry_register_custom() -> None:
-    register("custom-test", "kvcompress.adapters.llama")
+    register("custom-test", "kvfold.adapters.llama")
     try:
-        assert resolve("custom-test") == "kvcompress.adapters.llama"
+        assert resolve("custom-test") == "kvfold.adapters.llama"
     finally:
         # Clean up so we don't pollute the global registry for other tests.
-        from kvcompress.adapters import registry
+        from kvfold.adapters import registry
 
         if "custom-test" in registry.REGISTRY:
             del registry.REGISTRY["custom-test"]
@@ -57,25 +57,25 @@ def test_registry_register_custom() -> None:
 
 def test_registry_register_duplicate_raises() -> None:
     with pytest.raises(ValueError, match="already registered"):
-        register("llama", "kvcompress.adapters.llama")
+        register("llama", "kvfold.adapters.llama")
 
 
 def test_install_dispatches() -> None:
     model = FakeModel("llama")
-    from kvcompress.cache.manager import CacheManager
-    from kvcompress.compressor.jolt import JoLTCompressor
+    from kvfold.cache.manager import CacheManager
+    from kvfold.core.jolt import Jolt
 
-    mgr = CacheManager(compressor=JoLTCompressor(compression_ratio=3.0))
+    mgr = CacheManager(compressor=Jolt(compression_ratio=3.0))
     # Should not raise.
     install(model_type="llama", model=model, cache_manager=mgr)
 
 
 def test_install_unknown_uses_generic() -> None:
     model = FakeModel("nonexistent")
-    from kvcompress.cache.manager import CacheManager
-    from kvcompress.compressor.jolt import JoLTCompressor
+    from kvfold.cache.manager import CacheManager
+    from kvfold.core.jolt import Jolt
 
-    mgr = CacheManager(compressor=JoLTCompressor(compression_ratio=3.0))
+    mgr = CacheManager(compressor=Jolt(compression_ratio=3.0))
     # Should not raise even though no shim exists.
     install(model_type="nonexistent", model=model, cache_manager=mgr)
 
@@ -104,7 +104,7 @@ def test_enable_compression_requires_target_or_ratio() -> None:
 
 
 def test_target_memory_parses() -> None:
-    from kvcompress.api import parse_target_memory
+    from kvfold.api import parse_target_memory
 
     assert parse_target_memory("25%") == 4.0
     assert parse_target_memory("50%") == 2.0
@@ -207,8 +207,8 @@ def test_enable_rolls_back_on_failure() -> None:
     must be the original class.
     """
     import transformers.cache_utils as cu
-    from kvcompress.adapters import huggingface as hf_module
-    from kvcompress.adapters.huggingface import HuggingFaceAdapter
+    from kvfold.adapters import huggingface as hf_module
+    from kvfold.adapters.huggingface import HuggingFaceAdapter
 
     original_dynamic_cache = cu.DynamicCache
     original_install = hf_module.registry_install

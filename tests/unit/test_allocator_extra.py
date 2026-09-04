@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from kvcompress.compressor.allocator import (
+from kvfold.core.allocator import (
     Allocation,
     AllocationResult,
     Cell,
-    GreedyAllocator,
-    JointAllocator,
+    Greedy,
+    Bisect,
     bytes_original,
     candidate_feature_ranks,
     candidate_token_ranks,
@@ -80,12 +80,12 @@ def test_candidate_token_ranks_large_subset() -> None:
 def test_joint_allocator_invalid_target_ratio() -> None:
     """target_ratio <= 1 raises ValueError at construction."""
     with pytest.raises(ValueError, match="must be > 1.0"):
-        JointAllocator(target_ratio=1.0)
+        Bisect(target_ratio=1.0)
 
 
 def test_joint_allocator_empty_cells() -> None:
     """optimize with no cells returns an empty AllocationResult."""
-    alloc = JointAllocator(target_ratio=3.0)
+    alloc = Bisect(target_ratio=3.0)
     result = alloc.optimize([])
     assert result.allocations == []
     assert result.total_bytes == 0
@@ -94,7 +94,7 @@ def test_joint_allocator_empty_cells() -> None:
 
 def test_joint_allocator_with_explicit_target_bytes() -> None:
     """Passing ``original_bytes`` overrides the per-cell sum."""
-    alloc = JointAllocator(target_ratio=2.0)
+    alloc = Bisect(target_ratio=2.0)
     cells = [Cell(shape=(2, 8, 4), kind="key")]
     result = alloc.optimize(cells, original_bytes=1000)
     # target_bytes = 1000 / 2 = 500
@@ -102,7 +102,7 @@ def test_joint_allocator_with_explicit_target_bytes() -> None:
 
 
 def test_joint_allocator_candidate_token_ranks_override() -> None:
-    alloc = JointAllocator(target_ratio=2.0, max_token_rank=8)
+    alloc = Bisect(target_ratio=2.0, max_token_rank=8)
     cell = Cell(
         shape=(2, 64, 4),
         kind="key",
@@ -116,7 +116,7 @@ def test_joint_allocator_candidate_token_ranks_override() -> None:
 
 def test_joint_allocator_uses_tau_table() -> None:
     """When tau_table is provided, the optimizer uses it instead of the default model."""
-    alloc = JointAllocator(target_ratio=2.0)
+    alloc = Bisect(target_ratio=2.0)
     cell = Cell(shape=(2, 8, 4), kind="key")
     # tau_table is keyed by (cell idx, rt * d + rd). d=4 here.
     # Provide enough rows so rank-2 captures everything (error=0).
@@ -132,7 +132,7 @@ def test_joint_allocator_uses_tau_table() -> None:
 
 def test_greedy_allocator_runs() -> None:
     """Greedy allocator covers its allocation path."""
-    alloc = GreedyAllocator(target_ratio=2.0)
+    alloc = Greedy(target_ratio=2.0)
     cells = [Cell(shape=(2, 8, 4), kind="key")]
     result = alloc.optimize(cells)
     assert result.allocations
@@ -140,21 +140,21 @@ def test_greedy_allocator_runs() -> None:
 
 
 def test_greedy_allocator_empty_cells() -> None:
-    alloc = GreedyAllocator(target_ratio=2.0)
+    alloc = Greedy(target_ratio=2.0)
     result = alloc.optimize([])
     assert result.allocations == []
 
 
 def test_greedy_allocator_invalid_ratio() -> None:
-    # GreedyAllocator doesn't validate at construction (the value is
+    # Greedy doesn't validate at construction (the value is
     # only used during optimize); assert that construction succeeds.
-    alloc = GreedyAllocator(target_ratio=0.5)
+    alloc = Greedy(target_ratio=0.5)
     assert alloc.target_ratio == 0.5
 
 
 def test_joint_allocator_target_bytes_from_sum() -> None:
     """When original_bytes is not provided, sum cell bytes."""
-    alloc = JointAllocator(target_ratio=2.0)
+    alloc = Bisect(target_ratio=2.0)
     cells = [Cell(shape=(2, 8, 4), kind="key"), Cell(shape=(2, 8, 4), kind="value")]
     result = alloc.optimize(cells)
     expected = bytes_original((2, 8, 4)) + bytes_original((2, 8, 4))

@@ -1,7 +1,7 @@
-"""Tests for :mod:`kvcompress.compressor.dispatch`.
+"""Tests for :mod:`kvfold.core.dispatch`.
 
 The dispatcher is the public surface that maps the ``method`` string from
-:func:`kvcompress.api.enable_compression` to a concrete compressor. Bugs
+:func:`kvfold.api.enable_compression` to a concrete compressor. Bugs
 here manifest as silently broken ``enable_compression(method="int4")``
 calls, so we cover the happy path for every method plus the failure
 modes that previously surfaced only at runtime.
@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress import build_compressor, supported_methods
-from kvcompress.compressor.dispatch import METHODS
+from kvfold import build_compressor, supported_methods
+from kvfold.core.dispatch import METHODS
 
 
 # ---------------------------------------------------------------------------
@@ -24,16 +24,16 @@ from kvcompress.compressor.dispatch import METHODS
 @pytest.mark.parametrize(
     ("method", "expected_class_name"),
     [
-        ("jolt", "JoLTCompressor"),
-        ("flashjolt", "FlashJoLTCompressor"),
-        ("lowrank", "LowRankCompressor"),
-        ("int2", "IntQuantOnlyCompressor"),
-        ("int4", "IntQuantOnlyCompressor"),
-        ("int8", "IntQuantOnlyCompressor"),
-        ("fp8", "IdentityCompressor"),
-        ("fp16", "IdentityCompressor"),
-        ("bf16", "IdentityCompressor"),
-        ("identity", "IdentityCompressor"),
+        ("jolt", "Jolt"),
+        ("flashjolt", "FlashJolt"),
+        ("lowrank", "Low"),
+        ("int2", "IntQuant"),
+        ("int4", "IntQuant"),
+        ("int8", "IntQuant"),
+        ("fp8", "Pass"),
+        ("fp16", "Pass"),
+        ("bf16", "Pass"),
+        ("identity", "Pass"),
     ],
 )
 def test_dispatch_returns_correct_class(method: str, expected_class_name: str) -> None:
@@ -105,7 +105,7 @@ def test_unknown_kwarg_raises_with_actionable_message() -> None:
 
 
 def test_int_kwargs_rejected_on_identity() -> None:
-    """``per_channel`` is meaningless for IdentityCompressor — reject."""
+    """``per_channel`` is meaningless for Pass — reject."""
     with pytest.raises(ValueError, match="unexpected kwargs"):
         build_compressor("identity", per_channel=True)
 

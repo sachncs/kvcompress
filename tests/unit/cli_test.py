@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-from kvcompress import cli
+from kvfold import cli
 
 
 @pytest.fixture
@@ -27,10 +27,10 @@ def test_version_command(runner: CliRunner) -> None:
 
 
 def test_version_uses_module_version(runner: CliRunner) -> None:
-    import kvcompress
+    import kvfold
 
     result = runner.invoke(cli.app, ["version"])
-    assert kvcompress.__version__ in result.stdout
+    assert kvfold.__version__ in result.stdout
 
 
 def test_validate_help_lists_options(runner: CliRunner) -> None:

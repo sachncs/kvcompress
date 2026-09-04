@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from kvcompress.cache.metadata import (
+from kvfold.cache.metadata import (
     CompressionMetadata,
     LayerCompression,
 )

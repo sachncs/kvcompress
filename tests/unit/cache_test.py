@@ -5,17 +5,17 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.cache.compress import CompressedKVCache
-from kvcompress.cache.manager import CacheManager
-from kvcompress.cache.metadata import CompressionMetadata, LayerCompression
-from kvcompress.compressor.base import (
-    CompressedPayload,
-    CompressorStats,
-    KVCompressor,
+from kvfold.cache.compress import CompressedKVCache
+from kvfold.cache.manager import CacheManager
+from kvfold.cache.metadata import CompressionMetadata, LayerCompression
+from kvfold.core.base import (
+    Payload,
+    Stats,
+    Compressor,
 )
 
 
-class Identity(KVCompressor):
+class Identity(Compressor):
     """Test compressor that stores K and V as fp16 with no actual compression."""
 
     name = "identity-test"
@@ -25,26 +25,26 @@ class Identity(KVCompressor):
         self.calls = 0
 
     def compress(self, key: torch.Tensor, value: torch.Tensor):
-        kp = CompressedPayload(
+        kp = Payload(
             method="identity-test",
             shape=tuple(key.shape),
             dtype=key.dtype,
             metadata={"r_token": 0, "r_feature": 0, "bits": 0},
             data={"value": key.to(torch.float16)},
-            stats=CompressorStats(bytes_original=key.numel() * key.element_size()),
+            stats=Stats(bytes_original=key.numel() * key.element_size()),
         )
-        vp = CompressedPayload(
+        vp = Payload(
             method="identity-test",
             shape=tuple(value.shape),
             dtype=value.dtype,
             metadata={"r_token": 0, "r_feature": 0, "bits": 0},
             data={"value": value.to(torch.float16)},
-            stats=CompressorStats(bytes_original=value.numel() * value.element_size()),
+            stats=Stats(bytes_original=value.numel() * value.element_size()),
         )
         self.calls += 1
         return kp, vp
 
-    def decompress(self, kp: CompressedPayload, vp: CompressedPayload):
+    def decompress(self, kp: Payload, vp: Payload):
         return kp.data["value"].to(kp.dtype), vp.data["value"].to(vp.dtype)
 
 

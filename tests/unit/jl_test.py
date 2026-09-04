@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress.compressor.jl import (
-    cached_projection,
+from kvfold.core.jl import (
+    CACHE.get_or_build,
     clear_projection_cache,
     gaussian_projection,
     rademacher_projection,
@@ -64,15 +64,15 @@ def test_norm_preservation_gaussian() -> None:
     assert abs(ratio.mean().item() - 1.0) < 0.1
 
 
-def test_cached_projection_returns_same_object() -> None:
-    p1 = cached_projection(8, 16, seed=0)
-    p2 = cached_projection(8, 16, seed=0)
+def test_CACHE.get_or_build_returns_same_object() -> None:
+    p1 = CACHE.get_or_build(8, 16, seed=0)
+    p2 = CACHE.get_or_build(8, 16, seed=0)
     assert p1 is p2
 
 
-def test_cached_projection_distribution_switch() -> None:
-    p_g = cached_projection(4, 4, distribution="gaussian", seed=0)
-    p_r = cached_projection(4, 4, distribution="rademacher", seed=0)
+def test_CACHE.get_or_build_distribution_switch() -> None:
+    p_g = CACHE.get_or_build(4, 4, distribution="gaussian", seed=0)
+    p_r = CACHE.get_or_build(4, 4, distribution="rademacher", seed=0)
     assert p_g.distribution == "gaussian"
     assert p_r.distribution == "rademacher"
     assert not torch.allclose(p_g.matrix, p_r.matrix)

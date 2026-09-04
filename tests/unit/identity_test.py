@@ -1,4 +1,4 @@
-"""Tests for :class:`IdentityCompressor`.
+"""Tests for :class:`Pass`.
 
 Dedicated tests for the "passthrough" compressor that the dispatch wires
 to ``method="identity"``, ``"fp16"``, ``"bf16"``, and ``"fp8"``.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvcompress import IdentityCompressor
+from kvfold import Pass
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def k_v() -> tuple[torch.Tensor, torch.Tensor]:
 
 def test_identity_preserves_shape(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     k, v = k_v
-    c = IdentityCompressor()
+    c = Pass()
     kp, vp = c.compress(k, v)
     assert kp.shape == k.shape
     assert vp.shape == v.shape
@@ -29,7 +29,7 @@ def test_identity_preserves_shape(k_v: tuple[torch.Tensor, torch.Tensor]) -> Non
 def test_identity_dtype_cast_to_factor(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     """Default factor_dtype is fp16; stored K/V values are fp16 even when input is fp32."""
     k, v = k_v
-    c = IdentityCompressor()
+    c = Pass()
     kp, _ = c.compress(k, v)
     assert kp.data["value"].dtype == torch.float16
 
@@ -37,7 +37,7 @@ def test_identity_dtype_cast_to_factor(k_v: tuple[torch.Tensor, torch.Tensor]) -
 def test_identity_factor_dtype_override(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     """factor_dtype=bf16 stores values in bf16."""
     k, v = k_v
-    c = IdentityCompressor(factor_dtype=torch.bfloat16)
+    c = Pass(factor_dtype=torch.bfloat16)
     kp, _ = c.compress(k, v)
     assert kp.data["value"].dtype == torch.bfloat16
 
@@ -45,7 +45,7 @@ def test_identity_factor_dtype_override(k_v: tuple[torch.Tensor, torch.Tensor]) 
 def test_identity_factor_dtype_fp32_roundtrip(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     """factor_dtype=fp32 makes the round-trip bit-exact."""
     k, v = k_v
-    c = IdentityCompressor(factor_dtype=torch.float32)
+    c = Pass(factor_dtype=torch.float32)
     kp, vp = c.compress(k, v)
     k_hat, v_hat = c.decompress(kp, vp)
     assert torch.equal(k_hat, k)
@@ -55,7 +55,7 @@ def test_identity_factor_dtype_fp32_roundtrip(k_v: tuple[torch.Tensor, torch.Ten
 def test_identity_dtype_restore_on_decompress(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     """decompress returns the original input dtype, not the storage dtype."""
     k = k_v[0].to(torch.float32)
-    c = IdentityCompressor(factor_dtype=torch.float16)
+    c = Pass(factor_dtype=torch.float16)
     kp, _ = c.compress(k, k)
     k_hat, _ = c.decompress(kp, kp)
     assert k_hat.dtype == torch.float32
@@ -66,7 +66,7 @@ def test_identity_kv_separation(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     was compressing one side and storing it under both keys.
     """
     k, v = k_v
-    c = IdentityCompressor(factor_dtype=torch.float32)
+    c = Pass(factor_dtype=torch.float32)
     kp, vp = c.compress(k, v)
     assert not torch.equal(kp.data["value"], vp.data["value"])
     k_hat, v_hat = c.decompress(kp, vp)
@@ -78,7 +78,7 @@ def test_identity_kv_separation(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
 def test_identity_stats_correct(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     """``bytes_compressed`` reflects the factor_dtype's element size."""
     k, v = k_v
-    c = IdentityCompressor(factor_dtype=torch.float16)
+    c = Pass(factor_dtype=torch.float16)
     kp, _ = c.compress(k, v)
     assert kp.stats.bytes_compressed == k.numel() * 2  # fp16 = 2 bytes
     assert kp.stats.bytes_original == k.numel() * k.element_size()
@@ -88,6 +88,6 @@ def test_identity_extra_kwargs_are_dropped(k_v: tuple[torch.Tensor, torch.Tensor
     """Unknown kwargs are silently dropped at the dispatch boundary;
     the compressor itself doesn't validate."""
     k, v = k_v
-    c = IdentityCompressor(factor_dtype=torch.float32, random_unused_arg=42)
+    c = Pass(factor_dtype=torch.float32, random_unused_arg=42)
     kp, vp = c.compress(k, v)
     assert kp.shape == k.shape

@@ -15,8 +15,8 @@ import pytest
 import torch
 from typer.testing import CliRunner
 
-from kvcompress import __version__
-from kvcompress.cli import app
+from kvfold import __version__
+from kvfold.cli import app
 
 
 runner = CliRunner()
@@ -42,21 +42,21 @@ def test_version_prints_version() -> None:
 
 def test_version_callable() -> None:
     """Direct call exercises the body that Typer's wrapper hides."""
-    from kvcompress.cli import version as version_fn
+    from kvfold.cli import version as version_fn
 
     version_fn()  # typer.echo writes to stdout; we don't capture it here.
 
 
 def test_validate_callable() -> None:
     """Direct validate() call bypasses Typer wrapping for coverage."""
-    from kvcompress.cli import validate as validate_fn
+    from kvfold.cli import validate as validate_fn
 
     validate_fn(skip_hf=True)
 
 
 def test_validate_reports_flashjolt_callable() -> None:
     """Direct call: validate() runs both JoLT and FlashJoLT paths."""
-    from kvcompress.cli import validate as validate_fn
+    from kvfold.cli import validate as validate_fn
 
     validate_fn(skip_hf=True)
 
@@ -70,7 +70,7 @@ def test_validate_runs_synthetic_round_trip() -> None:
     result = runner.invoke(app, ["validate", "--skip-hf"])
     assert result.exit_code == 0
     assert "JoLT round-trip rel error" in result.stdout
-    assert "kvcompress validate: OK" in result.stdout
+    assert "kvfold validate: OK" in result.stdout
 
 
 def test_validate_reports_flashjolt_error() -> None:
@@ -119,18 +119,18 @@ def test_validate_hf_smoke_test_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_transformers.GPT2Tokenizer = mock.Mock(return_value=_StubTok())
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
     # Also intercept enable_compression to avoid touching the live model.
-    # validate() does ``from kvcompress import enable_compression`` which
+    # validate() does ``from kvfold import enable_compression`` which
     # resolves via LAZY_EXPORTS. Patch the upstream module and clear the
     # cache so the lazy resolution picks up our stub.
-    import kvcompress
+    import kvfold
 
-    kvcompress.__dict__.pop("enable_compression", None)
+    kvfold.__dict__.pop("enable_compression", None)
     fake_handle = mock.MagicMock()
-    with mock.patch("kvcompress.api.enable_compression", return_value=fake_handle) as m_enable:
-        from kvcompress.cli import validate as validate_fn
+    with mock.patch("kvfold.api.enable_compression", return_value=fake_handle) as m_enable:
+        from kvfold.cli import validate as validate_fn
 
         validate_fn(skip_hf=False)
-    kvcompress.__dict__.pop("enable_compression", None)
+    kvfold.__dict__.pop("enable_compression", None)
     assert m_enable.called
 
 
@@ -147,14 +147,14 @@ def test_validate_hf_smoke_test_skipped(monkeypatch: pytest.MonkeyPatch) -> None
     fake_transformers.GPT2LMHeadModel = _raise
     fake_transformers.GPT2Tokenizer = _raise
     monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
-    from kvcompress.cli import validate as validate_fn
+    from kvfold.cli import validate as validate_fn
 
     validate_fn(skip_hf=False)
 
 
 def test_run_subprocess_returns_true_on_success() -> None:
     """Direct call to run_subprocess — the wrapper around subprocess.check_call."""
-    from kvcompress.cli import run_subprocess as run_subprocess_fn
+    from kvfold.cli import run_subprocess as run_subprocess_fn
 
     # Mock subprocess.check_call to return normally; run_subprocess should
     # return True.
@@ -167,7 +167,7 @@ def test_run_subprocess_returns_false_on_called_process_error() -> None:
     """run_subprocess catches CalledProcessError and returns False."""
     from subprocess import CalledProcessError
 
-    from kvcompress.cli import run_subprocess as run_subprocess_fn
+    from kvfold.cli import run_subprocess as run_subprocess_fn
 
     with mock.patch(
         "subprocess.check_call",
@@ -181,7 +181,7 @@ def test_run_subprocess_returns_false_on_timeout() -> None:
     """run_subprocess catches TimeoutExpired and returns False."""
     from subprocess import TimeoutExpired
 
-    from kvcompress.cli import run_subprocess as run_subprocess_fn
+    from kvfold.cli import run_subprocess as run_subprocess_fn
 
     with mock.patch(
         "subprocess.check_call",
@@ -195,9 +195,9 @@ def test_benchmark_direct_memory_only() -> None:
     """Direct benchmark() call with --suite memory exercises the memory branch."""
     from pathlib import Path
 
-    from kvcompress.cli import benchmark as benchmark_fn
+    from kvfold.cli import benchmark as benchmark_fn
 
-    with mock.patch("kvcompress.cli.run_subprocess", return_value=True) as m:
+    with mock.patch("kvfold.cli.run_subprocess", return_value=True) as m:
         benchmark_fn(suite="memory", output_dir=Path("/tmp"))
     assert m.called
 
@@ -206,9 +206,9 @@ def test_benchmark_direct_speed_only() -> None:
     """Direct benchmark() call with --suite speed exercises the speed branch."""
     from pathlib import Path
 
-    from kvcompress.cli import benchmark as benchmark_fn
+    from kvfold.cli import benchmark as benchmark_fn
 
-    with mock.patch("kvcompress.cli.run_subprocess", return_value=True) as m:
+    with mock.patch("kvfold.cli.run_subprocess", return_value=True) as m:
         benchmark_fn(suite="speed", output_dir=Path("/tmp"))
     assert m.called
 
@@ -217,9 +217,9 @@ def test_benchmark_direct_reconstruction_only() -> None:
     """Direct benchmark() call with --suite reconstruction."""
     from pathlib import Path
 
-    from kvcompress.cli import benchmark as benchmark_fn
+    from kvfold.cli import benchmark as benchmark_fn
 
-    with mock.patch("kvcompress.cli.run_subprocess", return_value=True) as m:
+    with mock.patch("kvfold.cli.run_subprocess", return_value=True) as m:
         benchmark_fn(suite="reconstruction", output_dir=Path("/tmp"))
     assert m.called
 
@@ -231,18 +231,18 @@ def test_benchmark_direct_exits_when_any_suite_fails() -> None:
     import pytest
     from typer import Exit as TyperExit
 
-    from kvcompress.cli import benchmark as benchmark_fn
+    from kvfold.cli import benchmark as benchmark_fn
 
-    with mock.patch("kvcompress.cli.run_subprocess", return_value=False):
+    with mock.patch("kvfold.cli.run_subprocess", return_value=False):
         with pytest.raises(TyperExit):
             benchmark_fn(suite="all", output_dir=Path("/tmp"))
 
 
 def test_profile_direct_invokes_subprocess() -> None:
     """Direct profile() call invokes run_subprocess."""
-    from kvcompress.cli import profile as profile_fn
+    from kvfold.cli import profile as profile_fn
 
-    with mock.patch("kvcompress.cli.run_subprocess", return_value=True) as m:
+    with mock.patch("kvfold.cli.run_subprocess", return_value=True) as m:
         profile_fn(
             model="gpt2",
             ratio=3.0,
@@ -262,7 +262,7 @@ def test_profile_direct_invokes_subprocess() -> None:
 
 def test_compress_direct_requires_hf_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     """Direct compress() call surfaces a clean typer.Exit when transformers is missing."""
-    from kvcompress.cli import compress as compress_fn
+    from kvfold.cli import compress as compress_fn
 
     import builtins
 
@@ -284,7 +284,7 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
     """Direct compress() call with stubbed AutoModel/AutoTokenizer."""
     from typer import echo
 
-    from kvcompress.cli import compress as compress_fn
+    from kvfold.cli import compress as compress_fn
 
     class _StubModel:
         class _Config:
@@ -324,7 +324,7 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
             seed=0,
             bits="0",
             layer_groups=1,
-            cache_implementation="kvcompress",
+            cache_implementation="kvfold",
         )
 
 
@@ -350,7 +350,7 @@ def test_benchmark_swallows_per_suite_failure(tmp_path: Path) -> None:
             raise CalledProcessError(1, args)
         return True
 
-    with mock.patch("kvcompress.cli.run_subprocess", side_effect=fake_run):
+    with mock.patch("kvfold.cli.run_subprocess", side_effect=fake_run):
         result = runner.invoke(
             app,
             ["benchmark", "--suite", "all", "--output-dir", str(tmp_path)],
@@ -362,7 +362,7 @@ def test_benchmark_swallows_per_suite_failure(tmp_path: Path) -> None:
 
 def test_benchmark_succeeds_when_all_suites_pass(tmp_path: Path) -> None:
     """Happy path: every benchmark suite reports OK."""
-    with mock.patch("kvcompress.cli.run_subprocess", return_value=True):
+    with mock.patch("kvfold.cli.run_subprocess", return_value=True):
         result = runner.invoke(
             app,
             ["benchmark", "--suite", "all", "--output-dir", str(tmp_path)],
@@ -378,7 +378,7 @@ def test_benchmark_succeeds_when_all_suites_pass(tmp_path: Path) -> None:
 
 def test_profile_runs_subprocess() -> None:
     """profile invokes scripts.profile_model via run_subprocess."""
-    with mock.patch("kvcompress.cli.run_subprocess", return_value=True) as m:
+    with mock.patch("kvfold.cli.run_subprocess", return_value=True) as m:
         result = runner.invoke(
             app,
             ["profile", "--model", "gpt2", "--ratio", "3.0", "--method", "flashjolt"],
