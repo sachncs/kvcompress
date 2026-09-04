@@ -40,8 +40,8 @@ class Pass(Compressor):
 
     method: str = "pass"
 
-    def __init__(self, *, dtype: torch.dtype = torch.float16, **unused: Any) -> None:
-        self.dtype = dtype
+    def __init__(self, *, dtype: torch.dtype | None = None, **unused: Any) -> None:
+        self.dtype = dtype if dtype is not None else torch.float16
 
     @classmethod
     def default_config(cls) -> PassConfig:
