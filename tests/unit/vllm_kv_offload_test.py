@@ -2,7 +2,7 @@
 
 The data-path methods (:meth:`compress_block`, :meth:`decompress_block`)
 are version-agnostic and tested here without vLLM by injecting a stub
-base class. The vLLM surface (``is_vllm_kv_offload_available`` and the
+base class. The vLLM surface (``is_vllm_offload_available`` and the
 runtime import path) is also exercised end-to-end.
 """
 
@@ -14,26 +14,26 @@ import pytest
 import torch
 
 from kvfold import Pass, Jolt
-from kvfold.adapters.vllm_kv_offload import (
-    JoLTOffloadHandler,
-    ThreadSafeEvictionPool,
-    is_vllm_kv_offload_available,
+from kvfold.adapters.vllm_offload import (
+    Offload,
+    EvictPool,
+    is_vllm_offload_available,
 )
 
 
-def test_is_vllm_kv_offload_available_returns_bool() -> None:
-    assert isinstance(is_vllm_kv_offload_available(), bool)
+def test_is_vllm_offload_available_returns_bool() -> None:
+    assert isinstance(is_vllm_offload_available(), bool)
 
 
 def test_module_imports_without_vllm() -> None:
     """The module must import on systems without vLLM."""
-    import kvfold.adapters.vllm_kv_offload  # noqa: F401
+    import kvfold.adapters.vllm_offload  # noqa: F401
 
 
 def test_handler_attributes() -> None:
     """The handler exposes the expected public attributes."""
     comp = Jolt(compression_ratio=3.0)
-    handler = JoLTOffloadHandler(compressor=comp, block_shape=(4, 2, 16, 8))
+    handler = Offload(compressor=comp, block_shape=(4, 2, 16, 8))
     assert handler.name == "jolt-offload"
     assert hasattr(handler, "compress_block")
     assert hasattr(handler, "decompress_block")
@@ -41,7 +41,7 @@ def test_handler_attributes() -> None:
     assert hasattr(handler, "get_finished")
     assert hasattr(handler, "wait")
     # Default pool is thread-safe.
-    assert isinstance(handler.eviction_pool, ThreadSafeEvictionPool)
+    assert isinstance(handler.eviction_pool, EvictPool)
 
 
 def test_handler_instantiation_with_real_vllm() -> None:
@@ -50,7 +50,7 @@ def test_handler_instantiation_with_real_vllm() -> None:
     """
     pytest.importorskip("vllm")
     comp = Jolt(compression_ratio=3.0)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
     assert handler.name == "jolt-offload"
     assert handler.base_class is not None
 
@@ -72,7 +72,7 @@ def test_handler_instantiation_without_vllm() -> None:
     comp = Jolt(compression_ratio=3.0)
     builtins.__import__ = fake_import
     try:
-        handler = JoLTOffloadHandler(compressor=comp)
+        handler = Offload(compressor=comp)
         assert handler.base_class is None
         with pytest.raises(AttributeError):
             handler.some_vllm_only_method()
@@ -82,7 +82,7 @@ def test_handler_instantiation_without_vllm() -> None:
 
 def test_thread_safe_pool_round_trip() -> None:
     """Concurrent put/get across multiple threads must not corrupt state."""
-    pool = ThreadSafeEvictionPool()
+    pool = EvictPool()
     n_threads = 16
     n_layers = 32
 
@@ -111,7 +111,7 @@ def test_thread_safe_pool_round_trip() -> None:
 def test_compress_decompress_round_trip_separates_kv() -> None:
     """Regression: compress_block must not store K as both K and V."""
     comp = Pass(factor_dtype=torch.float32)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
     # vLLM's standard layout: (num_layers, num_kv, T, dh).
     torch.manual_seed(0)
     num_layers, _num_kv, T, dh = 2, 2, 4, 8
@@ -140,7 +140,7 @@ def test_compress_decompress_round_trip_separates_kv() -> None:
 def test_compress_block_handles_tuple_input() -> None:
     """Accepts ``(K_block, V_block)`` tuple as well as the 4-D tensor."""
     comp = Pass(factor_dtype=torch.float32)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
     torch.manual_seed(0)
     K_orig = torch.randn(2, 4, 8)
     V_orig = torch.randn(2, 4, 8)
@@ -155,7 +155,7 @@ def test_compress_block_handles_tuple_input() -> None:
 def test_compress_block_rejects_unknown_layout() -> None:
     """A 3-D block (no layer axis) must raise loudly, not silently store."""
     comp = Pass()
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
     bad = torch.randn(2, 4, 8)  # no layer axis
     with pytest.raises(ValueError, match="unsupported block type"):
         handler.compress_block(bad)
@@ -164,7 +164,7 @@ def test_compress_block_rejects_unknown_layout() -> None:
 def test_decompress_block_returns_list_of_tuples_for_list_input() -> None:
     """vLLM may pass a list of layer indices; we return one (K, V) per layer."""
     comp = Pass(factor_dtype=torch.float32)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
     torch.manual_seed(0)
     K_orig = torch.randn(3, 4, 8)
     V_orig = torch.randn(3, 4, 8)
@@ -183,7 +183,7 @@ def test_decompress_block_returns_list_of_tuples_for_list_input() -> None:
 def test_transfer_async_records_job_completion() -> None:
     """A successful transfer_async enqueues a finished job; get_finished drains."""
     comp = Pass(factor_dtype=torch.float32)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
 
     class _FakeSpec:
         def __init__(self, blocks: list[int]) -> None:
@@ -204,17 +204,17 @@ def test_transfer_async_records_job_completion() -> None:
 
 def test_transfer_async_records_failure_on_exception() -> None:
     """A transfer_async that raises still enqueues a (job_id, success=False)."""
-    from kvfold.adapters import vllm_kv_offload as mod
+    from kvfold.adapters import vllm_offload as mod
 
     comp = Pass(factor_dtype=torch.float32)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
 
     # Force run_transfer to raise.
     def boom(self, src, dst):  # noqa: ARG001
         raise RuntimeError("simulated failure")
 
-    original = mod.JoLTOffloadHandler.run_transfer
-    mod.JoLTOffloadHandler.run_transfer = boom
+    original = mod.Offload.run_transfer
+    mod.Offload.run_transfer = boom
     try:
         ok = handler.transfer_async(99, (None, None))
         assert ok is False
@@ -222,14 +222,14 @@ def test_transfer_async_records_failure_on_exception() -> None:
         assert len(finished) == 1
         assert finished[0] == (99, False)
     finally:
-        mod.JoLTOffloadHandler.run_transfer = original
+        mod.Offload.run_transfer = original
 
 
 def test_wait_returns_when_jobs_finish() -> None:
     """``wait`` polls and returns once all requested job IDs are in
     the finished list."""
     comp = Pass(factor_dtype=torch.float32)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
 
     class _FakeSpec:
         blocks: list[int] = []
@@ -242,7 +242,7 @@ def test_wait_returns_when_jobs_finish() -> None:
 def test_wait_times_out_on_missing_jobs() -> None:
     """``wait`` returns on timeout instead of looping forever."""
     comp = Pass(factor_dtype=torch.float32)
-    handler = JoLTOffloadHandler(compressor=comp)
+    handler = Offload(compressor=comp)
     # The default 60s deadline is too long for tests; monkey-patch.
     import time as _time
 

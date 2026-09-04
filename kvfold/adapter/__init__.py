@@ -28,10 +28,10 @@ def __getattr__(name: str) -> Any:
         from kvfold.adapter import vllm
 
         return getattr(vllm, name)
-    if name in ("JoLTOffloadHandler", "ThreadSafeEvictionPool", "is_vllm_kv_offload_available"):
-        from kvfold.adapter import vllm_kv_offload
+    if name in ("Offload", "EvictPool", "is_vllm_offload_available"):
+        from kvfold.adapter import vllm_offload
 
-        return getattr(vllm_kv_offload, name)
+        return getattr(vllm_offload, name)
     raise AttributeError(f"module 'kvfold.adapter' has no attribute {name!r}")
 
 
@@ -40,8 +40,8 @@ __all__ = [
     "export_kv",
     "import_kv",
     "is_vllm_available",
-    "is_vllm_kv_offload_available",
-    "JoLTOffloadHandler",
-    "ThreadSafeEvictionPool",
+    "is_vllm_offload_available",
+    "Offload",
+    "EvictPool",
     "resolve_cache",
 ]

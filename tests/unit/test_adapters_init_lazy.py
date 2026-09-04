@@ -31,16 +31,16 @@ def test_vllm_lazy_exports() -> None:
     assert callable(resolve_cache)
 
 
-def test_vllm_kv_offload_lazy_exports() -> None:
+def test_vllm_offload_lazy_exports() -> None:
     from kvfold.adapters import (
-        JoLTOffloadHandler,
-        ThreadSafeEvictionPool,
-        is_vllm_kv_offload_available,
+        Offload,
+        EvictPool,
+        is_vllm_offload_available,
     )
 
-    assert JoLTOffloadHandler.__name__ == "JoLTOffloadHandler"
-    assert ThreadSafeEvictionPool.__name__ == "ThreadSafeEvictionPool"
-    assert callable(is_vllm_kv_offload_available)
+    assert Offload.__name__ == "Offload"
+    assert EvictPool.__name__ == "EvictPool"
+    assert callable(is_vllm_offload_available)
 
 
 def test_unknown_attribute_raises() -> None:

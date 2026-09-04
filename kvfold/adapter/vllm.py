@@ -21,13 +21,13 @@ Caveats:
 * The exported file embeds the *compressor* layout. Importing on a
   model with a different number of layers raises immediately.
 * This is a *user-driven* workflow — there's no automatic hook into
-  vLLM's scheduler. For that, see :mod:`kvfold.adapter.vllm_kv_offload`.
+  vLLM's scheduler. For that, see :mod:`kvfold.adapter.vllm_offload`.
 
 vLLM availability:
 
 The module is importable on systems without vLLM. :func:`export_kv`
 and :func:`import_kv` only need ``transformers``, which is a hard
-dependency. The :mod:`kvfold.adapter.vllm_kv_offload` module is the
+dependency. The :mod:`kvfold.adapter.vllm_offload` module is the
 optional Shape B integration that requires vLLM.
 """
 

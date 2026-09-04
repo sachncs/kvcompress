@@ -30,9 +30,9 @@ Caveats
 * End-to-end exercise needs a GPU + a real vLLM deploy. The
   compression data path is unit-tested without vLLM
   (``test_compress_block_*``); the vLLM surface is verified at import
-  time and via the ``is_vllm_kv_offload_available`` probe.
+  time and via the ``is_vllm_offload_available`` probe.
 * The offload handler runs in the worker process; thread-safety
-  matters. :class:`ThreadSafeEvictionPool` is the default payload
+  matters. :class:`EvictPool` is the default payload
   storage.
 
 Usage on a GPU box (sketch; see ``docs/user/vllm.md`` for the full
@@ -41,11 +41,11 @@ example):
 .. code-block:: python
 
     from vllm import LLM
-    from kvfold.adapter.vllm_kv_offload import JoLTOffloadHandler
+    from kvfold.adapter.vllm_offload import Offload
     from kvfold import build_compressor
 
     compressor = build_compressor("flashjolt", compression_ratio=3.0)
-    handler = JoLTOffloadHandler(compressor=compressor)
+    handler = Offload(compressor=compressor)
     llm = LLM(model="meta-llama/Llama-2-7b-hf")
     # vLLM's OffloadingWorker accepts handlers via register_handler.
     # See vLLM docs for the exact wiring for your version.
@@ -60,16 +60,16 @@ from typing import Any
 from kvfold.core.base import Compressor
 
 __all__ = [
-    "JoLTOffloadHandler",
-    "ThreadSafeEvictionPool",
-    "is_vllm_kv_offload_available",
+    "Offload",
+    "EvictPool",
+    "is_vllm_offload_available",
     "import_vllm_base",
 ]
 
 log = logging.getLogger(__name__)
 
 
-def is_vllm_kv_offload_available() -> bool:
+def is_vllm_offload_available() -> bool:
     """Return True if the vLLM v1 KV-offload handler API is importable."""
     try:
         from vllm.v1.kv_offload.worker.worker import (  # noqa: F401
@@ -85,7 +85,7 @@ def import_vllm_base() -> type | None:
     """Late-import the vLLM v1 KV-offload ``OffloadingHandler`` ABC.
 
     Returns ``None`` if vLLM is not installed. We don't raise here so
-    import-time probes (e.g. ``is_vllm_kv_offload_available``) don't
+    import-time probes (e.g. ``is_vllm_offload_available``) don't
     require vLLM.
     """
     try:
@@ -100,7 +100,7 @@ def import_vllm_base() -> type | None:
 # concurrent vLLM worker threads; this wraps it in an RLock and uses
 # a layered lookup so the K and V payloads of one layer can be stored
 # or retrieved atomically.
-class ThreadSafeEvictionPool:
+class EvictPool:
     """Thread-safe eviction pool for compressed KV payloads.
 
     Keyed by ``(layer, kind)`` where ``kind in {"key", "value"}``.
@@ -141,7 +141,7 @@ class ThreadSafeEvictionPool:
             self.store.clear()
 
 
-class JoLTOffloadHandler:
+class Offload:
     """vLLM ``OffloadingHandler`` subclass that compresses blocks with JoLT.
 
     vLLM's KV offload flow:
@@ -163,7 +163,7 @@ class JoLTOffloadHandler:
     Args:
         compressor: the :class:`Compressor` to use.
         eviction_pool: optional payload storage. Defaults to an
-            in-memory :class:`ThreadSafeEvictionPool`. Supply a custom
+            in-memory :class:`EvictPool`. Supply a custom
             pool (Redis, disk) for production offload.
 
     Notes:
@@ -177,7 +177,7 @@ class JoLTOffloadHandler:
     def __init__(
         self,
         compressor: Compressor,
-        eviction_pool: ThreadSafeEvictionPool | None = None,
+        eviction_pool: EvictPool | None = None,
         **kwargs: Any,
     ) -> None:
         base_cls = import_vllm_base()
@@ -188,7 +188,7 @@ class JoLTOffloadHandler:
             not isinstance(base_cls, type) or not hasattr(base_cls, "transfer_async")
         ):
             raise ImportError(
-                f"JoLTOffloadHandler: vLLM OffloadingHandler at {base_cls!r} "
+                f"Offload: vLLM OffloadingHandler at {base_cls!r} "
                 "does not expose transfer_async; vLLM API drift."
             )
 
@@ -197,8 +197,8 @@ class JoLTOffloadHandler:
         # duplicating its __init__ (which varies per vLLM version).
         # __getattr__ below forwards any methods we don't override.
         self.compressor = compressor
-        self.eviction_pool: ThreadSafeEvictionPool = (
-            eviction_pool if eviction_pool is not None else ThreadSafeEvictionPool()
+        self.eviction_pool: EvictPool = (
+            eviction_pool if eviction_pool is not None else EvictPool()
         )
         self.lock = threading.Lock()
         self.next_job_id = 0
@@ -221,7 +221,7 @@ class JoLTOffloadHandler:
             self.run_transfer(src_spec, dst_spec)
         except Exception as e:  # noqa: BLE001 — best-effort, log + report failure
             log.warning(
-                "JoLTOffloadHandler.transfer_async: transfer %d failed: %r",
+                "Offload.transfer_async: transfer %d failed: %r",
                 job_id,
                 e,
             )
@@ -258,7 +258,7 @@ class JoLTOffloadHandler:
             if job_ids.issubset(done):
                 return
             if time.monotonic() > deadline:
-                log.warning("JoLTOffloadHandler.wait: timeout for %s", job_ids)
+                log.warning("Offload.wait: timeout for %s", job_ids)
                 return
             time.sleep(0.001)
 
@@ -302,7 +302,7 @@ class JoLTOffloadHandler:
                 stored[(layer_idx, "value")] = v_payload
             return stored
         raise ValueError(
-            f"JoLTOffloadHandler.compress_block: unsupported block type "
+            f"Offload.compress_block: unsupported block type "
             f"{type(block).__name__} with shape "
             f"{getattr(block, 'shape', None)}"
         )
@@ -325,10 +325,10 @@ class JoLTOffloadHandler:
             raise AttributeError(name)
         base = getattr(self, "base_class", None)
         if base is None:
-            raise AttributeError(f"JoLTOffloadHandler.{name}: base class unbound")
+            raise AttributeError(f"Offload.{name}: base class unbound")
         attr = getattr(base, name, None)
         if attr is None:
-            raise AttributeError(f"JoLTOffloadHandler.{name}: not present on vLLM base")
+            raise AttributeError(f"Offload.{name}: not present on vLLM base")
         return attr
 
     # ------------------------------------------------------------------
@@ -387,7 +387,7 @@ class JoLTOffloadHandler:
     ) -> tuple[Any, Any]:
         """Decompress a single ``(layer, kind) -> payload`` mapping."""
         if not stored:
-            raise ValueError("JoLTOffloadHandler: empty stored dict")
+            raise ValueError("Offload: empty stored dict")
         layer_idx = next(iter(stored))[0]
         k_payload = stored[(layer_idx, "key")]
         v_payload = stored[(layer_idx, "value")]
@@ -404,7 +404,7 @@ class JoLTOffloadHandler:
             v_payload = self.eviction_pool.get(layer_idx, "value")
             if k_payload is None or v_payload is None:
                 log.warning(
-                    "JoLTOffloadHandler: missing payload for layer %d (key=%s, value=%s)",
+                    "Offload: missing payload for layer %d (key=%s, value=%s)",
                     layer_idx,
                     k_payload is not None,
                     v_payload is not None,
