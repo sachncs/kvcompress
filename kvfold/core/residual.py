@@ -39,7 +39,7 @@ from kvfold.core.quant import (
 )
 
 __all__ = [
-    "ResidualPayload",
+    "Residual",
     "decode_residual",
     "encode_residual",
     "estimate_residual_bytes",
@@ -49,7 +49,7 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
-class ResidualPayload:
+class Residual:
     """Serialized JL-rotated residual.
 
     Attributes:
@@ -93,19 +93,18 @@ class ResidualPayload:
 
     @property
     def bytes_compressed(self) -> int:
-        """Approximate byte cost of the residual payload.
+        """Exact byte cost of the residual payload.
 
-        Includes the bit-packed codes (sized per sub-byte chunks),
-        the (packed) bytes themselves, and fp32 scale + zero-point.
-        Does *not* include the JL projection matrix because it's
-        reconstructible from the seed.
+        Counts the bit-packed storage exactly: ``packed.numel()`` bytes
+        (uint8 container) plus the fp32 scale and zero-point tensors.
+        The JL projection matrix is reconstructible from the seed so is
+        not counted.
         """
-        bits = self.bits
-        elem = self.packed.numel() * self.packed.element_size()
-        bytes_per = (bits + 7) // 8
-        # packed stores one byte per chunk of (8/bits) entries.
-        n_entries = self.packed.numel() * (8 // max(bits, 1))
-        return n_entries * bytes_per + elem + self.scale.numel() * 4 + self.zero_point.numel() * 4
+        return (
+            self.packed.numel() * self.packed.element_size()
+            + self.scale.numel() * self.scale.element_size()
+            + self.zero_point.numel() * self.zero_point.element_size()
+        )
 
     def to_dict(self) -> dict[str, object]:
         """Convert this payload to a JSON-/safetensors-friendly dict.
@@ -128,7 +127,7 @@ class ResidualPayload:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, object]) -> "ResidualPayload":
+    def from_dict(cls, d: dict[str, object]) -> "Residual":
         """Inverse of :meth:`to_dict`. Recovers a payload from a dict.
 
         Raises:
@@ -162,7 +161,7 @@ def encode_residual(
     symmetric: bool = True,
     per_channel: bool = True,
     group_size: int | None = None,
-) -> ResidualPayload:
+) -> Residual:
     """Encode a residual via JL rotation + uniform quantization.
 
     Args:
@@ -176,13 +175,13 @@ def encode_residual(
         group_size: optional per-group scale size.
 
     Returns:
-        :class:`ResidualPayload`.
+        :class:`Residual`.
     """
     if bits not in (0, 2, 4, 8):
         raise ValueError(f"bits must be 0, 2, 4, or 8, got {bits}")
     if bits == 0:
         # No residual stored: encode an empty payload.
-        return ResidualPayload(
+        return Residual(
             projection_seed=seed,
             projection_distribution=distribution,
             projection_sparsity=sparsity,
@@ -222,7 +221,7 @@ def encode_residual(
         per_channel=per_channel,
         group_size=group_size,
     )
-    return ResidualPayload(
+    return Residual(
         projection_seed=seed,
         projection_distribution=distribution,
         projection_sparsity=sparsity,
@@ -238,7 +237,7 @@ def encode_residual(
     )
 
 
-def decode_residual(payload: ResidualPayload, device: torch.device | None = None) -> torch.Tensor:
+def decode_residual(payload: Residual, device: torch.device | None = None) -> torch.Tensor:
     """Decode a residual back to the original layout.
 
     Steps:

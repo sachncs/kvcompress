@@ -1,4 +1,4 @@
-"""kvcompress public API.
+"""kvfold public API.
 
 The high-level entrypoint is :func:`enable_compression`, which monkey-patches a
 Hugging Face model so its KV cache is compressed transparently during
@@ -10,6 +10,8 @@ This module exposes:
   to disable compression, query stats, or swap methods at runtime.
 * :func:`enable_compression` — entry point.
 * :func:`disable_compression` — revert the patch.
+* :func:`build_compressor` — direct access to the compressor factory.
+* :func:`supported_methods` — tuple of every supported method name.
 * :func:`parse_target_memory` — helper that converts ``"25%"`` / ``0.25``
   to a ratio of ``4.0``.
 
@@ -38,21 +40,22 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
 
-    from kvcompress.adapters.huggingface import HuggingFaceAdapter
+    from kvfold.adapters.huggingface import HuggingFaceAdapter
 
 log = logging.getLogger(__name__)
 
 
 MethodName = Literal[
     "jolt",
-    "flashjolt",
-    "lowrank",
+    "flash",
+    "low",
     "int8",
     "int4",
     "int2",
     "fp8",
     "fp16",
-    "identity",
+    "bf16",
+    "pass",
 ]
 
 
@@ -102,7 +105,7 @@ class CompressionHandle:
     def disable(self) -> None:
         """Disable compression and restore the original behaviour."""
         self.adapter.disable()
-        log.info("kvcompress: disabled compression on %s", type(self.model).__name__)
+        log.info("kvfold: disabled compression on %s", type(self.model).__name__)
 
     def stats_dict(self) -> dict[str, float]:
         """Return cumulative stats as a flat dict for logging / benchmarking.
@@ -128,7 +131,7 @@ def enable_compression(
     compression_ratio: float | None = None,
     layer_groups: int = 1,
     bits: tuple[int, ...] = (0, 2, 4, 8),
-    cache_implementation: str = "kvcompress",
+    cache_implementation: str = "kvfold",
     seed: int = 0,
     **kwargs: Any,
 ) -> CompressionHandle:
@@ -174,13 +177,13 @@ def enable_compression(
         method = "identity"
 
     log.info(
-        "kvcompress: enabling method=%s ratio=%.2fx on %s",
+        "kvfold: enabling method=%s ratio=%.2fx on %s",
         method,
         compression_ratio,
         type(model).__name__,
     )
 
-    from kvcompress.adapters.huggingface import HuggingFaceAdapter
+    from kvfold.adapters.huggingface import HuggingFaceAdapter
 
     # Translate the public ``target_memory="100%"`` shortcut into the
     # identity compressor to avoid spinning up the allocator at ratio=1.
@@ -208,6 +211,26 @@ def enable_compression(
 def disable_compression(handle: CompressionHandle) -> None:
     """Disable compression on a handle returned by :func:`enable_compression`."""
     handle.disable()
+
+
+def build_compressor(method: str, **kwargs: Any) -> Any:
+    """Construct a configured compressor from its public method name.
+
+    Thin façade over :class:`kvfold.core.dispatch.CompressorRegistry` so
+    users do not have to remember the internal registry path.
+
+    Raises:
+        UnsupportedMethodError: if ``method`` is not registered.
+        MethodConfigError: if any kwarg is unknown or out of range.
+    """
+    from kvfold.core.dispatch import REGISTRY
+    return REGISTRY.build(method, **kwargs)
+
+
+def supported_methods() -> tuple[str, ...]:
+    """Tuple of every compression method the dispatcher accepts."""
+    from kvfold.core.dispatch import REGISTRY
+    return REGISTRY.names()
 
 
 def parse_target_memory(value: str | float) -> float:

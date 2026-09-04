@@ -49,13 +49,13 @@ from kvfold.core.base import (
     Compressor,
 )
 from kvfold.core.residual import (
-    ResidualPayload,
+    Residual,
     decode_residual,
     encode_residual,
 )
 from kvfold.core.svd import Exact, Randomized
 from kvfold.core.tucker import (
-    TuckerFactors,
+    Tucker,
     partial_tucker_st_hosvd,
     reconstruct_partial_tucker,
 )
@@ -75,8 +75,8 @@ class JoLTFactors:
         allocation: allocator decision for this cell.
     """
 
-    tucker: TuckerFactors
-    residual: ResidualPayload | None
+    tucker: Tucker
+    residual: Residual | None
     allocation: Any
 
 
@@ -316,7 +316,7 @@ class Jolt(Compressor):
         recon = reconstruct_partial_tucker(tucker, x.shape)
         residual_tensor = (x - recon).contiguous()
         if b == 0:
-            residual: ResidualPayload | None = encode_residual(
+            residual: Residual | None = encode_residual(
                 residual_tensor,
                 bits=0,
                 seed=self.seed,
@@ -431,7 +431,7 @@ class Jolt(Compressor):
         u_token = payload.data["u_token"].to(torch.float32)
         u_feature = payload.data["u_feature"].to(torch.float32)
         x = reconstruct_partial_tucker(
-            TuckerFactors(
+            Tucker(
                 core=core,
                 u_token=u_token,
                 u_feature=u_feature,
@@ -449,7 +449,7 @@ class Jolt(Compressor):
             quant_dtype = f"int{res_dtype_int}" if res_dtype_int > 0 else "int0"
             original_shape = tuple(int(d) for d in payload.data["residual_original_shape"].tolist())
             original_last = int(payload.data["residual_original_last"].item())
-            residual = ResidualPayload(
+            residual = Residual(
                 projection_seed=int(payload.metadata["residual_seed"]),
                 projection_distribution=payload.metadata["residual_distribution"],  # type: ignore[arg-type]
                 projection_sparsity=float(payload.metadata["residual_sparsity"]),

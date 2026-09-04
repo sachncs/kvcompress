@@ -42,8 +42,8 @@ from typing import Literal, Protocol
 import torch
 
 __all__ = [
-    "FloatCastQuantizer",
-    "IntQuantizer",
+    "FloatCast",
+    "IntQuant",
     "QuantDType",
     "Quantizer",
     "dequantize_tensor",
@@ -92,7 +92,7 @@ class Quantizer(Protocol):
 
 
 @dataclass
-class FloatCastQuantizer:
+class FloatCast:
     """Casts to a low-precision float and back; scale is always 1.0."""
 
     name: QuantDType = "fp16"
@@ -107,7 +107,7 @@ class FloatCastQuantizer:
         elif self.name == "fp8_e5m2":
             self.dtype = fp8_e5m2_dtype()
         else:
-            raise ValueError(f"FloatCastQuantizer does not support {self.name!r}")
+            raise ValueError(f"FloatCast does not support {self.name!r}")
 
     def quantize(
         self,
@@ -276,7 +276,7 @@ def bit_unpacking_signed(
 
 
 @dataclass
-class IntQuantizer:
+class IntQuant:
     """Symmetric or asymmetric uniform integer quantization.
 
     Args:
@@ -296,7 +296,7 @@ class IntQuantizer:
 
     def __post_init__(self) -> None:
         if self.bits not in (2, 4, 8):
-            raise ValueError(f"IntQuantizer bits must be 2/4/8, got {self.bits}")
+            raise ValueError(f"IntQuant bits must be 2/4/8, got {self.bits}")
         if self.symmetric:
             self.qmax = (1 << (self.bits - 1)) - 1
             self.qmin = -(1 << (self.bits - 1))
@@ -484,14 +484,14 @@ def get_quantizer(
         key = f"float:{name}"
         return get_or_create(
             key,
-            lambda: FloatCastQuantizer(name=name),  # type: ignore[arg-type]
+            lambda: FloatCast(name=name),  # type: ignore[arg-type]
         )
     if name in ("int2", "int4", "int8"):
         bits = int(name[3:])
         key = f"int:{bits}:{symmetric}:{per_channel}:{group_size}"
         return get_or_create(
             key,
-            lambda: IntQuantizer(
+            lambda: IntQuant(
                 bits=bits,
                 symmetric=symmetric,
                 per_channel=per_channel,
