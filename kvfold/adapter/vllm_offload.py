@@ -391,7 +391,7 @@ class Offload:
         layer_idx = next(iter(stored))[0]
         k_payload = stored[(layer_idx, "key")]
         v_payload = stored[(layer_idx, "value")]
-        return self.compressor.decompress(k_payload, v_payload)
+        return self.compressor.restore(k_payload, v_payload)
 
     def decompress_layers(
         self,
@@ -410,7 +410,7 @@ class Offload:
                     v_payload is not None,
                 )
                 continue
-            K, V = self.compressor.decompress(k_payload, v_payload)
+            K, V = self.compressor.restore(k_payload, v_payload)
             if K.dim() == 3 and K.shape[0] == 1:
                 K = K.squeeze(0)
             if V.dim() == 3 and V.shape[0] == 1:

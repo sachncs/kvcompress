@@ -163,7 +163,7 @@ def run_table2(
     # JoLT.
     jolt = JoLTCompressor(compression_ratio=compression_ratio, bits=(4, 8))
     kp, vp = jolt.compress(K, V)
-    k_hat, v_hat = jolt.decompress(kp, vp)
+    k_hat, v_hat = jolt.restore(kp, vp)
     results.append(
         ReconstructionResult(
             method="jolt",
@@ -180,7 +180,7 @@ def run_table2(
     # FlashJoLT.
     fjolt = FlashJoLTCompressor(compression_ratio=compression_ratio, bits=(4, 8))
     kp, vp = fjolt.compress(K, V)
-    k_hat, v_hat = fjolt.decompress(kp, vp)
+    k_hat, v_hat = fjolt.restore(kp, vp)
     results.append(
         ReconstructionResult(
             method="flashjolt",
@@ -197,7 +197,7 @@ def run_table2(
     # Low-rank baseline.
     lr = LowRankCompressor(rank=64)
     kp, vp = lr.compress(K, V)
-    k_hat, v_hat = lr.decompress(kp, vp)
+    k_hat, v_hat = lr.restore(kp, vp)
     results.append(
         ReconstructionResult(
             method="lowrank-64",
@@ -214,7 +214,7 @@ def run_table2(
     # INT4 baseline.
     int4 = IntQuantOnlyCompressor(bits=4, per_channel=True)
     kp, vp = int4.compress(K, V)
-    k_hat, v_hat = int4.decompress(kp, vp)
+    k_hat, v_hat = int4.restore(kp, vp)
     results.append(
         ReconstructionResult(
             method="int4-per-channel",

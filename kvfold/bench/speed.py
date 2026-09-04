@@ -81,7 +81,7 @@ def run_speed_sweep(
 
         compress_ms = time_call(lambda: comp.compress(K, V))
         kp, vp = comp.compress(K, V)
-        decompress_ms = time_call(lambda: comp.decompress(kp, vp))
+        decompress_ms = time_call(lambda: comp.restore(kp, vp))
 
         original_bytes = K.numel() * K.element_size() * 2
         compressed_bytes = kp.bytes_compressed + vp.bytes_compressed
