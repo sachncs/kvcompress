@@ -1,64 +1,58 @@
-"""Exact and randomized low-rank SVD.
+"""Decomposition strategies (exact and randomised SVD).
 
-The :class:`SVD` class wraps both algorithms. The randomized path follows
-Halko, Martinsson, Tropp (2011): Stage A finds an orthonormal basis ``Q`` for
-the range of ``A`` via a Gaussian sketch plus optional power iterations;
-Stage B does an exact small SVD on ``B = Q.T @ A`` and lifts back to the
-original space.
+The :class:`Decomposer` ABC defines the contract; :class:`Exact` and
+:class:`Randomized` are the two strategies. Use :class:`DecomposerRegistry`
+to construct one by name.
 
-Both paths return a :class:`SVDResult` carrying the singular triples plus a
-``tail_mass`` scalar — the Frobenius mass discarded by the rank-r truncation.
-FlashJoLT uses ``tail_mass`` for tail-mass accounting on the allocator.
+Both strategies return a :class:`Decomposition` carrying the singular
+triples plus a ``tail_mass`` scalar. The randomised path follows
+Halko, Martinsson, Tropp (2011): Stage A finds an orthonormal basis for
+the range via a Gaussian sketch plus power iterations; Stage B does an
+exact small SVD on the projected matrix and lifts back to the original
+space.
 
-Tail-mass semantics:
-
-* **Exact path**: ``tail_mass = sum(s[r:]**2) / sum(s**2)``. Computed
-  from the full singular spectrum, so it's exact.
-* **Randomised path**: ``tail_mass ≈ 1 - sum(s_r**2) / ||A||F**2``.
-  ``sum(s_r**2)`` is the retained energy in the rank-``r`` approximation;
-  ``||A||F**2`` is the full energy. The randomised path can't compute the
-  true discarded tail because it never sees the full spectrum; this
-  estimator is a tight upper bound in expectation when ``n_power ≥ 2``.
-
-The ``cap`` argument to :meth:`randomise` bounds the sketch size, which
-FlashJoLT uses to keep token-mode SVD cheap at long contexts.
+Thread-safety: instances are stateless across calls. Random components
+use a per-call :class:`torch.Generator` instead of mutating the global
+``torch.manual_seed`` state (which was Tier 0 bug B-07).
 """
 
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Type
 
 import torch
 
-__all__ = ["SVD", "SVDResult"]
+from kvfold.errors import ShapeError
+
+__all__ = ["Decomposition", "Decomposer", "Exact", "Randomized", "DecomposerRegistry"]
 
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
-class SVDResult:
+class Decomposition:
     """Result of an SVD-style decomposition ``A ≈ U @ diag(S) @ Vh``.
 
     Attributes:
-        u: shape ``(m, k)`` with orthonormal columns (``m × k``).
+        u: shape ``(m, k)`` with orthonormal columns.
         s: shape ``(k,)`` non-negative singular values, descending.
         vh: shape ``(k, n)`` — right singular vectors, transposed.
-        tail_mass: ``sum(s[r:]**2) / sum(s**2)`` — relative Frobenius mass
-            discarded by keeping only the top-``r`` components. ``0.0`` if
-            ``k == min(m, n)``.
-        method: ``"exact"`` or ``"randomised"``.
-        full_s: full singular spectrum of ``A`` if it was computed (only
-            ``"exact"`` always returns it). ``None`` for the randomised path.
+        tail_mass: relative Frobenius mass discarded by the rank-``r``
+            truncation. ``0.0`` when the full spectrum is retained.
+        strategy: name of the strategy that produced this decomposition.
+        full_s: full singular spectrum if it was computed (only :class:`Exact`
+            always returns it). ``None`` for :class:`Randomized`.
     """
 
     u: torch.Tensor
     s: torch.Tensor
     vh: torch.Tensor
     tail_mass: float
-    method: Literal["exact", "randomised"]
+    strategy: Literal["exact", "randomised"]
     full_s: torch.Tensor | None = None
 
     @property
@@ -68,24 +62,17 @@ class SVDResult:
 
     @property
     def shape(self) -> tuple[int, int]:
-        """``(m, n)`` of the original matrix ``A`` — recovers it from ``U``'s
-        rows and ``Vh``'s columns.
-        """
+        """``(m, n)`` of the original matrix ``A``."""
         return (int(self.u.shape[0]), int(self.vh.shape[1]))
 
     def reconstruct(self) -> torch.Tensor:
-        """Reconstruct ``A ≈ U @ diag(S) · Vh``.
-
-        Runs in fp32 if the stored ``u``/``s``/``vh`` were originally
-        cast to fp16/fp8 by the caller.
-        """
+        """Reconstruct ``A ≈ U @ diag(S) · Vh``."""
         return (self.u * self.s) @ self.vh
 
     def reconstruction_error(self, a: torch.Tensor) -> float:
         """Relative Frobenius error ``||A - Â||F / ||A||F``.
 
-        Returns ``0.0`` when ``||A||F == 0`` (degenerate case) to keep
-        it total.
+        Returns ``0.0`` when ``||A||F == 0`` (degenerate case).
         """
         recon = self.reconstruct()
         num = torch.linalg.norm(a - recon)
@@ -96,11 +83,7 @@ class SVDResult:
 
 
 def tail_mass(s: torch.Tensor, r: int) -> float:
-    """Relative Frobenius tail mass past the top-``r`` singular values.
-
-    Returns 0.0 if ``r`` covers the full spectrum or the spectrum is all
-    zeros. Otherwise returns ``sum(s[r:]**2) / sum(s**2)``.
-    """
+    """Relative Frobenius tail mass past the top-``r`` singular values."""
     if r >= s.shape[0]:
         return 0.0
     total = float(torch.sum(s * s))
@@ -110,207 +93,166 @@ def tail_mass(s: torch.Tensor, r: int) -> float:
     return tail / total
 
 
-class SVD:
-    """Unified exact and randomized SVD.
+class Decomposer(ABC):
+    """Abstract strategy for low-rank decomposition."""
 
-    Args:
-        oversampling: extra columns beyond ``rank`` for the randomised
-            sketch. Paper recommends 5-10.
-        n_power: number of power iterations. ``0`` skips them (fast but
-            less accurate for matrices with decaying spectra). With
-            ``n_power ≥ 2`` the randomised estimator of ``tail_mass`` is
-            a tight upper bound in expectation.
-        seed: seed for the randomised path. Ignored by :meth:`exact`.
-        method: ``"auto"`` picks randomised when ``rank < min(shape) // 2``,
-            else exact. ``"exact"`` and ``"randomised"`` force a path.
+    name: Literal["exact", "randomised"] = "exact"
 
-    Thread-safety: instances are stateless and safe to share across
-    threads. The underlying RNG is a fresh ``torch.Generator`` per call.
-    """
+    @abstractmethod
+    def decompose(self, a: torch.Tensor, rank: int) -> Decomposition:
+        """Compute a rank-``rank`` decomposition of ``a``."""
 
-    def __init__(
-        self,
-        *,
-        oversampling: int = 10,
-        n_power: int = 2,
-        seed: int = 0,
-        method: Literal["auto", "exact", "randomised"] = "auto",
-    ) -> None:
-        self.oversampling = int(oversampling)
-        self.n_power = int(n_power)
-        self.seed = int(seed)
-        self.method = method
 
-    # ------------------------------------------------------------------
-    # Public
-    # ------------------------------------------------------------------
+class Exact(Decomposer):
+    """Full-spectrum SVD; output truncated to ``rank`` if needed."""
 
-    def __call__(
-        self,
-        a: torch.Tensor,
-        *,
-        rank: int | None = None,
-        cap: int | None = None,
-    ) -> SVDResult:
-        """Dispatch on ``method``.
+    name: Literal["exact", "randomised"] = "exact"
 
-        Args:
-            a: matrix of shape ``(m, n)``.
-            rank: target rank. ``None`` keeps all components.
-            cap: optional randomised cap. If set, the randomised path
-                computes ``min(rank + oversampling, cap)`` columns.
-        """
+    def decompose(self, a: torch.Tensor, rank: int) -> Decomposition:
         if a.dim() != 2:
-            raise ValueError(f"SVD expects a 2-D matrix, got shape {tuple(a.shape)}")
-        m, n = a.shape
-        max_rank = min(m, n)
-
-        if rank is None:
-            return self.exact(a, rank=max_rank)
-        rank = max(1, min(int(rank), max_rank))
-
-        if self.method == "exact":
-            return self.exact(a, rank=rank)
-        if self.method == "randomised":
-            return self.randomise(a, rank=rank, cap=cap)
-        # auto
-        if rank < max_rank // 2:
-            return self.randomise(a, rank=rank, cap=cap)
-        return self.exact(a, rank=rank)
-
-    def exact(
-        self,
-        a: torch.Tensor,
-        rank: int | None = None,
-    ) -> SVDResult:
-        """Compute the exact truncated SVD ``A ≈ U_r Σ_r V_rᵀ``.
-
-        Half-precision inputs (fp16, bf16) are upcast to float32 for the
-        SVD computation since ``torch.linalg.svd`` doesn't support fp16 on
-        CPU. The output bases are returned in the input's original dtype.
-        """
-        if a.dim() != 2:
-            raise ValueError(f"SVD expects a 2-D matrix, got shape {tuple(a.shape)}")
-        # torch.linalg.svd on CPU supports only float32 / float64.
+            raise ShapeError(f"Exact decomposer expects 2-D matrix; got {a.dim()}-D shape {tuple(a.shape)}")
         compute_dtype = a.dtype if a.dtype in (torch.float32, torch.float64) else torch.float32
         a_compute = a.to(compute_dtype) if a.dtype != compute_dtype else a
         m, n = a.shape
         max_rank = min(m, n)
+        rank = max(1, min(int(rank), max_rank))
         full = torch.linalg.svd(a_compute, full_matrices=False)
         u, s, vh = full.U, full.S, full.Vh
-        if rank is None or rank >= max_rank:
-            tail = 0.0
-            u_out, s_out, vh_out = u, s, vh
-        else:
-            tail = tail_mass(s, rank)
-            u_out, s_out, vh_out = u[:, :rank], s[:rank], vh[:rank, :]
-        # Cast outputs back to the input dtype if we upcast.
+        tail = tail_mass(s, rank)
+        u_out = u[:, :rank].contiguous()
+        s_out = s[:rank].contiguous()
+        vh_out = vh[:rank, :].contiguous()
         if a.dtype != compute_dtype:
             u_out = u_out.to(a.dtype)
             s_out = s_out.to(a.dtype)
             vh_out = vh_out.to(a.dtype)
-        return SVDResult(
-            u=u_out.contiguous(),
-            s=s_out.contiguous(),
-            vh=vh_out.contiguous(),
+        return Decomposition(
+            u=u_out,
+            s=s_out,
+            vh=vh_out,
             tail_mass=tail,
-            method="exact",
+            strategy="exact",
             full_s=s,
         )
 
-    def randomise(
-        self,
-        a: torch.Tensor,
-        rank: int,
-        *,
-        cap: int | None = None,
-    ) -> SVDResult:
-        """Compute a rank-``rank`` randomised SVD.
 
-        Implementation follows Algorithm 4.1 / 4.2 of Halko, Martinsson,
-        Tropp (2011) with optional power iterations. The sketch size is
-        ``k = min(rank + oversampling, cap) if cap else rank + oversampling``.
-        The returned :class:`SVDResult` reports the *true* ``tail_mass`` of
-        the matrix, computed from the full singular spectrum of
-        ``Q.T @ A`` — this is what FlashJoLT uses to correct the allocator.
-        """
+class Randomized(Decomposer):
+    """Halko-Martinsson-Tropp randomised SVD.
+
+    Uses a per-call :class:`torch.Generator` so the global RNG state is
+    never mutated.
+    """
+
+    name: Literal["exact", "randomised"] = "randomised"
+
+    def __init__(self, *, oversampling: int = 10, n_power: int = 2, seed: int = 0, cap: int | None = None) -> None:
+        self.oversampling = int(oversampling)
+        self.n_power = int(n_power)
+        self.seed = int(seed)
+        self.cap = int(cap) if cap is not None else None
+
+    def decompose(self, a: torch.Tensor, rank: int) -> Decomposition:
+        if a.dim() != 2:
+            raise ShapeError(f"Randomized decomposer expects 2-D matrix; got {a.dim()}-D shape {tuple(a.shape)}")
         m, n = a.shape
         max_rank = min(m, n)
         rank = max(1, min(int(rank), max_rank))
-        sketch_extra = self.oversampling
-        k = rank + sketch_extra
-        if cap is not None:
-            k = min(k, int(cap))
+        k = rank + self.oversampling
+        if self.cap is not None:
+            k = min(k, self.cap)
         k = max(k, rank + 1)
         k = min(k, max_rank)
 
-        # torch.linalg.svd on CPU supports only float32 / float64. Cast
-        # for the computation, restore the input dtype on the way out.
         compute_dtype = a.dtype if a.dtype in (torch.float32, torch.float64) else torch.float32
         a_compute = a.to(compute_dtype) if a.dtype != compute_dtype else a
 
-        # Stage A: form a Gaussian sketch Y = A @ Omega.
-        # ``torch.Generator(device=...)`` only supports CPU generators; we
-        # build the sketch on the input's device using ``torch.randn``
-        # without a generator (still deterministic per-seed via
-        # ``torch.manual_seed`` which is thread-safe at the per-call level
-        # here). ponytail: switch to a per-call generator once
-        # ``torch.Generator`` supports cuda/mps devices.
-        torch.manual_seed(self.seed)
-        omega = torch.randn(n, k, dtype=compute_dtype, device=a_compute.device)
+        gen = torch.Generator(device="cpu")
+        gen.manual_seed(self.seed + rank)
+        omega = torch.randn(n, k, dtype=compute_dtype, device=a_compute.device, generator=gen)
         y = a_compute @ omega
 
-        # Optional power iterations: Y = (A A^T)^q A Omega.
         for _ in range(self.n_power):
             y = a_compute @ (a_compute.t() @ y)
 
-        # Orthonormalise Q via QR.
         q, _ = torch.linalg.qr(y, mode="reduced")
-
-        # Stage B: SVD on the small matrix B = Q^T A.
         b = q.t() @ a_compute
         u_b, s_b, vh_b = torch.linalg.svd(b, full_matrices=False)
-
-        # Lift U to the original space.
         u = q @ u_b
 
-        # Truncate to the target rank.
         if rank > s_b.shape[0]:
             rank = s_b.shape[0]
         u_r = u[:, :rank].contiguous()
         s_r = s_b[:rank].contiguous()
         vh_r = vh_b[:rank, :].contiguous()
 
-        # True tail mass: compute the full SVD spectrum of A only when it is
-        # cheap enough (small n or the caller asked for it). For the
-        # typical long-context case we use the *retained* mass from the
-        # Stage-B SVD on B (the randomised approximation of A's spectrum).
-        # The JL-style estimator is: tail_mass ≈ 1 - sum(s_r**2) / ||A||F**2.
         a_fro_sq = float(torch.sum(a_compute * a_compute))
         retained = float(torch.sum(s_r * s_r))
         if a_fro_sq > 0:
-            tail_mass = max(0.0, 1.0 - retained / a_fro_sq)
+            tail_mass_value = max(0.0, 1.0 - retained / a_fro_sq)
         else:
-            tail_mass = 0.0
+            tail_mass_value = 0.0
 
-        # Cast outputs back to the input dtype if we upcast.
         if a.dtype != compute_dtype:
             u_r = u_r.to(a.dtype)
             s_r = s_r.to(a.dtype)
             vh_r = vh_r.to(a.dtype)
 
         log.debug(
-            "SVD.randomise: rank=%d oversampling=%d n_power=%d tail_mass=%.4e",
+            "Randomized: rank=%d oversampling=%d n_power=%d tail_mass=%.4e",
             rank,
             self.oversampling,
             self.n_power,
-            tail_mass,
+            tail_mass_value,
         )
-        return SVDResult(
+        return Decomposition(
             u=u_r,
             s=s_r,
             vh=vh_r,
-            tail_mass=tail_mass,
-            method="randomised",
+            tail_mass=tail_mass_value,
+            strategy="randomised",
             full_s=None,
         )
+
+
+class DecomposerRegistry:
+    """Registry of :class:`Decomposer` strategies."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, Type[Decomposer]] = {
+            "exact": Exact,
+            "randomised": Randomized,
+        }
+
+    def register(self, name: str, cls: Type[Decomposer]) -> Type[Decomposer]:
+        if not issubclass(cls, Decomposer):
+            raise TypeError(f"{cls.__name__} must inherit from Decomposer")
+        self.entries[name] = cls
+        return cls
+
+    def resolve(self, name: str) -> Type[Decomposer]:
+        try:
+            return self.entries[name]
+        except KeyError:
+            raise KeyError(f"unknown decomposer {name!r}; available: {list(self.entries)}") from None
+
+    def default(self, method: Literal["auto", "exact", "randomised"], **kwargs: object) -> Decomposer:
+        """Construct the appropriate strategy for ``method``.
+
+        ``"auto"`` picks :class:`Exact` when no kwargs are given, else
+        :class:`Randomized`.
+        """
+        if method == "auto":
+            return Exact()
+        if method == "exact":
+            return Exact()
+        if method == "randomised":
+            return Randomized(**kwargs)  # type: ignore[arg-type]
+        raise ValueError(f"unknown decomposer method {method!r}")
+
+
+REGISTRY: DecomposerRegistry = DecomposerRegistry()
+
+
+def tail_mass_at(s: torch.Tensor, r: int) -> float:
+    """Public alias for :func:`tail_mass` for explicit semantics."""
+    return tail_mass(s, r)
