@@ -8,7 +8,7 @@ ratios. Reports the achieved bytes per method and ratio.
 
 Usage::
 
-    python -m kvfold.benchmarks.memory --T 1024 --dh 128 --m 8 --ratio 3.0
+    python -m kvfold.bench.memory --T 1024 --dh 128 --m 8 --ratio 3.0
 
 The benchmark runs purely on synthetic tensors so it does not require
 GPU resources.

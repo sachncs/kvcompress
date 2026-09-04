@@ -159,7 +159,7 @@ def benchmark(
                     [
                         sys.executable,
                         "-m",
-                        "kvfold.benchmarks.memory",
+                        "kvfold.bench.memory",
                         "--T",
                         "1024",
                         "--dh",
@@ -191,7 +191,7 @@ def benchmark(
                     [
                         sys.executable,
                         "-m",
-                        "kvfold.benchmarks.throughput",
+                        "kvfold.bench.throughput",
                         "--T",
                         "1024",
                         "--dh",
@@ -215,7 +215,7 @@ def benchmark(
                     [
                         sys.executable,
                         "-m",
-                        "kvfold.benchmarks.reconstruction",
+                        "kvfold.bench.reconstruction",
                         "--T",
                         "1024",
                         "--ratio",

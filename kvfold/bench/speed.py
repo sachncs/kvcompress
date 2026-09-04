@@ -6,7 +6,7 @@ baseline. Includes warm-up iterations to amortise first-call cache effects.
 
 Usage::
 
-    python -m kvfold.benchmarks.throughput --T 1024 --dh 128 --ratio 3
+    python -m kvfold.bench.throughput --T 1024 --dh 128 --ratio 3
 
 On CPU the three methods are roughly comparable at small T; FlashJoLT
 pulls ahead at T ≥ 1024 once the SVD becomes the bottleneck.

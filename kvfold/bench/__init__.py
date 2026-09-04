@@ -1,7 +1,7 @@
 """Benchmark scripts and orchestration.
 
 Each module here is a Typer-style entry point that can also be invoked
-via ``python -m kvfold.benchmarks.<name>``. They are wired into the
+via ``python -m kvfold.bench.<name>``. They are wired into the
 top-level :mod:`kvfold.cli` ``benchmark`` command.
 
 * :mod:`.memory` — bytes occupied by the compressed cache at different
