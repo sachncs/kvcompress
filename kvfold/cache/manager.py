@@ -1,9 +1,9 @@
 """High-level cache orchestration.
 
-The :class:`CacheManager` is the entry point used by the HF adapter. It owns
-a :class:`CompressedKVCache` and a per-call record of which layers are live.
+The :class:`Pool` is the entry point used by the HF adapter. It owns
+a :class:`Cache` and a per-call record of which layers are live.
 
-Why a manager on top of :class:`CompressedKVCache`:
+Why a manager on top of :class:`Cache`:
 
 * It tracks *which layers are live* — needed by the adapter's
   ``__getitem__`` path to know whether to reconstruct or pass through.
@@ -25,15 +25,15 @@ from typing import Any
 
 import torch
 
-from kvcompress.cache.compress import CompressedKVCache
-from kvcompress.cache.metadata import CompressionMetadata
-from kvcompress.compressor.base import KVCompressor
+from kvfold.cache.compress import Cache
+from kvfold.cache.metadata import Meta
+from kvfold.core.base import Compressor
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
-class CacheManager:
+class Pool:
     """High-level cache facade.
 
     Args:
@@ -42,15 +42,15 @@ class CacheManager:
         device: device to materialize reconstructed tensors on.
     """
 
-    compressor: KVCompressor
+    compressor: Compressor
     max_layers: int | None = None
     device: torch.device | str | None = None
-    cache: CompressedKVCache = field(init=False)
+    cache: Cache = field(init=False)
     live_layers: list[int] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
-        """Build the underlying :class:`CompressedKVCache` from ``compressor``."""
-        self.cache = CompressedKVCache(
+        """Build the underlying :class:`Cache` from ``compressor``."""
+        self.cache = Cache(
             compressor=self.compressor,
             max_layers=self.max_layers,
             device=self.device,
@@ -69,7 +69,7 @@ class CacheManager:
     ) -> None:
         """Compress and store the K/V pair for one layer.
 
-        Forwards to :meth:`CompressedKVCache.store`. After a successful
+        Forwards to :meth:`Cache.store`. After a successful
         store, ``layer`` is added to the ``live_layers`` list (used by
         the HF adapter's ``__getitem__`` path).
         """
@@ -116,8 +116,8 @@ class CacheManager:
         s["live_layers"] = list(self.live_layers)
         return s
 
-    def metadata(self) -> CompressionMetadata:
-        """Return the live :class:`CompressionMetadata`."""
+    def metadata(self) -> Meta:
+        """Return the live :class:`Meta`."""
         return self.cache.metadata()
 
     # ------------------------------------------------------------------

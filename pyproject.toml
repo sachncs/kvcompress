@@ -3,11 +3,12 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kvcompress"
-version = "0.1.0"
+name = "kvfold"
+version = "0.2.0"
+description = "Universal plug-and-play KV cache compression for decoder-only LLMs."
 description = "Universal plug-and-play KV cache compression for decoder-only LLMs."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 license = { text = "Apache-2.0" }
 authors = [{ name = "sachin", email = "sachncs@gmail.com" }]
 keywords = ["kv-cache", "compression", "transformers", "llm", "tucker"]
@@ -50,27 +51,31 @@ docs = [
     "mkdocs>=1.5",
     "mkdocs-material>=9",
 ]
+paper = [
+    "datasets>=2.14",
+    "transformers>=4.45,<5",
+]
 
 [project.scripts]
-kvcompress = "kvcompress.cli:app"
+kvfold = "kvfold.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/sachncs/kvcompress"
+Homepage = "https://github.com/sachncs/kvfold"
 Paper = "https://arxiv.org/abs/2607.12550"
-Changelog = "https://github.com/sachncs/kvcompress/blob/master/CHANGELOG.md"
+Changelog = "https://github.com/sachncs/kvfold/blob/master/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["kvcompress*"]
+include = ["kvfold*"]
 exclude = ["configs*", "tests*", "examples*", "scripts*", "docs*"]
 
 [tool.setuptools.package-data]
-"kvcompress" = ["py.typed"]
+"kvfold" = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["kvcompress", "tests", "examples", "scripts"]
+src = ["kvfold", "tests", "examples", "scripts"]
 
 [tool.ruff.lint]
 select = [
@@ -86,7 +91,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["PLR0915", "N806", "ARG"]
 "examples/**/*.py" = ["E402"]
-"kvcompress/kernels/triton/**/*.py" = ["E402"]
+"kvfold/kernels/triton/**/*.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -102,7 +107,7 @@ warn_unused_ignores = false
 warn_return_any = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
-files = ["kvcompress"]
+files = ["kvfold"]
 
 [[tool.mypy.overrides]]
 module = "torch.*"
@@ -121,27 +126,27 @@ module = "vllm.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "kvcompress.adapters.huggingface"
+module = "kvfold.adapters.huggingface"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "kvcompress.kernels.triton.*"
+module = "kvfold.kernels.triton.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "kvcompress.adapters.registry"
+module = "kvfold.adapters.registry"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "kvcompress.adapters.vllm"
+module = "kvfold.adapters.vllm"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "kvcompress.adapters.vllm_kv_offload"
+module = "kvfold.adapters.vllm_kv_offload"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "kvcompress.benchmarks.*"
+module = "kvfold.benchmarks.*"
 ignore_errors = true
 
 # Vulture configuration.
@@ -150,30 +155,30 @@ ignore_errors = true
 # elsewhere). We exclude the patterns that consistently produce noise.
 [tool.vulture]
 min_confidence = 80
-paths = ["kvcompress"]
+paths = ["kvfold"]
 exclude_patterns = [
     # ``if False: ... # TYPE_CHECKING`` is intentional — used by lazy-export
     # subpackages so the public surface is importable even when modules are
     # mid-edit. vulture flags the unsatisfiable ``if`` at 100% confidence.
     "*/__init__.py",
     # Stub / abstract methods that subclasses fill in.
-    "kvcompress/compressor/base.py",
+    "kvfold/compressor/base.py",
     # Properties / dataclass field names (vulture's string match is
     # imprecise on dataclass-heavy modules).
-    "kvcompress/compressor/tucker.py",
+    "kvfold/compressor/tucker.py",
     # Tests have dead helpers we don't care about.
     "tests/",
     # Benchmarks have dead CLI plumbing (version, validate, profile subcommands
-    # are also exposed through kvcompress.cli but vulture sees them as unused
+    # are also exposed through kvfold.cli but vulture sees them as unused
     # inside benchmarks/*).
-    "kvcompress/benchmarks/",
+    "kvfold/benchmarks/",
 ]
 
 [tool.coverage.run]
-source = ["kvcompress"]
+source = ["kvfold"]
 branch = false
 omit = [
-    "kvcompress/benchmarks/*",
+    "kvfold/benchmarks/*",
 ]
 
 [tool.coverage.report]

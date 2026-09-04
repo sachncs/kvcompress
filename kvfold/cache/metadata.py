@@ -6,12 +6,12 @@ needs to be JSON-serializable for safetensors round-trips.
 
 Two dataclasses:
 
-* :class:`LayerCompression` — one cell (layer × kind × K/V). Carries the
+* :class:`LayerMeta` — one cell (layer × kind × K/V). Carries the
   ``r_token``, ``r_feature``, ``bits`` chosen by the allocator plus the
   bytes-original / bytes-compressed bookkeeping that
-  :class:`CompressedKVCache` uses to report memory.
-* :class:`CompressionMetadata` — top-level metadata for one cache. Holds a
-  list of :class:`LayerCompression` entries plus the cache-wide settings
+  :class:`Cache` uses to report memory.
+* :class:`Meta` — top-level metadata for one cache. Holds a
+  list of :class:`LayerMeta` entries plus the cache-wide settings
   (method, dtype, layer-group count, allowed bit-widths, calibration
   extras).
 
@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 @dataclass
-class LayerCompression:
+class LayerMeta:
     """Metadata for one (layer, key-or-value) compressed tensor.
 
     Attributes:
@@ -83,14 +83,14 @@ class LayerCompression:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "LayerCompression":
+    def from_dict(cls, d: dict[str, Any]) -> "LayerMeta":
         """Inverse of :meth:`to_dict`."""
         return cls(**d)
 
 
 @dataclass
-class CompressionMetadata:
-    """Top-level metadata for one :class:`CompressedKVCache`.
+class Meta:
+    """Top-level metadata for one :class:`Cache`.
 
     Attributes:
         method: compressor name.
@@ -104,7 +104,7 @@ class CompressionMetadata:
 
     method: str
     dtype: str
-    layers: list[LayerCompression] = field(default_factory=list)
+    layers: list[LayerMeta] = field(default_factory=list)
     layer_groups: int = 1
     bits_allowed: tuple[int, ...] = (0, 2, 4, 8)
     extras: dict[str, Any] = field(default_factory=dict)
@@ -116,8 +116,8 @@ class CompressionMetadata:
         default_factory=dict, init=False, repr=False, compare=False
     )
 
-    def layer(self, idx: int) -> LayerCompression:
-        """Return the first :class:`LayerCompression` for ``idx``.
+    def layer(self, idx: int) -> LayerMeta:
+        """Return the first :class:`LayerMeta` for ``idx``.
 
         Raises:
             KeyError: if no entry matches.
@@ -127,7 +127,7 @@ class CompressionMetadata:
                 return entry
         raise KeyError(f"no metadata for layer {idx}")
 
-    def add_layer(self, entry: LayerCompression) -> None:
+    def add_layer(self, entry: LayerMeta) -> None:
         """Insert ``entry``, replacing any existing (layer, kind) match.
 
         Replacing rather than appending means a re-store of the same
@@ -175,12 +175,12 @@ class CompressionMetadata:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "CompressionMetadata":
+    def from_dict(cls, d: dict[str, Any]) -> "Meta":
         """Inverse of :meth:`to_dict`."""
         meta = cls(
             method=d["method"],
             dtype=d["dtype"],
-            layers=[LayerCompression.from_dict(x) for x in d.get("layers", [])],
+            layers=[LayerMeta.from_dict(x) for x in d.get("layers", [])],
             layer_groups=d.get("layer_groups", 1),
             bits_allowed=tuple(d.get("bits_allowed", (0, 2, 4, 8))),
             extras=d.get("extras", {}),
