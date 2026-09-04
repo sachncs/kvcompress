@@ -32,16 +32,23 @@ def __getattr__(name: str) -> Any:
         from kvfold.adapter import vllm_offload
 
         return getattr(vllm_offload, name)
+    if name in ("Family", "FamilyRegistry", "known_model_types"):
+        from kvfold.adapter import registry
+
+        return getattr(registry, name)
     raise AttributeError(f"module 'kvfold.adapter' has no attribute {name!r}")
 
 
 __all__ = [
+    "EvictPool",
+    "Family",
+    "FamilyRegistry",
     "HF",
+    "Offload",
     "export_kv",
     "import_kv",
     "is_vllm_available",
     "is_vllm_offload_available",
-    "Offload",
-    "EvictPool",
+    "known_model_types",
     "resolve_cache",
 ]

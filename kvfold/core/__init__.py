@@ -13,6 +13,8 @@ from kvfold.config import REGISTRY as CONFIG_REGISTRY
 
 LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "Compressor": ("kvfold.core.base", "Compressor"),
+    "Payload": ("kvfold.core.base", "Payload"),
+    "Stats": ("kvfold.core.base", "Stats"),
     "CompressorRegistry": ("kvfold.core.dispatch", "CompressorRegistry"),
     "Jolt": ("kvfold.core.jolt", "Jolt"),
     "Flash": ("kvfold.core.flash", "Flash"),
@@ -27,6 +29,7 @@ LAZY_EXPORTS: dict[str, tuple[str, str]] = {
     "Residual": ("kvfold.core.residual", "Residual"),
     "Projector": ("kvfold.core.jl", "Projector"),
     "Decomposer": ("kvfold.core.svd", "Decomposer"),
+    "Quantizer": ("kvfold.core.quant", "Quantizer"),
     "RankStrategy": ("kvfold.core.rank", "RankStrategy"),
     "Allocator": ("kvfold.core.budget", "Allocator"),
     "Bisect": ("kvfold.core.budget", "Bisect"),
