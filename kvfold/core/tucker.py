@@ -33,7 +33,7 @@ from dataclasses import dataclass
 
 import torch
 
-from kvfold.compressor.svd import SVD
+from kvfold.core.svd import Exact
 
 log = logging.getLogger(__name__)
 
@@ -194,7 +194,7 @@ def partial_tucker_st_hosvd(
     *,
     r_token: int | None = None,
     r_feature: int | None = None,
-    svd: SVD | None = None,
+    svd: Exact | None = None,
 ) -> TuckerFactors:
     """Sequentially truncated HOSVD for partial Tucker decomposition.
 
@@ -233,7 +233,7 @@ def partial_tucker_st_hosvd(
     rt = rt_max if r_token is None else max(1, min(int(r_token), rt_max))
     rd = rd_max if r_feature is None else max(1, min(int(r_feature), rd_max))
 
-    svd = svd or SVD()
+    svd = svd or Exact()
     rt_used = min(rt, t)
     rd_used = min(rd, d)
 
@@ -242,7 +242,7 @@ def partial_tucker_st_hosvd(
     # (d, rd) — the leading rd left singular vectors of the feature
     # unfolding.
     feat_unfold = mode_n_unfold(x, 2)  # (d, m*T)
-    feat_svd = svd(feat_unfold, rank=rd_used)
+    feat_svd = svd.decompose(feat_unfold, rank=rd_used)
     u_dh = feat_svd.u  # (d, rd)
     s_dh = feat_svd.s
     feature_tail_mass = feat_svd.tail_mass
@@ -252,7 +252,7 @@ def partial_tucker_st_hosvd(
 
     # Now unfold the projected tensor along the token mode.
     tok_unfold = mode_n_unfold(x_proj_dh, 1)  # (T, m*rd)
-    tok_svd = svd(tok_unfold, rank=rt_used)
+    tok_svd = svd.decompose(tok_unfold, rank=rt_used)
     u_t = tok_svd.u  # (T, rt)
     s_t = tok_svd.s
     token_tail_mass = tok_svd.tail_mass

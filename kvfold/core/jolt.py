@@ -9,21 +9,21 @@ Combines:
 
 The compressor takes K and V at one layer, applies the allocator to decide
 ranks and residual bit-widths jointly for K and V, compresses each, and
-returns two :class:`~kvfold.compressor.base.CompressedPayload`
+returns two :class:`~kvfold.core.base.Payload`
 objects ready for storage.
 
 Algorithm (per compress() call):
 
-1. Build two :class:`~kvfold.compressor.allocator.Cell` instances (one
+1. Build two :class:`~kvfold.core.allocator.Cell` instances (one
    each for K and V) describing the cell shape and budget knobs.
 2. Call :meth:`JointAllocator.optimize` to get the per-cell
    ``(r_token, r_feature, bits)`` decisions.
 3. For each cell: run ST-HOSVD via
-   :func:`~kvfold.compressor.tucker.partial_tucker_st_hosvd`,
+   :func:`~kvfold.core.tucker.partial_tucker_st_hosvd`,
    compute the residual, JL-rotate and quantise it via
-   :func:`~kvfold.compressor.residual.encode_residual`.
+   :func:`~kvfold.core.residual.encode_residual`.
 4. Package the core + bases + residual payload into a
-   :class:`CompressedPayload` and return the K and V payloads.
+   :class:`Payload` and return the K and V payloads.
 
 The :meth:`decompress` method is the exact inverse.
 """
@@ -37,29 +37,30 @@ from typing import Any
 
 import torch
 
-from kvfold.compressor.allocator import (
+from kvfold.config import JoltConfig
+from kvfold.core.allocator import (
     AllocationResult,
     Cell,
     JointAllocator,
 )
-from kvfold.compressor.base import (
-    CompressedPayload,
-    CompressorStats,
-    KVCompressor,
+from kvfold.core.base import (
+    Payload,
+    Stats,
+    Compressor,
 )
-from kvfold.compressor.residual import (
+from kvfold.core.residual import (
     ResidualPayload,
     decode_residual,
     encode_residual,
 )
-from kvfold.compressor.svd import SVD
-from kvfold.compressor.tucker import (
+from kvfold.core.svd import Exact, Randomized
+from kvfold.core.tucker import (
     TuckerFactors,
     partial_tucker_st_hosvd,
     reconstruct_partial_tucker,
 )
 
-__all__ = ["JoLTCompressor"]
+__all__ = ["Jolt"]
 
 log = logging.getLogger(__name__)
 
@@ -79,13 +80,19 @@ class JoLTFactors:
     allocation: Any
 
 
-class JoLTCompressor(KVCompressor):
+class Jolt(Compressor):
+    """Paper-faithful JoLT compressor."""
+
+    @classmethod
+    def default_config(cls) -> JoltConfig:
+        return JoltConfig()
+
     """Paper-faithful JoLT compressor.
 
     Args:
         compression_ratio: target compression ratio (e.g. ``3.0``).
         bits: residual bit-widths the allocator can choose from.
-        factor_dtype: dtype of stored Tucker factors (``fp16`` or ``fp32``).
+        dtype: dtype of stored Tucker factors (``fp16`` or ``fp32``).
         jl_distribution: ``"gaussian"`` or ``"rademacher"``.
         allocator: optional pre-built :class:`JointAllocator`. If ``None``,
             one is constructed from ``compression_ratio`` and ``bits``.
@@ -97,14 +104,14 @@ class JoLTCompressor(KVCompressor):
             the paper uses G=1).
     """
 
-    name = "jolt"
+    method: str = "jolt"
 
     def __init__(
         self,
         *,
         compression_ratio: float = 3.0,
         bits: tuple[int, ...] = (0, 2, 4, 8),
-        factor_dtype: torch.dtype = torch.float16,
+        dtype: torch.dtype = torch.float16,
         jl_distribution: str = "gaussian",
         allocator: JointAllocator | None = None,
         svd: SVD | None = None,
@@ -120,7 +127,7 @@ class JoLTCompressor(KVCompressor):
             raise ValueError(f"compression_ratio must be > 1.0, got {compression_ratio}")
         self.compression_ratio = float(compression_ratio)
         self.bits = tuple(bits)
-        self.factor_dtype = factor_dtype
+        self.dtype = dtype
         self.jl_distribution = jl_distribution
         # Ponytail: allocator defaults to fp16 element size; pass
         # ``element_size_bytes=...`` to match a fp32 cache (allocator
@@ -129,16 +136,15 @@ class JoLTCompressor(KVCompressor):
         self.allocator = allocator or JointAllocator(
             target_ratio=compression_ratio,
             bits_grid=self.bits,
-            factor_dtype_bytes=factor_dtype.itemsize,
+            factor_dtype_bytes=dtype.itemsize,
         )
-        self.svd = svd or SVD(seed=seed, method="exact")
+        self.decomposer = svd or Exact()
         self.symmetric_quant = symmetric_quant
         self.per_channel_quant = per_channel_quant
         self.group_size = group_size
         self.layer_groups = int(layer_groups)
         self.seed = int(seed)
-        self.last_stats = CompressorStats()
-        self.call_count = 0
+        self.stats_history: list[Stats] = []
 
     # ------------------------------------------------------------------
     # Compress / decompress
@@ -148,7 +154,7 @@ class JoLTCompressor(KVCompressor):
         self,
         key: torch.Tensor,
         value: torch.Tensor,
-    ) -> tuple[CompressedPayload, CompressedPayload]:
+    ) -> tuple[Payload, Payload]:
         """Allocator-driven JoLT compression of a (K, V) pair.
 
         Steps:
@@ -206,10 +212,11 @@ class JoLTCompressor(KVCompressor):
         v_payload = self.build_payload(value, v_factors)
 
         elapsed = (time.perf_counter() - t0) * 1000
-        self.last_stats = CompressorStats(
-            compress_time_ms=elapsed,
+        new_stats = Stats(
+            compress_ms=elapsed,
             bytes_original=key.numel() * key.element_size() * 2,
             bytes_compressed=k_payload.bytes_compressed + v_payload.bytes_compressed,
+            cell_count=len(self.stats_history) + 1,
             extra={
                 "k_r_token": k_factors.allocation.r_token,
                 "k_r_feature": k_factors.allocation.r_feature,
@@ -222,13 +229,13 @@ class JoLTCompressor(KVCompressor):
                 "target_ratio": alloc_result.target_ratio,
             },
         )
-        self.call_count += 1
+        self.stats_history.append(new_stats)
         return k_payload, v_payload
 
-    def decompress(
+    def restore(
         self,
-        key_payload: CompressedPayload,
-        value_payload: CompressedPayload,
+        key_payload: Payload,
+        value_payload: Payload,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Inverse of :meth:`compress`.
 
@@ -243,27 +250,26 @@ class JoLTCompressor(KVCompressor):
         Returns:
             ``(K, V)`` reconstructed to original dtype and shape.
         """
-        t0 = time.perf_counter()
         k = self.reconstruct_payload(key_payload)
         v = self.reconstruct_payload(value_payload)
-        elapsed = (time.perf_counter() - t0) * 1000
-        # Update stats; don't overwrite compress stats.
-        if self.last_stats.decompress_time_ms == 0.0:
-            self.last_stats.decompress_time_ms = elapsed
         return k, v
 
     def stats(self) -> dict[str, Any]:
-        """Return aggregated stats across all compress()/decompress() calls.
+        """Return aggregated stats across all compress()/restore() calls.
+
+        Stats are stored in a list rather than mutated on the instance, so
+        the compressor is safe to share across threads.
 
         Notes:
             ``last_stats.decompress_time_ms`` is updated lazily: only the
             first decompress after each compress updates the field. This
             matches how the paper's Table 2 reports compress-only numbers.
         """
+        latest = self.stats_history[-1].to_dict() if self.stats_history else {}
         return {
-            "method": self.name,
-            "call_count": self.call_count,
-            **self.last_stats.to_dict(),
+            "method": self.method,
+            "history_size": len(self.stats_history),
+            **latest,
         }
 
     # ------------------------------------------------------------------
@@ -282,7 +288,7 @@ class JoLTCompressor(KVCompressor):
             2. Reconstruct the partial Tucker approximation and compute
                the residual ``R = x - x̂``.
             3. JL-rotate and quantise ``R`` at ``bits`` via
-               :func:`~kvfold.compressor.residual.encode_residual`.
+               :func:`~kvfold.core.residual.encode_residual`.
                The ``bits == 0`` branch skips the residual entirely
                (pure-Tucker mode).
             4. Return a :class:`JoLTFactors` bundling Tucker factors,
@@ -304,7 +310,7 @@ class JoLTCompressor(KVCompressor):
             x,
             r_token=rt,
             r_feature=rd,
-            svd=self.svd,
+            svd=self.decomposer,
         )
         # Residual
         recon = reconstruct_partial_tucker(tucker, x.shape)
@@ -328,10 +334,10 @@ class JoLTCompressor(KVCompressor):
             )
         return JoLTFactors(tucker=tucker, residual=residual, allocation=allocation)
 
-    def build_payload(self, original: torch.Tensor, factors: JoLTFactors) -> CompressedPayload:
+    def build_payload(self, original: torch.Tensor, factors: JoLTFactors) -> Payload:
         """Wrap :class:`JoLTFactors` into a serialisable payload.
 
-        Casts the Tucker core and bases to ``factor_dtype``, serialises
+        Casts the Tucker core and bases to ``dtype``, serialises
         the residual (if any) under the ``residual_*`` keys, and
         records the tail Frobenius mass for diagnostics.
 
@@ -341,14 +347,14 @@ class JoLTCompressor(KVCompressor):
             factors: output of :meth:`compress_cell`.
 
         Returns:
-            A :class:`CompressedPayload` containing ``data`` (Tucker core
+            A :class:`Payload` containing ``data`` (Tucker core
             + bases + residual buffers) and ``metadata`` (ranks, bit
             widths, residual config, tail mass).
         """
         # Cast factors to storage dtype.
-        core = factors.tucker.core.to(self.factor_dtype).contiguous()
-        u_token = factors.tucker.u_token.to(self.factor_dtype).contiguous()
-        u_feature = factors.tucker.u_feature.to(self.factor_dtype).contiguous()
+        core = factors.tucker.core.to(self.dtype).contiguous()
+        u_token = factors.tucker.u_token.to(self.dtype).contiguous()
+        u_feature = factors.tucker.u_feature.to(self.dtype).contiguous()
 
         data: dict[str, Any] = {
             "core": core,
@@ -360,7 +366,7 @@ class JoLTCompressor(KVCompressor):
             "r_token": factors.tucker.r_token,
             "r_feature": factors.tucker.r_feature,
             "bits": factors.allocation.bits,
-            "core_dtype": "fp16" if self.factor_dtype == torch.float16 else "fp32",
+            "core_dtype": "fp16" if self.dtype == torch.float16 else "fp32",
             "tail_token_mass": factors.tucker.token_tail_mass,
             "tail_feature_mass": factors.tucker.feature_tail_mass,
         }
@@ -384,13 +390,13 @@ class JoLTCompressor(KVCompressor):
                 int(factors.residual.quant_dtype[3:]), dtype=torch.int32
             )
 
-        return CompressedPayload(
+        return Payload(
             method="jolt",
             shape=tuple(original.shape),
             dtype=original.dtype,
             metadata=meta,
             data=data,
-            stats=CompressorStats(
+            stats=Stats(
                 bytes_original=original.numel() * original.element_size(),
                 bytes_compressed=core.numel() * core.element_size()
                 + u_token.numel() * u_token.element_size()
@@ -398,7 +404,7 @@ class JoLTCompressor(KVCompressor):
             ),
         )
 
-    def reconstruct_payload(self, payload: CompressedPayload) -> torch.Tensor:
+    def reconstruct_payload(self, payload: Payload) -> torch.Tensor:
         """Reconstruct a single K or V tensor from a JoLT payload.
 
         Steps:

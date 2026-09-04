@@ -32,8 +32,8 @@ from dataclasses import dataclass
 
 import torch
 
-from kvfold.compressor.jl import JLDistribution, cached_projection
-from kvfold.compressor.quantization import (
+from kvfold.core.jl import Distribution, CACHE
+from kvfold.core.quant import (
     dequantize_tensor,
     quantize_tensor,
 )
@@ -70,7 +70,7 @@ class ResidualPayload:
     """
 
     projection_seed: int
-    projection_distribution: JLDistribution
+    projection_distribution: Distribution
     projection_sparsity: float
     quant_dtype: str
     symmetric: bool
@@ -157,7 +157,7 @@ def encode_residual(
     *,
     bits: int,
     seed: int,
-    distribution: JLDistribution = "gaussian",
+    distribution: Distribution = "gaussian",
     sparsity: float = 1.0,
     symmetric: bool = True,
     per_channel: bool = True,
@@ -204,14 +204,13 @@ def encode_residual(
     flat = residual.reshape(m_total, residual.shape[-1]).to(torch.float32)
 
     # JL projection: dh x dh (square rotation).
-    proj = cached_projection(
-        output_dim=residual.shape[-1],
-        input_dim=residual.shape[-1],
+    proj = CACHE.get_or_build(
+        out_dim=residual.shape[-1],
+        in_dim=residual.shape[-1],
         distribution=distribution,
         seed=seed,
         device=residual.device,
         dtype=torch.float32,
-        sparsity=sparsity,
     )
     rotated = flat @ proj.matrix.t()
 
@@ -262,14 +261,13 @@ def decode_residual(payload: ResidualPayload, device: torch.device | None = None
         return torch.zeros(payload.original_shape, dtype=torch.float32, device=device)
 
     dev = device or payload.packed.device
-    proj = cached_projection(
-        output_dim=payload.original_last,
-        input_dim=payload.original_last,
+    proj = CACHE.get_or_build(
+        out_dim=payload.original_last,
+        in_dim=payload.original_last,
         distribution=payload.projection_distribution,
         seed=payload.projection_seed,
         device=dev,
         dtype=torch.float32,
-        sparsity=payload.projection_sparsity,
     )
     rotated = dequantize_tensor(
         {
