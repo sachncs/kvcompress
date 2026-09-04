@@ -5,6 +5,9 @@ from __future__ import annotations
 import pytest
 
 from kvfold.adapter.registry import (
+    Family,
+    FamilyRegistry,
+    REGISTRY,
     install,
     known_model_types,
     register,
@@ -39,25 +42,33 @@ def test_registry_known_types() -> None:
 
 
 def test_registry_resolve() -> None:
-    assert resolve("llama") == "kvfold.adapter.llama"
+    llama = resolve("llama")
+    assert llama is not None
+    assert llama.name == "llama"
     assert resolve("unknown-type") is None
 
 
 def test_registry_register_custom() -> None:
-    register("custom-test", "kvfold.adapter.llama")
+    class CustomFamily(Family):
+        name = "custom-test"
+
+        def install(self, model: object, pool: object):
+            return None
+
+    REGISTRY.register(CustomFamily)
     try:
-        assert resolve("custom-test") == "kvfold.adapter.llama"
+        family = resolve("custom-test")
+        assert family is not None
+        assert family.name == "custom-test"
     finally:
         # Clean up so we don't pollute the global registry for other tests.
-        from kvfold.adapter import registry
-
-        if "custom-test" in registry.REGISTRY:
-            del registry.REGISTRY["custom-test"]
+        REGISTRY.entries.pop("custom-test", None)
 
 
 def test_registry_register_duplicate_raises() -> None:
+    from kvfold.adapter.registry import Llama
     with pytest.raises(ValueError, match="already registered"):
-        register("llama", "kvfold.adapter.llama")
+        REGISTRY.register(Llama)
 
 
 def test_install_dispatches() -> None:
@@ -67,7 +78,7 @@ def test_install_dispatches() -> None:
 
     mgr = Pool(compressor=Jolt(ratio=3.0))
     # Should not raise.
-    install(model_type="llama", model=model, cache_manager=mgr)
+    install(model, mgr, model_type="llama")
 
 
 def test_install_unknown_uses_generic() -> None:
@@ -77,7 +88,7 @@ def test_install_unknown_uses_generic() -> None:
 
     mgr = Pool(compressor=Jolt(ratio=3.0))
     # Should not raise even though no shim exists.
-    install(model_type="nonexistent", model=model, cache_manager=mgr)
+    install(model, mgr, model_type="nonexistent")
 
 
 def test_enable_compression_on_fake_model() -> None:
@@ -129,8 +140,9 @@ def test_handle_stats_dict() -> None:
 
 
 def test_enable_compression_unknown_method_raises() -> None:
+    from kvfold.errors import UnsupportedMethodError
     model = FakeModel("llama")
-    with pytest.raises(NotImplementedError, match="not supported"):
+    with pytest.raises(UnsupportedMethodError, match="not-a-method"):
         enable_compression(model, method="not-a-method", ratio=2.0)
 
 
@@ -213,7 +225,7 @@ def test_enable_rolls_back_on_failure() -> None:
     original_dynamic_cache = cu.DynamicCache
     original_install = hf_module.registry_install
 
-    def boom(**_kwargs):
+    def boom(model, pool, model_type="llama"):
         raise RuntimeError("simulated family-shim install failure")
 
     hf_module.registry_install = boom

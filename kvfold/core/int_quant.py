@@ -19,7 +19,8 @@ import torch
 
 from kvfold.config import Int8Config
 from kvfold.core.base import Compressor, Payload, Stats
-from kvfold.core.quant import IntQuant, dequantize_tensor, quantize_tensor
+from kvfold.core.quant import IntQuant as IntQuantImpl
+from kvfold.core.quant import dequantize_tensor, quantize_tensor
 
 __all__ = ["IntQuant"]
 
@@ -58,7 +59,7 @@ class IntQuant(Compressor):
         self.symmetric = bool(symmetric)
         self.per_channel = bool(per_channel)
         self.group_size = group_size
-        self._quant = IntQuant(
+        self._quant = IntQuantImpl(
             bits=self.bits, symmetric=self.symmetric, per_channel=self.per_channel, group_size=self.group_size
         )
 

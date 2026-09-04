@@ -38,7 +38,7 @@ def test_gpt2_flashjolt_runs(gpt2_model_with_pad) -> None:
     tok, model = gpt2_model_with_pad
     ids = tok.encode("The quick brown fox", return_tensors="pt")
 
-    handle = enable_compression(model, method="flashjolt", compression_ratio=3.0)
+    handle = enable_compression(model, method="flashjolt", ratio=3.0)
     try:
         with torch.no_grad():
             out = model.generate(
@@ -64,7 +64,7 @@ def test_gpt2_disable_restores_behavior(gpt2_model_with_pad) -> None:
     tok, model = gpt2_model_with_pad
     ids = tok.encode("Hello world", return_tensors="pt")
 
-    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    handle = enable_compression(model, method="flashjolt", ratio=2.0)
     with torch.no_grad():
         out_compressed = model.generate(
             ids, max_new_tokens=5, do_sample=False, pad_token_id=tok.eos_token_id
@@ -90,7 +90,7 @@ def test_gpt2_method_switch(gpt2_model_with_pad) -> None:
     ids = tok.encode("Hello", return_tensors="pt")
 
     for method in ("identity", "flashjolt"):
-        handle = enable_compression(model, method=method, compression_ratio=3.0)
+        handle = enable_compression(model, method=method, ratio=3.0)
         try:
             with torch.no_grad():
                 out = model.generate(

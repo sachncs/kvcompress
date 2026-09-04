@@ -8,7 +8,7 @@ import torch
 
 from kvfold.core.jolt import Jolt
 from kvfold.core.quantization import (
-    IntQuantizer,
+    IntQuant,
     bit_packing_signed,
     bit_unpacking_signed,
     quantize_tensor,
@@ -40,7 +40,7 @@ def test_int_quantization_roundtrip_property(bits: int, data: st.DataObject) -> 
     torch.manual_seed(0)
     x = torch.randn(*shape) * 4.0
     payload = quantize_tensor(x, dtype=f"int{bits}", symmetric=True, per_channel=True)
-    q = IntQuantizer(bits=bits, symmetric=True, per_channel=True)
+    q = IntQuant(bits=bits, symmetric=True, per_channel=True)
     x_hat = q.dequantize(
         payload["q"],
         payload["scale"],
@@ -101,7 +101,7 @@ def test_jolt_compressor_handles_arbitrary_shapes(m: int, T: int, dh: int) -> No
     rank_d = min(dh // 2, 4)
     K = make_smooth_tensor(m, T, dh, rank_T, rank_d)
     V = make_smooth_tensor(m, T, dh, rank_T, rank_d)
-    comp = JoLTCompressor(ratio=2.0, bits=(0, 4, 8))
+    comp = Jolt(ratio=2.0, bits=(0, 4, 8))
     kp, vp = comp.compress(K, V)
     k_hat, v_hat = comp.decompress(kp, vp)
     assert k_hat.shape == K.shape
@@ -122,7 +122,7 @@ def test_jolt_roundtrip_is_bounded() -> None:
     torch.manual_seed(0)
     K = make_smooth_tensor(m=2, T=64, dh=16, rank_T=8, rank_d=4)
     V = make_smooth_tensor(m=2, T=64, dh=16, rank_T=8, rank_d=4)
-    comp = JoLTCompressor(ratio=2.0, bits=(0, 4, 8))
+    comp = Jolt(ratio=2.0, bits=(0, 4, 8))
     kp, vp = comp.compress(K, V)
     k_hat, v_hat = comp.decompress(kp, vp)
     rel_err = torch.linalg.norm(K - k_hat) / torch.linalg.norm(K)

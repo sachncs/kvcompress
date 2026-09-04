@@ -92,7 +92,7 @@ def test_export_uses_passed_compressor(fake_model: Any, tmp_path: Path) -> None:
     comp = Jolt(ratio=4.0)
     out = tmp_path / "kv3.safetensors"
     meta = export_kv(fake_model, str(out), compressor=comp)
-    # Allocation decisions should reflect the 4x target.
+    # Pick decisions should reflect the 4x target.
     assert meta.method == "jolt"
 
 

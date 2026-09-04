@@ -107,7 +107,7 @@ def test_allocator_per_cell_grid_finite() -> None:
     alloc = Bisect(target_ratio=3.0)
     grid = alloc.build_cell_grid(cell, None, 0)
     # Grid size is candidate_rt × candidate_rd × bits.
-    assert all(isinstance(a, Allocation) for a in grid)
+    assert all(isinstance(a, Pick) for a in grid)
     assert all(a.cost_bytes > 0 for a in grid)
 
 

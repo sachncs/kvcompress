@@ -47,7 +47,7 @@ def test_register_adds_new_family() -> None:
     original = registry.known_model_types()
     original_set = set(registry.REGISTRY)
     try:
-        registry.register("test-family-xyz", "kvfold.adapter.llama")
+        registry.REGISTRY.register("test-family-xyz",  "kvfold.adapter.llama")
         assert "test-family-xyz" in registry.known_model_types()
         assert registry.resolve("test-family-xyz") == "kvfold.adapter.llama"
     finally:
@@ -60,7 +60,7 @@ def test_register_adds_new_family() -> None:
 
 def test_register_duplicate_raises() -> None:
     with pytest.raises(ValueError, match="already registered"):
-        registry.register("llama", "kvfold.adapter.llama")
+        registry.REGISTRY.register("llama",  "kvfold.adapter.llama")
 
 
 @pytest.mark.parametrize(

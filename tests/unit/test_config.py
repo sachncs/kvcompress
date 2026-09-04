@@ -58,15 +58,15 @@ def test_registry_build_rejects_unknown_kwarg() -> None:
 
 def test_registry_register_duplicate_raises() -> None:
     reg = MethodConfigRegistry()
-    reg.register("jolt", JoltConfig)
+    reg.REGISTRY.register("jolt",  JoltConfig)
     with pytest.raises(ValueError):
-        reg.register("jolt", JoltConfig)
+        reg.REGISTRY.register("jolt",  JoltConfig)
 
 
 def test_registry_register_wrong_type_raises() -> None:
     reg = MethodConfigRegistry()
     with pytest.raises(TypeError):
-        reg.register("xx", object)
+        reg.REGISTRY.register("xx",  object)
 
 
 def test_jolt_config_validates_ratio() -> None:

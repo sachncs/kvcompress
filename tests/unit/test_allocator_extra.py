@@ -17,17 +17,17 @@ from kvfold.core.budget import (
 
 
 def test_allocation_tuple_property() -> None:
-    """Allocation.tuple returns (r_token, r_feature, bits)."""
-    a = Allocation(r_token=8, r_feature=4, bits=4, cost_bytes=128, error=0.1)
+    """Pick.tuple returns (r_token, r_feature, bits)."""
+    a = Pick(r_token=8, r_feature=4, bits=4, cost_bytes=128, error=0.1)
     assert a.tuple == (8, 4, 4)
 
 
 def test_allocation_result_iteration() -> None:
-    """AllocationResult is iterable over its allocations."""
-    r = AllocationResult(
+    """Plan is iterable over its allocations."""
+    r = Plan(
         allocations=[
-            Allocation(r_token=1, r_feature=1, bits=0, cost_bytes=10, error=0.0),
-            Allocation(r_token=2, r_feature=2, bits=0, cost_bytes=20, error=0.0),
+            Pick(r_token=1, r_feature=1, bits=0, cost_bytes=10, error=0.0),
+            Pick(r_token=2, r_feature=2, bits=0, cost_bytes=20, error=0.0),
         ],
     )
     assert len(r) == 2
@@ -36,7 +36,7 @@ def test_allocation_result_iteration() -> None:
 
 def test_allocation_result_zero_target_bytes() -> None:
     """achieved_ratio collapses to 1.0 when total_bytes is zero."""
-    r = AllocationResult()
+    r = Plan()
     assert r.achieved_ratio == 1.0
     assert r.total_bytes == 0
 
@@ -84,7 +84,7 @@ def test_joint_allocator_invalid_target_ratio() -> None:
 
 
 def test_joint_allocator_empty_cells() -> None:
-    """optimize with no cells returns an empty AllocationResult."""
+    """optimize with no cells returns an empty Plan."""
     alloc = Bisect(target_ratio=3.0)
     result = alloc.optimize([])
     assert result.allocations == []

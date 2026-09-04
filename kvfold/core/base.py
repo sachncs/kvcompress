@@ -183,6 +183,15 @@ class Compressor(abc.ABC):
 
     method: str = "base"
 
+    @property
+    def name(self) -> str:
+        """Backward-compat alias for :attr:`method`.
+
+        Some pre-0.2.0 sites reference ``compressor.name``; the canonical
+        name is :attr:`method`. This property keeps both readable.
+        """
+        return self.method
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 

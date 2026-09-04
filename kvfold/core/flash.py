@@ -80,7 +80,7 @@ class Flash(Jolt):
     def __init__(
         self,
         *,
-        compression_ratio: float = 3.0,
+        ratio: float = 3.0,
         bits: tuple[int, ...] = (0, 2, 4, 8),
         cap: int | None = None,
         cap_policy: Literal["linear"] = "linear",
@@ -88,7 +88,7 @@ class Flash(Jolt):
         **kwargs: Any,
     ) -> None:
         super().__init__(
-            compression_ratio=compression_ratio,
+            ratio=ratio,
             bits=bits,
             seed=seed,
             **kwargs,
@@ -100,7 +100,7 @@ class Flash(Jolt):
     def default_config(cls) -> FlashConfig:
         return FlashConfig()
 
-    def compress_cell(self, x: torch.Tensor, allocation: Any) -> JoltFactors:
+    def compress_cell(self, x: torch.Tensor, allocation: Any) -> JoLTFactors:
         """Run partial Tucker + JL residual with a randomised token-mode SVD.
 
         Overrides :meth:`Jolt.compress_cell` to use a per-call randomised
@@ -110,7 +110,7 @@ class Flash(Jolt):
         if x.dim() != 3:
             raise ValueError(f"Flash expects 3-D (m, T, dh); got {tuple(x.shape)}")
         if self.cap is None:
-            cap = self.cap_policy.cap(x.shape[1], self.compression_ratio)
+            cap = self.cap_policy.cap(x.shape[1], self.ratio)
         else:
             cap = self.cap
         token_decomposer = Randomized(seed=self.seed, cap=cap)

@@ -113,7 +113,7 @@ class HF:
     Args:
         model: HF ``PreTrainedModel`` returned by ``AutoModelForCausalLM``.
         method: compressor name (e.g. ``"flashjolt"``).
-        compression_ratio: target ratio (e.g. ``3.0``).
+        ratio: target ratio (e.g. ``3.0``).
         layer_groups: layer-group count for the allocator. The paper
             uses ``1``.
         bits: residual bit-widths the allocator may choose from.
@@ -131,7 +131,7 @@ class HF:
         *,
         model: Any,
         method: str,
-        compression_ratio: float,
+        ratio: float,
         layer_groups: int = 1,
         bits: tuple[int, ...] = (0, 2, 4, 8),
         cache_implementation: str = "dynamic",
@@ -141,7 +141,7 @@ class HF:
     ) -> None:
         self.model = model
         self.method = method
-        self.compression_ratio = float(compression_ratio)
+        self.ratio = float(ratio)
         self.layer_groups = int(layer_groups)
         self.bits = tuple(bits)
         # Hugging Face maintains a strict allow-list of cache
@@ -169,7 +169,7 @@ class HF:
 
         compressor = _build_compressor(
             method,
-            compression_ratio=compression_ratio,
+            ratio=ratio,
             bits=bits,
             seed=seed,
             layer_groups=layer_groups,
@@ -255,9 +255,9 @@ class HF:
         model_type = getattr(getattr(self.model, "config", None), "model_type", None)
         if model_type is not None:
             self.family_install = registry_install(
+                self.model,
+                self.manager,
                 model_type=model_type,
-                model=self.model,
-                cache_manager=self.manager,
             )
             log.info("kvfold: installed family shim for %s", model_type)
 

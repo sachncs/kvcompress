@@ -57,18 +57,19 @@ def test_int_quant_int2_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None
 
 
 def test_int_quant_accepts_arbitrary_shape() -> None:
-    """IntQuantOnly works on any shape since it operates on the last dim."""
+    """IntQuant works on any 3-D shape since it operates on the last dim."""
     comp = IntQuant(bits=4)
-    K = torch.randn(2, 4)
-    V = torch.randn(2, 4)
+    K = torch.randn(2, 8, 4)
+    V = torch.randn(2, 8, 4)
     kp, vp = comp.compress(K, V)
-    assert kp.shape == (2, 4)
-    assert vp.shape == (2, 4)
+    assert kp.shape == (2, 8, 4)
+    assert vp.shape == (2, 8, 4)
 
 
 def test_low_shape_mismatch() -> None:
     comp = Low(rank=4)
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 16, 16)
-    with pytest.raises(ValueError):
+    from kvfold.errors import CacheValidationError
+    with pytest.raises(CacheValidationError):
         comp.compress(K, V)

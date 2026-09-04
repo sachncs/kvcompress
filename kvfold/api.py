@@ -120,7 +120,7 @@ class CompressionHandle:
             "decompress_calls": self.stats.decompress_calls,
             "bytes_original": self.stats.bytes_original,
             "bytes_compressed": self.stats.bytes_compressed,
-            "compression_ratio": self.stats.compression_ratio,
+            "ratio": self.stats.compression_ratio,
             "memory_saved_bytes": self.stats.memory_saved_bytes,
         }
 
@@ -128,9 +128,9 @@ class CompressionHandle:
 def enable_compression(
     model: "PreTrainedModel",
     *,
-    method: MethodName = "flashjolt",
+    method: MethodName = "flash",
     target_memory: str | float | None = None,
-    compression_ratio: float | None = None,
+    ratio: float | None = None,
     layer_groups: int = 1,
     bits: tuple[int, ...] = (0, 2, 4, 8),
     cache_implementation: str = "kvfold",
@@ -142,13 +142,13 @@ def enable_compression(
     Args:
         model: a ``PreTrainedModel`` returned by ``AutoModelForCausalLM`` or
             similar.
-        method: compressor name. One of ``jolt``, ``flashjolt``, ``lowrank``,
-            ``int2``, ``int4``, ``int8``, ``fp8``, ``fp16``, ``identity``.
+        method: compressor name. One of ``jolt``, ``flash``, ``low``,
+            ``int2``, ``int4``, ``int8``, ``fp8``, ``fp16``, ``bf16``, ``pass``.
         target_memory: target memory as a fraction of original. Examples:
             ``"25%"`` (4× compression), ``"50%"`` (2×), or a float like
-            ``0.25``. Mutually exclusive with ``compression_ratio``.
-        compression_ratio: target compression ratio as a float (e.g. ``3.0``
-            for 3×). Mutually exclusive with ``target_memory``.
+            ``0.25``. Mutually exclusive with ``ratio``.
+        ratio: target compression ratio as a float (e.g. ``3.0`` for 3×).
+            Mutually exclusive with ``target_memory``.
         layer_groups: number of contiguous layer groups the allocator splits
             the model into. The paper uses ``G = 1`` by default; increase to
             give the allocator finer control.
@@ -162,41 +162,41 @@ def enable_compression(
         :class:`CompressionHandle` used to disable compression or read stats.
 
     Raises:
-        ValueError: if neither ``target_memory`` nor ``compression_ratio`` is
-            provided, or if both are provided.
+        ValueError: if neither ``target_memory`` nor ``ratio`` is provided,
+            or if both are provided.
     """
-    if (target_memory is None) == (compression_ratio is None):
-        raise ValueError("Exactly one of `target_memory` or `compression_ratio` must be provided.")
+    if (target_memory is None) == (ratio is None):
+        raise ValueError("Exactly one of `target_memory` or `ratio` must be provided.")
 
     if target_memory is not None:
-        compression_ratio = parse_target_memory(target_memory)
-    elif compression_ratio is None:
+        ratio = parse_target_memory(target_memory)
+    elif ratio is None:
         raise ValueError("unreachable")
 
     # ``target_memory="100%"`` is identity — short-circuit so we don't pay
     # the allocator cost or hand the user a 3x default they didn't ask for.
-    if compression_ratio == 1.0:
-        method = "identity"
+    if ratio == 1.0:
+        method = "pass"
 
     log.info(
         "kvfold: enabling method=%s ratio=%.2fx on %s",
         method,
-        compression_ratio,
+        ratio,
         type(model).__name__,
     )
 
     from kvfold.adapter.huggingface import HF
 
     # Translate the public ``target_memory="100%"`` shortcut into the
-    # identity compressor to avoid spinning up the allocator at ratio=1.
+    # passthrough compressor to avoid spinning up the allocator at ratio=1.
     extra: dict[str, Any] = dict(kwargs)
-    if method == "identity":
+    if method == "pass":
         extra.pop("rank", None)
 
     adapter = HF(
         model=model,
         method=method,
-        compression_ratio=compression_ratio,
+        ratio=ratio,
         layer_groups=layer_groups,
         bits=bits,
         cache_implementation=cache_implementation,

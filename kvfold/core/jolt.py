@@ -106,12 +106,12 @@ class Jolt(Compressor):
     """Paper-faithful JoLT compressor.
 
     Args:
-        compression_ratio: target compression ratio (e.g. ``3.0``).
+        ratio: target compression ratio (e.g. ``3.0``).
         bits: residual bit-widths the allocator can choose from.
         dtype: dtype of stored Tucker factors (``fp16`` or ``fp32``).
         jl_distribution: ``"gaussian"`` or ``"rademacher"``.
         allocator: optional pre-built :class:`Bisect`. If ``None``,
-            one is constructed from ``compression_ratio`` and ``bits``.
+            one is constructed from ``ratio`` and ``bits``.
         svd: optional shared :class:`SVD` (for deterministic seeding).
         symmetric_quant: symmetric vs. asymmetric quantization.
         per_channel_quant: per-channel scales.
@@ -125,12 +125,12 @@ class Jolt(Compressor):
     def __init__(
         self,
         *,
-        compression_ratio: float = 3.0,
+        ratio: float = 3.0,
         bits: tuple[int, ...] = (0, 2, 4, 8),
         dtype: torch.dtype = torch.float16,
         jl_distribution: Distribution = "gaussian",
         allocator: Bisect | None = None,
-        svd: SVD | None = None,
+        decomposer: Decomposer | None = None,
         symmetric_quant: bool = True,
         per_channel_quant: bool = True,
         group_size: int | None = None,
@@ -139,9 +139,9 @@ class Jolt(Compressor):
         **unused: Any,
     ) -> None:
         super().__init__()
-        if compression_ratio <= 1.0:
-            raise ValueError(f"compression_ratio must be > 1.0, got {compression_ratio}")
-        self.compression_ratio = float(compression_ratio)
+        if ratio <= 1.0:
+            raise ValueError(f"ratio must be > 1.0; got {ratio}")
+        self.ratio = float(ratio)
         self.bits = tuple(bits)
         self.dtype = dtype
         self.jl_distribution = jl_distribution
@@ -150,11 +150,11 @@ class Jolt(Compressor):
         # bytes budget then doubles and the achieved ratio lands at the
         # user-requested target instead of half).
         self.allocator = allocator or Bisect(
-            target_ratio=compression_ratio,
+            target_ratio=ratio,
             bits_grid=self.bits,
             factor_dtype_bytes=dtype.itemsize,
         )
-        self.decomposer = svd or Exact()
+        self.decomposer = decomposer or Exact()
         self.symmetric_quant = symmetric_quant
         self.per_channel_quant = per_channel_quant
         self.group_size = group_size
