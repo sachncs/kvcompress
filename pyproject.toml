@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "kvfold"
 version = "0.2.0"
 description = "Universal plug-and-play KV cache compression for decoder-only LLMs."
-description = "Universal plug-and-play KV cache compression for decoder-only LLMs."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = { text = "Apache-2.0" }
