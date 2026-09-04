@@ -101,20 +101,25 @@ def test_unknown_method_raises_with_actionable_message() -> None:
 
 def test_unknown_kwarg_raises_with_actionable_message() -> None:
     """A typo (``per_chanel`` instead of ``per_channel``) must fail loud."""
-    with pytest.raises(ValueError, match="unexpected kwargs"):
+    from kvfold.errors import MethodConfigError
+    with pytest.raises(MethodConfigError, match="per_chanel"):
         build_compressor("int4", per_chanel=True)
 
 
 def test_int_kwargs_rejected_on_pass() -> None:
     """``per_channel`` is meaningless for Pass — reject."""
-    with pytest.raises(ValueError, match="unexpected kwargs"):
+    from kvfold.errors import MethodConfigError
+    with pytest.raises(MethodConfigError, match="per_channel"):
         build_compressor("pass", per_channel=True)
 
 
 def test_method_is_case_insensitive() -> None:
-    """``"INT4"`` and ``"Int4"`` should both work — we lowercase internally."""
+    """Case-insensitive method names are normalised."""
     a = build_compressor("INT4")
     b = build_compressor("Int4")
+    from kvfold.core.int_quant import IntQuant
+    assert isinstance(a, IntQuant)
+    assert isinstance(b, IntQuant)
     assert type(a) is type(b)
 
 

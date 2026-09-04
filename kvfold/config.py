@@ -252,16 +252,19 @@ class Float8Config(MethodConfig):
             raise MethodConfigError("fp8", "group_size", "must be >= 1 when provided")
 
 
+@dataclasses.dataclass(frozen=True)
 class Int2Config(IntConfig):
     method: ClassVar[Method] = "int2"
     bits: int = 2
 
 
+@dataclasses.dataclass(frozen=True)
 class Int4Config(IntConfig):
     method: ClassVar[Method] = "int4"
     bits: int = 4
 
 
+@dataclasses.dataclass(frozen=True)
 class Int8Config(IntConfig):
     method: ClassVar[Method] = "int8"
     bits: int = 8

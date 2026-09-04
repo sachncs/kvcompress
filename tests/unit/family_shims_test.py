@@ -1,8 +1,9 @@
 """Tests for the per-family adapter shims.
 
-The shims are no-ops today (the DynamicCache subclass installed by
-HF covers all standard cache layouts). These tests
-verify the registration mechanism and that each shim imports cleanly.
+The shims are no-op :class:`Family` subclasses today (the
+DynamicCache subclass installed by the HF adapter covers all standard
+cache layouts). These tests verify the registration mechanism and that
+every built-in family loads cleanly.
 """
 
 from __future__ import annotations
@@ -10,96 +11,89 @@ from __future__ import annotations
 import pytest
 
 from kvfold.adapter import registry
+from kvfold.adapter.registry import (
+    Family,
+    FamilyRegistry,
+    REGISTRY,
+    install,
+    known_model_types,
+    resolve,
+)
+
+
+EXPECTED_FAMILIES = {
+    "llama",
+    "mistral",
+    "qwen2",
+    "qwen2_moe",
+    "gemma",
+    "gemma2",
+    "phi",
+    "phi3",
+    "mixtral",
+    "falcon",
+    "deepseek",
+    "internlm",
+}
 
 
 def test_registry_lists_all_families() -> None:
-    families = registry.known_model_types()
-    expected = {
-        "llama",
-        "mistral",
-        "qwen2",
-        "qwen2_moe",
-        "gemma",
-        "gemma2",
-        "phi",
-        "phi3",
-        "mixtral",
-        "falcon",
-        "deepseek",
-        "internlm",
-    }
-    assert set(families) == expected
+    assert set(known_model_types()) == EXPECTED_FAMILIES
 
 
-def test_resolve_returns_module_path_for_known_family() -> None:
-    for family in ("llama", "mistral", "qwen2", "deepseek"):
-        module_path = registry.resolve(family)
-        assert module_path is not None
-        assert module_path.startswith("kvfold.adapter.")
+@pytest.mark.parametrize("family", list(EXPECTED_FAMILIES))
+def test_resolve_returns_family_for_known(family: str) -> None:
+    f = resolve(family)
+    assert f is not None
+    assert f.name == family
 
 
 def test_resolve_returns_none_for_unknown_family() -> None:
-    assert registry.resolve("not-a-real-model") is None
-    assert registry.resolve("") is None
+    assert resolve("not-a-real-model") is None
+    assert resolve("") is None
 
 
 def test_register_adds_new_family() -> None:
-    original = registry.known_model_types()
-    original_set = set(registry.REGISTRY)
+    class _CustomFamily(Family):
+        name = "test-family-xyz"
+
+        def install(self, model, pool):
+            return None
+
+    original_count = len(REGISTRY.entries)
+    REGISTRY.register(_CustomFamily)
     try:
-        registry.REGISTRY.register("test-family-xyz",  "kvfold.adapter.llama")
-        assert "test-family-xyz" in registry.known_model_types()
-        assert registry.resolve("test-family-xyz") == "kvfold.adapter.llama"
+        assert "test-family-xyz" in known_model_types()
+        assert resolve("test-family-xyz") is not None
     finally:
-        # Restore registry by removing any keys we added.
-        for k in list(registry.REGISTRY):
-            if k not in original_set:
-                del registry.REGISTRY[k]
-        assert registry.known_model_types() == original
+        REGISTRY.entries.pop("test-family-xyz", None)
+    assert len(REGISTRY.entries) == original_count
 
 
 def test_register_duplicate_raises() -> None:
+    from kvfold.adapter.registry import Llama
     with pytest.raises(ValueError, match="already registered"):
-        registry.REGISTRY.register("llama",  "kvfold.adapter.llama")
+        REGISTRY.register(Llama)
 
 
-@pytest.mark.parametrize(
-    "family",
-    [
-        "llama",
-        "mistral",
-        "qwen2",
-        "gemma",
-        "phi",
-        "mixtral",
-        "falcon",
-        "deepseek",
-        "internlm",
-    ],
-)
-def test_every_family_shim_imports_and_installs(family: str) -> None:
-    """Each registered family shim exposes an ``install`` function that
-    accepts a model and cache_manager. The DynamicCache subclass covers
-    them, so install is a no-op, but the contract must hold.
-    """
-    import importlib
-
-    module_path = registry.resolve(family)
-    assert module_path is not None
-    module = importlib.import_module(module_path)
-    assert hasattr(module, "install"), f"{module_path} missing install()"
+def test_install_returns_none_for_no_op_family() -> None:
+    """Each NoOpFamily's install() returns None."""
+    for family in EXPECTED_FAMILIES:
+        f = resolve(family)
+        result = f.install(object(), object())
+        assert result is None
 
 
-def test_install_unknown_model_type_falls_back_to_generic() -> None:
-    """``install(model_type="nonexistent", ...)`` falls back to the
-    generic path (a no-op) and doesn't raise."""
-    from kvfold.adapter import registry
+def test_install_module_function_dispatches_to_family() -> None:
+    """The module-level install() forwards to the registered family."""
+    result = install(object(), object(), model_type="llama")
+    assert result is None
 
-    # The generic install returns None; the family install returns
-    # the callable. Either way, the function didn't raise.
-    result = registry.install(
-        model_type="definitely-not-a-real-family-xyz",
-        model=object(),
-        cache_manager=object(),
-    )
-    assert result is None or callable(result)
+
+def test_install_module_function_unknown_returns_none() -> None:
+    result = install(object(), object(), model_type="not-a-real-family-xyz")
+    assert result is None
+
+
+def test_registry_is_family_registry_instance() -> None:
+    assert isinstance(REGISTRY, FamilyRegistry)
