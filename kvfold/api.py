@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
 
-    from kvfold.adapter.huggingface import HuggingFaceAdapter
+    from kvfold.adapter.huggingface import HF
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class CompressionHandle:
     compressor at runtime.
     """
 
-    adapter: HuggingFaceAdapter
+    adapter: HF
     model: Any
     stats: CompressionStats = field(default_factory=CompressionStats)
 
@@ -183,7 +183,7 @@ def enable_compression(
         type(model).__name__,
     )
 
-    from kvfold.adapter.huggingface import HuggingFaceAdapter
+    from kvfold.adapter.huggingface import HF
 
     # Translate the public ``target_memory="100%"`` shortcut into the
     # identity compressor to avoid spinning up the allocator at ratio=1.
@@ -191,7 +191,7 @@ def enable_compression(
     if method == "identity":
         extra.pop("rank", None)
 
-    adapter = HuggingFaceAdapter(
+    adapter = HF(
         model=model,
         method=method,
         compression_ratio=compression_ratio,

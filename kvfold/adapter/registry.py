@@ -7,7 +7,7 @@ into that family's attention layer.
 Adding a new family: write ``adapters/<name>.py`` exposing
 ``install(model, cache_manager)`` and add an entry to :data:`REGISTRY`.
 
-Today every entry is a no-op shim because the :class:`HuggingFaceAdapter`'s
+Today every entry is a no-op shim because the :class:`HF`'s
 :class:`~transformers.cache_utils.DynamicCache` subclass already covers the
 standard cache layout. The registry exists so future model-specific hooks
 (custom attention kernels, MLA, fused QKV) have a place to land.
@@ -15,7 +15,7 @@ standard cache layout. The registry exists so future model-specific hooks
 Thread-safety: the registry is mutated only at import time and via
 :func:`register`. The module uses a module-level dict without locking;
 callers that register at runtime must do so before any
-:class:`HuggingFaceAdapter` is constructed.
+:class:`HF` is constructed.
 """
 
 from __future__ import annotations

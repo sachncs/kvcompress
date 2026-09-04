@@ -1,7 +1,7 @@
 """Tests for the per-family adapter shims.
 
 The shims are no-ops today (the DynamicCache subclass installed by
-HuggingFaceAdapter covers all standard cache layouts). These tests
+HF covers all standard cache layouts). These tests
 verify the registration mechanism and that each shim imports cleanly.
 """
 

@@ -60,7 +60,7 @@ from kvfold.cache.manager import Pool
 from kvfold.core.base import Compressor
 from kvfold.api import build_compressor as _build_compressor
 
-__all__ = ["HuggingFaceAdapter", "build_compressor", "is_compression_active"]
+__all__ = ["HF", "build_compressor", "is_compression_active"]
 
 
 log = logging.getLogger(__name__)
@@ -72,13 +72,13 @@ log = logging.getLogger(__name__)
 # ``weakref.WeakValueDictionary`` lets GC reclaim adapters when the model
 # goes out of scope (e.g. between test cases) without us having to thread
 # teardown through every call site.
-INSTALLED_ADAPTERS: "weakref.WeakValueDictionary[int, HuggingFaceAdapter]" = (
+INSTALLED_ADAPTERS: "weakref.WeakValueDictionary[int, HF]" = (
     weakref.WeakValueDictionary()
 )
 
 
 def is_compression_active(model: object) -> bool:
-    """Return ``True`` if a :class:`HuggingFaceAdapter` is active on ``model``."""
+    """Return ``True`` if a :class:`HF` is active on ``model``."""
     return id(model) in INSTALLED_ADAPTERS
 
 
@@ -87,7 +87,7 @@ def build_compressor(method: str, **kwargs: Any) -> Compressor:
     return _build_compressor(method, **kwargs)
 
 
-class HuggingFaceAdapter:
+class HF:
     """Adapter that wires a :class:`Compressor` into an HF model.
 
     The adapter is **stateful** in two ways:
@@ -437,6 +437,6 @@ def generic_install(model: object, cache_manager: Pool) -> None:
 
     Returns ``None`` so the registry's ``install`` dispatch knows the
     generic path was taken. The DynamicCache subclass installed by
-    :meth:`HuggingFaceAdapter.enable` is what does the actual work.
+    :meth:`HF.enable` is what does the actual work.
     """
     return None

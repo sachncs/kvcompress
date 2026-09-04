@@ -1,6 +1,6 @@
 """Tests for the lazy-export ``__getattr__`` in adapters/__init__.py.
 
-The adapters subpackage exposes HuggingFaceAdapter, vLLM helpers, and
+The adapters subpackage exposes HF, vLLM helpers, and
 the OffloadingHandler through a single ``__getattr__`` so the import
 chain is shallow and missing optional deps don't blow up the package
 import. These tests cover the dispatch path.
@@ -12,9 +12,9 @@ import pytest
 
 
 def test_huggingface_adapter_lazy_export() -> None:
-    from kvfold.adapters import HuggingFaceAdapter
+    from kvfold.adapters import HF
 
-    assert HuggingFaceAdapter.__name__ == "HuggingFaceAdapter"
+    assert HF.__name__ == "HF"
 
 
 def test_vllm_lazy_exports() -> None:
@@ -54,6 +54,6 @@ def test_lazy_exports_cached_after_first_lookup() -> None:
     """After the first ``__getattr__`` resolution, the symbol is cached."""
     import kvfold.adapters as sub
 
-    a = sub.HuggingFaceAdapter
-    b = sub.HuggingFaceAdapter
+    a = sub.HF
+    b = sub.HF
     assert a is b  # cached reference, same object

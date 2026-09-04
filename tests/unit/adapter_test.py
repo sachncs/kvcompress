@@ -208,7 +208,7 @@ def test_enable_rolls_back_on_failure() -> None:
     """
     import transformers.cache_utils as cu
     from kvfold.adapters import huggingface as hf_module
-    from kvfold.adapters.huggingface import HuggingFaceAdapter
+    from kvfold.adapters.huggingface import HF
 
     original_dynamic_cache = cu.DynamicCache
     original_install = hf_module.registry_install
@@ -218,7 +218,7 @@ def test_enable_rolls_back_on_failure() -> None:
 
     hf_module.registry_install = boom
     model = FakeModel("llama", has_cache_impl=False)
-    adapter = HuggingFaceAdapter(
+    adapter = HF(
         model=model,
         method="flashjolt",
         compression_ratio=2.0,

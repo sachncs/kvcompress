@@ -2,7 +2,7 @@
 
 Llama uses ``LlamaAttention`` with rotary embeddings and standard
 ``past_key_values``. The DynamicCache subclass installed by
-:class:`HuggingFaceAdapter` already intercepts cache writes correctly;
+:class:`HF` already intercepts cache writes correctly;
 this shim exists as a documented no-op so the registry can dispatch to
 a family-specific module.
 

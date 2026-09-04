@@ -20,10 +20,10 @@ from typing import Any
 
 
 def __getattr__(name: str) -> Any:
-    if name == "HuggingFaceAdapter":
-        from kvfold.adapter.huggingface import HuggingFaceAdapter
+    if name == "HF":
+        from kvfold.adapter.huggingface import HF
 
-        return HuggingFaceAdapter
+        return HF
     if name in ("export_kv", "import_kv", "is_vllm_available", "resolve_cache"):
         from kvfold.adapter import vllm
 
@@ -36,7 +36,7 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "HuggingFaceAdapter",
+    "HF",
     "export_kv",
     "import_kv",
     "is_vllm_available",
