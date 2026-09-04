@@ -55,22 +55,22 @@ def family(name: Method) -> Literal["quant", "low", "dtype", "pass"]:
     raise ValueError(f"unknown method {name!r}")
 
 
-def is_quant(name: Method) -> TypeGuard[Literal["int2", "int4", "int8", "fp8"]]:
+def is_quant(name: Method) -> bool:
     """True if the method produces a per-element quantised payload."""
-    return name in QUANT_METHODS  # type: ignore[return-value]
+    return name in QUANT_METHODS
 
 
-def is_low(name: Method) -> TypeGuard[Literal["jolt", "flash", "low"]]:
+def is_low(name: Method) -> bool:
     """True if the method stores a low-rank factorisation."""
-    return name in LOW_METHODS  # type: ignore[return-value]
+    return name in LOW_METHODS
 
 
-def is_dtype_only(name: Method) -> TypeGuard[Literal["fp16", "bf16"]]:
+def is_dtype_only(name: Method) -> bool:
     """True if the method only changes storage dtype (no real compression)."""
-    return name in DTYPE_METHODS  # type: ignore[return-value]
+    return name in DTYPE_METHODS
 
 
-def is_passthrough(name: Method) -> TypeGuard[Literal["pass"]]:
+def is_passthrough(name: Method) -> bool:
     """True if the method copies the input through unchanged."""
     return name == "pass"
 
@@ -91,8 +91,8 @@ def normalise(name: str) -> Method:
         ValueError: If ``name`` is not a registered method.
     """
     candidate = name.strip().lower()
-    if candidate in METHODS:  # type: ignore[operator]
-        return candidate  # type: ignore[return-value]
+    if candidate in METHODS:
+        return candidate
     raise ValueError(f"unknown method {name!r}; supported: {METHODS}")
 
 

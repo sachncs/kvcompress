@@ -12,13 +12,13 @@ import pytest
 
 
 def test_huggingface_adapter_lazy_export() -> None:
-    from kvfold.adapters import HF
+    from kvfold.adapter import HF
 
     assert HF.__name__ == "HF"
 
 
 def test_vllm_lazy_exports() -> None:
-    from kvfold.adapters import (
+    from kvfold.adapter import (
         export_kv,
         import_kv,
         is_vllm_available,
@@ -32,7 +32,7 @@ def test_vllm_lazy_exports() -> None:
 
 
 def test_vllm_offload_lazy_exports() -> None:
-    from kvfold.adapters import (
+    from kvfold.adapter import (
         Offload,
         EvictPool,
         is_vllm_offload_available,
@@ -44,7 +44,7 @@ def test_vllm_offload_lazy_exports() -> None:
 
 
 def test_unknown_attribute_raises() -> None:
-    import kvfold.adapters as sub
+    import kvfold.adapter as sub
 
     with pytest.raises(AttributeError, match="no attribute"):
         _ = sub.NoSuchSymbol
@@ -52,7 +52,7 @@ def test_unknown_attribute_raises() -> None:
 
 def test_lazy_exports_cached_after_first_lookup() -> None:
     """After the first ``__getattr__`` resolution, the symbol is cached."""
-    import kvfold.adapters as sub
+    import kvfold.adapter as sub
 
     a = sub.HF
     b = sub.HF

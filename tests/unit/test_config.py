@@ -153,8 +153,9 @@ def test_pass_config_rejects_non_float() -> None:
 
 
 def test_float8_config_validates_variant() -> None:
+    from kvfold.errors import MethodConfigError
     with pytest.raises(MethodConfigError):
-        Float8Config(variant="e3m2").validate()  # type: ignore[arg-type]
+        Float8Config(variant="e3m2").validate()
 
 
 def test_float8_config_validates_group_size() -> None:
@@ -183,7 +184,7 @@ def test_round_trip_through_dict(cls: type[MethodConfig], kwargs: dict) -> None:
 def test_frozen_configs_cannot_be_mutated() -> None:
     config = JoltConfig(ratio=3.0)
     with pytest.raises(dataclasses.FrozenInstanceError):
-        config.ratio = 4.0  # type: ignore[misc]
+        config.ratio = 4.0
 
 
 def test_each_config_has_method_attribute() -> None:

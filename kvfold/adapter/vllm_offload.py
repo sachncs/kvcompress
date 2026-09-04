@@ -219,7 +219,7 @@ class Offload:
         src_spec, dst_spec = transfer_spec
         try:
             self.run_transfer(src_spec, dst_spec)
-        except Exception as e:  # noqa: BLE001 — best-effort, log + report failure
+        except (ValueError, RuntimeError, OSError) as e:
             log.warning(
                 "Offload.transfer_async: transfer %d failed: %r",
                 job_id,

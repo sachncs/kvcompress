@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.flashjolt import FlashJolt, flashjolt_cap
+from kvfold.core.flash import Flash, LinearCap
 from kvfold.core.jolt import Jolt
 
 
@@ -102,20 +102,20 @@ def test_jolt_method_name() -> None:
     assert comp.stats()["method"] == "jolt"
 
 
-def test_flashjolt_cap_policy() -> None:
+def test_flash_cap_policy() -> None:
     # Short context: cap equals q_min(R).
-    assert flashjolt_cap(128, 3.0) == 32
-    assert flashjolt_cap(128, 8.0) == 64
+    assert LinearCap().cap(128, 3.0) == 32
+    assert LinearCap().cap(128, 8.0) == 64
     # Long context: cap grows sublinearly.
-    assert flashjolt_cap(8192, 3.0) == 256  # ⌈8192/32⌉ = 256, max(32, 256) = 256, capped at 512
-    assert flashjolt_cap(32768, 3.0) == 512  # ⌈32768/32⌉ = 1024, capped at 512
+    assert LinearCap().cap(8192, 3.0) == 256  # ⌈8192/32⌉ = 256, max(32, 256) = 256, capped at 512
+    assert LinearCap().cap(32768, 3.0) == 512  # ⌈32768/32⌉ = 1024, capped at 512
 
 
 def test_flashjolt_compress_decompress() -> None:
     torch.manual_seed(0)
     k = torch.randn(4, 64, 16, dtype=torch.float32)
     v = torch.randn(4, 64, 16, dtype=torch.float32)
-    comp = FlashJolt(compression_ratio=2.0, bits=(0, 4, 8))
+    comp = Flash(compression_ratio=2.0, bits=(0, 4, 8))
     k_p, v_p = comp.compress(k, v)
     k_hat, v_hat = comp.decompress(k_p, v_p)
     assert k_hat.shape == k.shape
@@ -123,7 +123,7 @@ def test_flashjolt_compress_decompress() -> None:
 
 
 def test_flashjolt_method_name() -> None:
-    comp = FlashJolt(compression_ratio=2.0)
+    comp = Flash(compression_ratio=2.0)
     assert comp.name == "flashjolt"
 
 
@@ -134,7 +134,7 @@ def test_flashjolt_speedup_no_quality_loss() -> None:
     v = torch.randn(4, 64, 16, dtype=torch.float32)
 
     comp_exact = Jolt(compression_ratio=3.0, bits=(0, 4, 8))
-    comp_fast = FlashJolt(compression_ratio=3.0, bits=(0, 4, 8))
+    comp_fast = Flash(compression_ratio=3.0, bits=(0, 4, 8))
 
     kp_e, vp_e = comp_exact.compress(k, v)
     kp_f, vp_f = comp_fast.compress(k, v)
@@ -150,5 +150,5 @@ def test_jolt_compressor_inheritance() -> None:
     """FlashJoLT should be a Compressor subclass."""
     from kvfold.core.base import Compressor
 
-    assert issubclass(FlashJolt, Compressor)
+    assert issubclass(Flash, Compressor)
     assert issubclass(Jolt, Compressor)

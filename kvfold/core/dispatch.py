@@ -92,7 +92,7 @@ class CompressorRegistry:
             try:
                 config_cls = CONFIG_REGISTRY.resolve(method)
             except KeyError:
-                config_cls = None  # type: ignore[assignment]
+                pass
 
         if factory is None:
             if config_cls is None:

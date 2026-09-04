@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from kvfold.adapters.registry import (
+from kvfold.adapter.registry import (
     install,
     known_model_types,
     register,
@@ -39,17 +39,17 @@ def test_registry_known_types() -> None:
 
 
 def test_registry_resolve() -> None:
-    assert resolve("llama") == "kvfold.adapters.llama"
+    assert resolve("llama") == "kvfold.adapter.llama"
     assert resolve("unknown-type") is None
 
 
 def test_registry_register_custom() -> None:
-    register("custom-test", "kvfold.adapters.llama")
+    register("custom-test", "kvfold.adapter.llama")
     try:
-        assert resolve("custom-test") == "kvfold.adapters.llama"
+        assert resolve("custom-test") == "kvfold.adapter.llama"
     finally:
         # Clean up so we don't pollute the global registry for other tests.
-        from kvfold.adapters import registry
+        from kvfold.adapter import registry
 
         if "custom-test" in registry.REGISTRY:
             del registry.REGISTRY["custom-test"]
@@ -57,25 +57,25 @@ def test_registry_register_custom() -> None:
 
 def test_registry_register_duplicate_raises() -> None:
     with pytest.raises(ValueError, match="already registered"):
-        register("llama", "kvfold.adapters.llama")
+        register("llama", "kvfold.adapter.llama")
 
 
 def test_install_dispatches() -> None:
     model = FakeModel("llama")
-    from kvfold.store.manager import CacheManager
+    from kvfold.store.manager import Pool
     from kvfold.core.jolt import Jolt
 
-    mgr = CacheManager(compressor=Jolt(compression_ratio=3.0))
+    mgr = Pool(compressor=Jolt(compression_ratio=3.0))
     # Should not raise.
     install(model_type="llama", model=model, cache_manager=mgr)
 
 
 def test_install_unknown_uses_generic() -> None:
     model = FakeModel("nonexistent")
-    from kvfold.store.manager import CacheManager
+    from kvfold.store.manager import Pool
     from kvfold.core.jolt import Jolt
 
-    mgr = CacheManager(compressor=Jolt(compression_ratio=3.0))
+    mgr = Pool(compressor=Jolt(compression_ratio=3.0))
     # Should not raise even though no shim exists.
     install(model_type="nonexistent", model=model, cache_manager=mgr)
 
@@ -207,8 +207,8 @@ def test_enable_rolls_back_on_failure() -> None:
     must be the original class.
     """
     import transformers.cache_utils as cu
-    from kvfold.adapters import huggingface as hf_module
-    from kvfold.adapters.huggingface import HF
+    from kvfold.adapter import huggingface as hf_module
+    from kvfold.adapter.huggingface import HF
 
     original_dynamic_cache = cu.DynamicCache
     original_install = hf_module.registry_install

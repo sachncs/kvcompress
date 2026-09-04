@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.quantization import (
-    IntQuantizer,
+from kvfold.core.quant import (
+    IntQuant,
     dequantize_tensor,
     estimate_int_bytes,
     get_quantizer,
@@ -22,7 +22,7 @@ def tensor() -> torch.Tensor:
 
 @pytest.mark.parametrize("bits", [2, 4, 8])
 def test_int_symmetric_roundtrip(tensor: torch.Tensor, bits: int) -> None:
-    q = IntQuantizer(bits=bits, symmetric=True, per_channel=True)
+    q = IntQuant(bits=bits, symmetric=True, per_channel=True)
     payload = quantize_tensor(tensor, dtype=f"int{bits}", symmetric=True, per_channel=True)
     packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
     x_hat = q.dequantize(
@@ -40,7 +40,7 @@ def test_int_symmetric_roundtrip(tensor: torch.Tensor, bits: int) -> None:
 
 @pytest.mark.parametrize("bits", [2, 4, 8])
 def test_int_asymmetric_roundtrip(tensor: torch.Tensor, bits: int) -> None:
-    q = IntQuantizer(bits=bits, symmetric=False, per_channel=True)
+    q = IntQuant(bits=bits, symmetric=False, per_channel=True)
     payload = quantize_tensor(tensor, dtype=f"int{bits}", symmetric=False, per_channel=True)
     packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
     x_hat = q.dequantize(
@@ -59,7 +59,7 @@ def test_int_asymmetric_roundtrip(tensor: torch.Tensor, bits: int) -> None:
 def test_int_per_tensor() -> None:
     torch.manual_seed(0)
     x = torch.randn(4, 8)
-    q = IntQuantizer(bits=8, symmetric=True, per_channel=False)
+    q = IntQuant(bits=8, symmetric=True, per_channel=False)
     payload = quantize_tensor(x, dtype="int8", symmetric=True, per_channel=False)
     packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
     assert scale.dim() == 0
@@ -71,7 +71,7 @@ def test_int_per_tensor() -> None:
 def test_int_per_group() -> None:
     torch.manual_seed(0)
     x = torch.randn(2, 8)
-    q = IntQuantizer(bits=4, symmetric=True, per_channel=False, group_size=4)
+    q = IntQuant(bits=4, symmetric=True, per_channel=False, group_size=4)
     payload = quantize_tensor(x, dtype="int4", symmetric=True, per_channel=False, group_size=4)
     packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
     # group_size=4 → 2 groups per row → scale shape (2, 2).
@@ -91,7 +91,7 @@ def test_int_per_group() -> None:
 def test_packing_inverse_unpacking() -> None:
     torch.manual_seed(0)
     for bits in (2, 4, 8):
-        q = IntQuantizer(bits=bits, symmetric=True, per_channel=True)
+        q = IntQuant(bits=bits, symmetric=True, per_channel=True)
         x = torch.randn(4, 16) * 2
         payload = quantize_tensor(x, dtype=f"int{bits}", symmetric=True, per_channel=True)
         packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
@@ -175,12 +175,12 @@ def test_estimate_int_bytes() -> None:
 
 def test_invalid_bits() -> None:
     with pytest.raises(ValueError, match="bits"):
-        IntQuantizer(bits=3)
+        IntQuant(bits=3)
 
 
 def test_int_group_size_not_divisible() -> None:
     x = torch.randn(2, 7)  # 7 not divisible by 4
-    q = IntQuantizer(bits=4, group_size=4, per_channel=False)
+    q = IntQuant(bits=4, group_size=4, per_channel=False)
     with pytest.raises(ValueError, match="not divisible"):
         q.quantize(x)
 
@@ -189,7 +189,7 @@ def test_int2_shape_after_packing() -> None:
     """Bit 2 packing: 4 entries per byte."""
     torch.manual_seed(0)
     x = torch.randn(2, 8) * 0.5
-    q = IntQuantizer(bits=2, symmetric=True, per_channel=True)
+    q = IntQuant(bits=2, symmetric=True, per_channel=True)
     packed, scale, zp = q.quantize(x)
     # 8 entries per row, packed at 2 bits → 2 bytes per row, 4 rows = 8 bytes.
     assert packed.dtype == torch.uint8
@@ -198,7 +198,7 @@ def test_int2_shape_after_packing() -> None:
 def test_int4_shape_after_packing() -> None:
     torch.manual_seed(0)
     x = torch.randn(2, 8)
-    q = IntQuantizer(bits=4, symmetric=True, per_channel=True)
+    q = IntQuant(bits=4, symmetric=True, per_channel=True)
     packed, scale, zp = q.quantize(x)
     # 8 entries per row, 4 bits → 4 bytes per row.
     assert packed.dtype == torch.uint8

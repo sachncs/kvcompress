@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from kvfold.core.allocator import (
-    Allocation,
-    AllocationResult,
+from kvfold.core.budget import (
+    Pick,
+    Plan,
     Cell,
     Greedy,
     Bisect,

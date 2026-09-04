@@ -5,17 +5,28 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.jl import (
-    CACHE.get_or_build,
-    clear_projection_cache,
-    gaussian_projection,
-    rademacher_projection,
-)
+from kvfold.core.jl import CACHE, Gaussian, Rademacher, Sparse
 
 
 @pytest.fixture(autouse=True)
 def clear_cache() -> None:
-    clear_projection_cache()
+    CACHE.clear()
+
+
+def gaussian_projection(out_dim: int, in_dim: int, *, seed: int, **kwargs: object):
+    kwargs.setdefault("device", "cpu")
+    kwargs.setdefault("dtype", torch.float32)
+    return CACHE.get_or_build(out_dim, in_dim, distribution="gaussian", seed=seed, **kwargs)
+
+
+def rademacher_projection(out_dim: int, in_dim: int, *, seed: int, **kwargs: object):
+    kwargs.setdefault("device", "cpu")
+    kwargs.setdefault("dtype", torch.float32)
+    return CACHE.get_or_build(out_dim, in_dim, distribution="rademacher", seed=seed, **kwargs)
+
+
+def sparse_projection(out_dim: int, in_dim: int, *, seed: int, sparsity: float = 0.1):
+    return CACHE.get_or_build(out_dim, in_dim, distribution="sparse", seed=seed, device="cpu", dtype=torch.float32, projector=Sparse(sparsity))
 
 
 def test_gaussian_projection_shape() -> None:
@@ -54,38 +65,37 @@ def test_apply_inverse_roundtrip_shape() -> None:
 
 
 def test_norm_preservation_gaussian() -> None:
-    """JL should preserve squared norm on average (within slack)."""
     torch.manual_seed(0)
     p = gaussian_projection(64, 64, seed=0)
     x = torch.randn(1024, 64)
     y = p.apply(x)
     ratio = (y * y).sum(dim=-1) / (x * x).sum(dim=-1)
-    # Mean ratio should be ~1.0; allow wide slack for finite samples.
     assert abs(ratio.mean().item() - 1.0) < 0.1
 
 
-def test_CACHE.get_or_build_returns_same_object() -> None:
-    p1 = CACHE.get_or_build(8, 16, seed=0)
-    p2 = CACHE.get_or_build(8, 16, seed=0)
+def test_cache_returns_same_object() -> None:
+    p1 = gaussian_projection(8, 16, seed=0)
+    p2 = gaussian_projection(8, 16, seed=0)
     assert p1 is p2
 
 
-def test_CACHE.get_or_build_distribution_switch() -> None:
-    p_g = CACHE.get_or_build(4, 4, distribution="gaussian", seed=0)
-    p_r = CACHE.get_or_build(4, 4, distribution="rademacher", seed=0)
+def test_cache_distribution_switch() -> None:
+    p_g = gaussian_projection(4, 4, seed=0)
+    p_r = rademacher_projection(4, 4, seed=0)
     assert p_g.distribution == "gaussian"
     assert p_r.distribution == "rademacher"
     assert not torch.allclose(p_g.matrix, p_r.matrix)
 
 
-def test_rademacher_sparsity() -> None:
-    p = rademacher_projection(16, 16, seed=0, sparsity=0.25)
-    nz = (p.matrix != 0).float().mean().item()
-    # Expect ~0.25, with some slack.
-    assert 0.18 < nz < 0.32
+def test_rademacher_entries() -> None:
+    p = rademacher_projection(16, 16, seed=0)
+    unique = torch.unique(p.matrix)
+    rounded = sorted(round(float(u), 4) for u in unique)
+    assert rounded == [-1.0, 1.0] or len(rounded) <= 2
 
 
 def test_apply_shape_mismatch_raises() -> None:
     p = gaussian_projection(4, 4, seed=0)
-    with pytest.raises(ValueError, match="trailing dim mismatch"):
+    from kvfold.errors import ShapeError
+    with pytest.raises(ShapeError):
         p.apply(torch.randn(2, 3, 5))

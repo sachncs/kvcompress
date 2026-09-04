@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 
 from kvfold.store.metadata import (
-    CompressionMetadata,
-    LayerCompression,
+    Meta,
+    LayerMeta,
 )
 
 
 def test_layer_compression_to_from_dict_roundtrip() -> None:
-    lc = LayerCompression(
+    lc = LayerMeta(
         layer=5,
         kind="key",
         m=8,
@@ -28,7 +28,7 @@ def test_layer_compression_to_from_dict_roundtrip() -> None:
         group_size=1,
     )
     d = lc.to_dict()
-    lc2 = LayerCompression.from_dict(d)
+    lc2 = LayerMeta.from_dict(d)
     assert lc2.layer == lc.layer
     assert lc2.kind == lc.kind
     assert lc2.m == lc.m
@@ -46,14 +46,14 @@ def test_layer_compression_to_from_dict_roundtrip() -> None:
 
 
 def test_layer_compression_shape_property() -> None:
-    lc = LayerCompression(
+    lc = LayerMeta(
         layer=0, kind="key", m=4, tokens=128, dh=64, r_token=8, r_feature=4, bits=0
     )
     assert lc.shape == (4, 128, 64)
 
 
 def test_layer_compression_compression_ratio_property() -> None:
-    lc = LayerCompression(
+    lc = LayerMeta(
         layer=0,
         kind="key",
         m=4,
@@ -67,7 +67,7 @@ def test_layer_compression_compression_ratio_property() -> None:
     )
     assert lc.compression_ratio == 2.0
     # No payload → 1.0 (the no-cache identity).
-    lc2 = LayerCompression(
+    lc2 = LayerMeta(
         layer=0,
         kind="key",
         m=4,
@@ -82,17 +82,17 @@ def test_layer_compression_compression_ratio_property() -> None:
 
 
 def test_compression_metadata_layer_lookup() -> None:
-    meta = CompressionMetadata(method="jolt", dtype="float16")
+    meta = Meta(method="jolt", dtype="float16")
     meta.add_layer(
-        LayerCompression(layer=0, kind="key", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0)
+        LayerMeta(layer=0, kind="key", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0)
     )
     meta.add_layer(
-        LayerCompression(
+        LayerMeta(
             layer=0, kind="value", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0
         )
     )
     meta.add_layer(
-        LayerCompression(layer=1, kind="key", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0)
+        LayerMeta(layer=1, kind="key", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0)
     )
     assert meta.layer(0).kind == "key"
     assert meta.layer(0).m == 4
@@ -103,8 +103,8 @@ def test_compression_metadata_layer_lookup() -> None:
 
 def test_compression_metadata_add_layer_replaces() -> None:
     """Adding a layer entry with the same (layer, kind) replaces."""
-    meta = CompressionMetadata(method="jolt", dtype="float16")
-    a = LayerCompression(
+    meta = Meta(method="jolt", dtype="float16")
+    a = LayerMeta(
         layer=0,
         kind="key",
         m=4,
@@ -115,7 +115,7 @@ def test_compression_metadata_add_layer_replaces() -> None:
         bits=0,
         bytes_compressed=100,
     )
-    b = LayerCompression(
+    b = LayerMeta(
         layer=0,
         kind="key",
         m=4,
@@ -134,9 +134,9 @@ def test_compression_metadata_add_layer_replaces() -> None:
 
 
 def test_compression_metadata_bytes_aggregates() -> None:
-    meta = CompressionMetadata(method="jolt", dtype="float16")
+    meta = Meta(method="jolt", dtype="float16")
     meta.add_layer(
-        LayerCompression(
+        LayerMeta(
             layer=0,
             kind="key",
             m=4,
@@ -150,7 +150,7 @@ def test_compression_metadata_bytes_aggregates() -> None:
         )
     )
     meta.add_layer(
-        LayerCompression(
+        LayerMeta(
             layer=0,
             kind="value",
             m=4,
@@ -169,7 +169,7 @@ def test_compression_metadata_bytes_aggregates() -> None:
 
 
 def test_compression_metadata_to_from_dict_roundtrip() -> None:
-    meta = CompressionMetadata(
+    meta = Meta(
         method="flashjolt",
         dtype="bfloat16",
         layer_groups=4,
@@ -177,7 +177,7 @@ def test_compression_metadata_to_from_dict_roundtrip() -> None:
         extras={"calibration": "default"},
     )
     meta.add_layer(
-        LayerCompression(
+        LayerMeta(
             layer=3,
             kind="key",
             m=8,
@@ -193,7 +193,7 @@ def test_compression_metadata_to_from_dict_roundtrip() -> None:
         )
     )
     d = meta.to_dict()
-    meta2 = CompressionMetadata.from_dict(d)
+    meta2 = Meta.from_dict(d)
     assert meta2.method == meta.method
     assert meta2.dtype == meta.dtype
     assert meta2.layer_groups == meta.layer_groups
@@ -205,7 +205,7 @@ def test_compression_metadata_to_from_dict_roundtrip() -> None:
 
 
 def test_compression_metadata_empty_layer() -> None:
-    meta = CompressionMetadata(method="jolt", dtype="float16")
+    meta = Meta(method="jolt", dtype="float16")
     assert meta.layers == []
     assert meta.bytes_original() == 0
     assert meta.bytes_compressed() == 0
@@ -214,5 +214,5 @@ def test_compression_metadata_empty_layer() -> None:
 
 def test_compression_metadata_default_bits_allowed() -> None:
     """Default ``bits_allowed`` is the paper's grid ``(0, 2, 4, 8)``."""
-    meta = CompressionMetadata(method="jolt", dtype="float16")
+    meta = Meta(method="jolt", dtype="float16")
     assert meta.bits_allowed == (0, 2, 4, 8)

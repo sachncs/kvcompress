@@ -43,6 +43,8 @@ import logging
 from collections import OrderedDict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+
+from kvfold.errors import CacheMissingLayerError
 from typing import Any
 
 import torch
@@ -193,10 +195,14 @@ class Cache:
         """
         entry = self.entries[layer]
         if kind == "key":
-            return entry.key  # type: ignore[return-value]
-        if kind == "value":
-            return entry.value  # type: ignore[return-value]
-        raise ValueError(f"kind must be 'key' or 'value', got {kind!r}")
+            payload = entry.key
+        elif kind == "value":
+            payload = entry.value
+        else:
+            raise ValueError(f"kind must be 'key' or 'value', got {kind!r}")
+        if payload is None:
+            raise CacheMissingLayerError(layer=layer)
+        return payload
 
     def has_layer(self, layer: int) -> bool:
         """Return ``True`` if the cache has an entry for ``layer``."""

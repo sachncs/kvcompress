@@ -205,7 +205,7 @@ def enable_compression(
     )
     handle = CompressionHandle(adapter=adapter, model=model)
     # Wire the stats object so the patched DynamicCache can update it.
-    adapter.stats_ref = handle.stats  # type: ignore[assignment]
+    adapter.stats_ref = handle.stats
     adapter.enable()
     return handle
 

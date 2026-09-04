@@ -14,7 +14,7 @@ import pytest
 import torch
 
 from kvfold import Pass, Jolt
-from kvfold.adapters.vllm_offload import (
+from kvfold.adapter.vllm_offload import (
     Offload,
     EvictPool,
     is_vllm_offload_available,
@@ -27,7 +27,7 @@ def test_is_vllm_offload_available_returns_bool() -> None:
 
 def test_module_imports_without_vllm() -> None:
     """The module must import on systems without vLLM."""
-    import kvfold.adapters.vllm_offload  # noqa: F401
+    import kvfold.adapter.vllm_offload  # noqa: F401
 
 
 def test_handler_attributes() -> None:
@@ -204,7 +204,7 @@ def test_transfer_async_records_job_completion() -> None:
 
 def test_transfer_async_records_failure_on_exception() -> None:
     """A transfer_async that raises still enqueues a (job_id, success=False)."""
-    from kvfold.adapters import vllm_offload as mod
+    from kvfold.adapter import vllm_offload as mod
 
     comp = Pass(factor_dtype=torch.float32)
     handler = Offload(compressor=comp)

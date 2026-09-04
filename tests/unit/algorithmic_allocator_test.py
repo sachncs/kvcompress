@@ -22,7 +22,7 @@ import math
 
 import pytest
 
-from kvfold.core.allocator import (
+from kvfold.core.budget import (
     Cell,
     Bisect,
 )

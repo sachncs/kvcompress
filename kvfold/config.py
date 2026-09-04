@@ -51,8 +51,14 @@ class MethodConfig(ABC):
         """Raise :class:`MethodConfigError` if any field is out of range."""
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serialisable snapshot of this config."""
-        return dataclasses.asdict(self)  # type: ignore[arg-type]
+        """Return a JSON-serialisable snapshot of this config.
+
+        Iterates the concrete subclass's dataclass fields at runtime so
+        the abstract base does not need to be a dataclass itself.
+        """
+        if not dataclasses.is_dataclass(self):
+            raise TypeError(f"{type(self).__name__} is not a dataclass")
+        return {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "MethodConfig":
@@ -296,8 +302,8 @@ class MethodConfigRegistry:
             raise ValueError(f"method {name!r} is already registered to {self.entries[name].__name__}")
         if not issubclass(config_cls, MethodConfig):
             raise TypeError(f"{config_cls.__name__} must inherit from MethodConfig")
-        config_cls.registry = self  # type: ignore[attr-defined]
-        config_cls.method = name  # type: ignore[attr-defined]
+        config_cls.registry = self
+        config_cls.method = name
         self.entries[name] = config_cls
 
     def names(self) -> tuple[Method, ...]:
@@ -311,7 +317,7 @@ class MethodConfigRegistry:
             KeyError: If ``name`` is not registered.
         """
         try:
-            return self.entries[name]  # type: ignore[return-value]
+            return self.entries[name]
         except KeyError:
             raise KeyError(f"unknown method {name!r}; registered: {self.names()}") from None
 

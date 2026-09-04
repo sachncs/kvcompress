@@ -288,7 +288,7 @@ def import_kv(
         by_cell.setdefault((layer_idx, kind), {})[name] = t
 
     # Reconstruct K and V separately per cell.
-    reconstructed: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+    reconstructed: dict[int, tuple[torch.Tensor | None, torch.Tensor | None]] = {}
 
     from kvfold.core.tucker import (
         TuckerFactors,
@@ -365,7 +365,7 @@ def import_kv(
             continue
 
         if layer_idx not in reconstructed:
-            reconstructed[layer_idx] = (None, None)  # type: ignore[assignment]
+            reconstructed[layer_idx] = (None, None)
         k, v = reconstructed[layer_idx]
         if kind == "key":
             reconstructed[layer_idx] = (tensor, v)

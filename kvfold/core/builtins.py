@@ -60,7 +60,7 @@ class IntQuant(Compressor):
     method: str = "int_quant"
 
     def __init__(self, *, bits: int = 8, symmetric: bool = True, per_channel: bool = True, group_size: int | None = None) -> None:
-        from kvfold.core.quant import IntQuant as QuantImpl  # noqa: PLC0415
+        from kvfold.core.quant import IntQuant as QuantImpl
 
         self.bits = int(bits)
         if self.bits not in (2, 4, 8):

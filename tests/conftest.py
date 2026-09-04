@@ -7,7 +7,7 @@ Fixtures:
 - ``large_kv``     — (heads=8,  length=1024, head_dim=128) random K/V
 - ``kv_factory``   — parametric factory returning (K, V) at chosen shape
 - ``deterministic_seed`` — pins torch.manual_seed for the test
-- ``cache_factory``      — builds a CompressedKVCache with a stub compressor
+- ``cache_factory``      — builds a Cache with a stub compressor
 - ``compressor_factory`` — builds a Compressor for a given method name
 """
 

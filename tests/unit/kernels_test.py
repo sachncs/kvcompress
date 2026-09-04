@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.kernels.triton.compression import (
+from kvfold.kernel.triton.fused import (
     is_triton_available,
     jl_project,
     quantize_int8,
     tucker_reconstruct,
 )
-from kvfold.kernels.triton.tucker_reconstruct import triton_tucker_reconstruct
+from kvfold.kernel.triton.tucker import triton_tucker_reconstruct
 
 
 def test_is_triton_available() -> None:
@@ -60,7 +60,7 @@ def test_triton_tucker_reconstruct_fallback() -> None:
 
 def test_vllm_adapter_import_succeeds_without_vllm() -> None:
     """vllm adapter imports even when vllm is not installed."""
-    from kvfold.adapters.vllm import is_vllm_available
+    from kvfold.adapter.vllm import is_vllm_available
 
     # Either True or False; just check it doesn't raise.
     assert isinstance(is_vllm_available(), bool)

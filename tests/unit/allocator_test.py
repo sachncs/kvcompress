@@ -6,8 +6,7 @@ import math
 
 import pytest
 
-from kvfold.core.allocator import (
-    Allocation,
+from kvfold.core.budget import (
     Cell,
     Greedy,
     Bisect,

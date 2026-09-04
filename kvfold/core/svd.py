@@ -246,7 +246,9 @@ class DecomposerRegistry:
         if method == "exact":
             return Exact()
         if method == "randomised":
-            return Randomized(**kwargs)  # type: ignore[arg-type]
+            valid = {"oversampling", "n_power", "seed", "cap"}
+            filtered = {k: v for k, v in kwargs.items() if k in valid}
+            return Randomized(**filtered)
         raise ValueError(f"unknown decomposer method {method!r}")
 
 

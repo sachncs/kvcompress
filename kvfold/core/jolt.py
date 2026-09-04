@@ -38,6 +38,7 @@ from typing import Any
 import torch
 
 from kvfold.config import JoltConfig
+from kvfold.core.jl import Distribution
 from kvfold.core.budget import (
     Cell,
     Bisect,
@@ -63,6 +64,21 @@ from kvfold.core.tucker import (
 __all__ = ["Jolt"]
 
 log = logging.getLogger(__name__)
+
+
+_ALLOWED_DISTRIBUTIONS: tuple[Distribution, ...] = ("gaussian", "rademacher", "sparse")
+
+
+def _coerce_distribution(value: object) -> Distribution:
+    """Validate and narrow a distribution tag to the :data:`Distribution` literal.
+
+    Accepts the in-memory form (``"gaussian"`` / ``"rademacher"`` /
+    ``"sparse"``) and the legacy stringified form from older payloads.
+    Raises :class:`ValueError` for unknown values.
+    """
+    if value in _ALLOWED_DISTRIBUTIONS:
+        return value
+    raise ValueError(f"unknown distribution tag: {value!r}")
 
 
 @dataclass
@@ -112,7 +128,7 @@ class Jolt(Compressor):
         compression_ratio: float = 3.0,
         bits: tuple[int, ...] = (0, 2, 4, 8),
         dtype: torch.dtype = torch.float16,
-        jl_distribution: str = "gaussian",
+        jl_distribution: Distribution = "gaussian",
         allocator: Bisect | None = None,
         svd: SVD | None = None,
         symmetric_quant: bool = True,
@@ -320,14 +336,14 @@ class Jolt(Compressor):
                 residual_tensor,
                 bits=0,
                 seed=self.seed,
-                distribution=self.jl_distribution,  # type: ignore[arg-type]
+                distribution=self.jl_distribution,
             )
         else:
             residual = encode_residual(
                 residual_tensor,
                 bits=b,
                 seed=self.seed,
-                distribution=self.jl_distribution,  # type: ignore[arg-type]
+                distribution=self.jl_distribution,
                 symmetric=self.symmetric_quant,
                 per_channel=self.per_channel_quant,
                 group_size=self.group_size,
@@ -440,7 +456,7 @@ class Jolt(Compressor):
                 token_tail_mass=float(payload.metadata.get("tail_token_mass", 0.0)),
                 feature_tail_mass=float(payload.metadata.get("tail_feature_mass", 0.0)),
             ),
-            target_shape=payload.shape,  # type: ignore[arg-type]
+            target_shape=tuple(int(d) for d in payload.shape),
         )
 
         # Add residual if present.
@@ -451,7 +467,7 @@ class Jolt(Compressor):
             original_last = int(payload.data["residual_original_last"].item())
             residual = Residual(
                 projection_seed=int(payload.metadata["residual_seed"]),
-                projection_distribution=payload.metadata["residual_distribution"],  # type: ignore[arg-type]
+                projection_distribution=_coerce_distribution(payload.metadata["residual_distribution"]),
                 projection_sparsity=float(payload.metadata["residual_sparsity"]),
                 quant_dtype=quant_dtype,
                 symmetric=bool(payload.metadata["residual_symmetric"]),

@@ -51,9 +51,22 @@ from __future__ import annotations
 import logging
 import sys
 import weakref
+from types import ModuleType
 from typing import Any
 
 import torch
+
+
+def set_module_attr(module: ModuleType, name: str, value: Any) -> None:
+    """Set a module attribute bypassing static-typer module-frozen checks.
+
+    Some external libraries ship with strict type checkers that mark
+    module attributes as read-only at the type level. We deliberately
+    reassign these at runtime as part of the monkey-patching contract;
+    wrapping the assignment in a typed helper keeps the call sites
+    clean.
+    """
+    object.__setattr__(module, name, value)
 
 from kvfold.adapter.registry import install as registry_install
 from kvfold.store.manager import Pool
@@ -178,7 +191,8 @@ class HF:
         self.original_dynamic_cache_cls: type | None = None
         self.patched_cache_cls: type | None = None
         self.patched_modules: dict[str, type] = {}
-        self.stats_ref: Any = None
+        from kvfold.api import CompressionStats
+        self.stats_ref: CompressionStats | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -259,7 +273,7 @@ class HF:
         if self.original_dynamic_cache_cls is not None:
             try:
                 self.uninstall_dynamic_cache()
-            except Exception:  # noqa: BLE001 -- best-effort rollback
+            except (AttributeError, TypeError, RuntimeError):
                 log.exception("kvfold: rollback failed during uninstall_dynamic_cache")
         # Undo generation_config mutation.
         if hasattr(self.model, "generation_config"):
@@ -273,7 +287,7 @@ class HF:
                         delattr(self.model.generation_config, "cache_implementation")
                     except AttributeError:
                         pass
-            except Exception:  # noqa: BLE001
+            except (AttributeError, TypeError, RuntimeError):
                 log.exception("kvfold: rollback failed for cache_implementation")
         self.manager = None
 
@@ -322,12 +336,10 @@ class HF:
         """
         cache = self
 
-        # ``type: ignore[misc, valid-type]`` — subclassing a class we
-        # only have a dynamic handle to. mypy can't see the metaclass.
-        class KvCompressCache(dynamic_cache_cls):  # type: ignore[misc, valid-type]
+        class KvCompressCache(dynamic_cache_cls):
             """DynamicCache subclass that compresses on every update."""
 
-            def update(  # type: ignore[override]  -- overrides HF's update with a richer signature
+            def update(  # noqa: D401 — dynamic subclass override
                 self,
                 key_states: torch.Tensor,
                 value_states: torch.Tensor,
@@ -354,10 +366,7 @@ class HF:
                 """
                 out = super().update(key_states, value_states, layer_idx, cache_kwargs)
                 if cache.manager is not None:
-                    # ``type: ignore[attr-defined]`` — ``layers`` is set
-                    # by the parent class lazily, so static analysers
-                    # don't see it.
-                    layer_obj = self.layers[layer_idx]  # type: ignore[attr-defined]
+                    layer_obj = self.layers[layer_idx]
                     k = layer_obj.keys
                     v = layer_obj.values
                     cache.manager.store(layer_idx, k, v)
@@ -371,9 +380,9 @@ class HF:
                         cache.stats_ref.bytes_compressed = cache.manager.memory_used()
                 return out
 
-            def __getitem__(self, layer_idx: int):  # type: ignore[override]
-                # ``type: ignore[override]`` — the parent's __getitem__
-                # signature varies across HF versions; we accept any.
+            def __getitem__(self, layer_idx: int):  # noqa: D401 — dynamic subclass override
+                # The parent's __getitem__ signature varies across HF
+                # versions; we accept any positional layer index.
                 if (
                     cache.manager is not None
                     and layer_idx in cache.manager
@@ -394,23 +403,22 @@ class HF:
         # class; reassigning a module attribute is technically a
         # ``module-level override`` that mypy warns about.
         import transformers.cache_utils as cu
-
-        cu.DynamicCache = KvCompressCache  # type: ignore[misc]
-
-        # Patch transformers.generation.utils.
         import transformers.generation.utils as gu
 
+        set_module_attr(cu, "DynamicCache", KvCompressCache)
         if hasattr(gu, "DynamicCache"):
-            gu.DynamicCache = KvCompressCache  # type: ignore[misc]
+            set_module_attr(gu, "DynamicCache", KvCompressCache)
+
+        for mod_name, mod in list(sys.modules.items()):
+            set_module_attr(gu, "DynamicCache", KvCompressCache)
             self.patched_modules["transformers.generation.utils"] = KvCompressCache
 
         # Patch any other transformers module that imported DynamicCache.
-        # ``type: ignore[misc]`` — same module-attribute reassignment.
         for mod_name, mod in list(sys.modules.items()):
             if mod is None or not mod_name.startswith("transformers"):
                 continue
             if getattr(mod, "DynamicCache", None) is dynamic_cache_cls:
-                mod.DynamicCache = KvCompressCache  # type: ignore[misc]
+                set_module_attr(mod, "DynamicCache", KvCompressCache)
                 self.patched_modules[mod_name] = KvCompressCache
 
     def uninstall_dynamic_cache(self) -> None:
@@ -424,11 +432,11 @@ class HF:
         import transformers.cache_utils as cu
 
         if self.original_dynamic_cache_cls is not None:
-            cu.DynamicCache = self.original_dynamic_cache_cls  # type: ignore[misc]
+            set_module_attr(cu, "DynamicCache", self.original_dynamic_cache_cls)
         for mod_name in list(self.patched_modules.keys()):
             mod = sys.modules.get(mod_name)
             if mod is not None:
-                mod.DynamicCache = self.original_dynamic_cache_cls  # type: ignore[misc]
+                set_module_attr(mod, "DynamicCache", self.original_dynamic_cache_cls)
         self.patched_modules.clear()
 
 

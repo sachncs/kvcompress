@@ -10,14 +10,9 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.jl import (
-    CACHE.get_or_build,
-    clear_projection_cache,
-    gaussian_projection,
-    rademacher_projection,
-)
-from kvfold.core.quantization import (
-    IntQuantizer,
+from kvfold.core.jl import CACHE, Gaussian, Rademacher, Sparse
+from kvfold.core.quant import (
+    IntQuant,
     bit_packing_signed,
     bit_unpacking_signed,
     dequantize_tensor,
@@ -28,7 +23,7 @@ from kvfold.core.quantization import (
 
 @pytest.fixture(autouse=True)
 def clear_cache() -> None:
-    clear_projection_cache()
+    CACHE.clear()
 
 
 def test_jl_gaussian_norm_preservation() -> None:
@@ -37,7 +32,7 @@ def test_jl_gaussian_norm_preservation() -> None:
     """
     torch.manual_seed(0)
     dim = 64
-    proj = gaussian_projection(dim, dim, seed=0)
+    proj = CACHE.get_or_build(dim, dim, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
     # Average squared-norm ratio over many vectors.
     x = torch.randn(2048, dim)
     y = proj.apply(x)
@@ -52,7 +47,7 @@ def test_jl_rademacher_norm_preservation() -> None:
     """Same as above for the Rademacher (sign) distribution."""
     torch.manual_seed(0)
     dim = 64
-    proj = rademacher_projection(dim, dim, seed=0)
+    proj = CACHE.get_or_build(dim, dim, distribution="rademacher", seed=0, device="cpu", dtype=torch.float32)
     x = torch.randn(2048, dim)
     y = proj.apply(x)
     ratios = (y * y).sum(dim=-1) / (x * x).sum(dim=-1)
@@ -62,7 +57,7 @@ def test_jl_rademacher_norm_preservation() -> None:
 
 def test_jl_apply_shape_preservation() -> None:
     """``apply`` preserves shape on arbitrary input ranks."""
-    proj = gaussian_projection(8, 8, seed=0)
+    proj = CACHE.get_or_build(8, 8, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
     for shape in [(8,), (4, 8), (2, 3, 8), (1, 1, 4, 8)]:
         x = torch.randn(*shape)
         y = proj.apply(x)
@@ -74,7 +69,7 @@ def test_jl_projection_is_orthonormal_at_limit() -> None:
     approximately orthonormal (this is the JL lemma at the matrix level).
     """
     dim = 128
-    proj = gaussian_projection(dim, dim, seed=0)
+    proj = CACHE.get_or_build(dim, dim, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
     gram = proj.matrix.t() @ proj.matrix / dim
     # Off-diagonal elements should be small relative to the diagonal.
     off_diag = (gram - torch.diag(torch.diagonal(gram))).abs().mean()
@@ -85,20 +80,20 @@ def test_jl_projection_is_orthonormal_at_limit() -> None:
 
 
 def test_jl_cache_returns_same_object() -> None:
-    proj1 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
-    proj2 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
+    proj1 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
+    proj2 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
     assert proj1 is proj2
 
 
 def test_jl_cache_different_seeds_give_different_matrices() -> None:
-    a = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
-    b = CACHE.get_or_build(8, 16, distribution="gaussian", seed=1)
+    a = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
+    b = CACHE.get_or_build(8, 16, distribution="gaussian", seed=1, device="cpu", dtype=torch.float32)
     assert not torch.allclose(a.matrix, b.matrix)
 
 
 def test_jl_distribution_switch_yields_different_matrices() -> None:
-    g = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0)
-    r = CACHE.get_or_build(8, 16, distribution="rademacher", seed=0)
+    g = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
+    r = CACHE.get_or_build(8, 16, distribution="rademacher", seed=0, device="cpu", dtype=torch.float32)
     assert not torch.allclose(g.matrix, r.matrix)
 
 
@@ -109,7 +104,7 @@ def test_quant_error_bounded_by_one_bin() -> None:
     torch.manual_seed(0)
     x = torch.randn(8, 16) * 4.0
     for bits in (2, 4, 8):
-        q = IntQuantizer(bits=bits, symmetric=True, per_channel=True)
+        q = IntQuant(bits=bits, symmetric=True, per_channel=True)
         payload = quantize_tensor(x, dtype=f"int{bits}", symmetric=True, per_channel=True)
         packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
         x_hat = q.dequantize(
@@ -135,7 +130,7 @@ def test_quant_error_bounded_by_one_bin_asymmetric() -> None:
     torch.manual_seed(0)
     x = torch.randn(4, 8) * 4.0
     for bits in (2, 4, 8):
-        q = IntQuantizer(bits=bits, symmetric=False, per_channel=True)
+        q = IntQuant(bits=bits, symmetric=False, per_channel=True)
         payload = quantize_tensor(x, dtype=f"int{bits}", symmetric=False, per_channel=True)
         packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
         x_hat = q.dequantize(
@@ -173,7 +168,7 @@ def test_packing_unpacking_roundtrip_per_bit_width() -> None:
 
 def test_quantizer_dispatch_returns_int_quantizer() -> None:
     q = get_quantizer("int4")
-    assert isinstance(q, IntQuantizer)
+    assert isinstance(q, IntQuant)
     assert q.bits == 4
     q2 = get_quantizer("int4", symmetric=False, per_channel=False, group_size=4)
     assert q2.symmetric is False
@@ -195,7 +190,7 @@ def test_quant_registry_survives_shape_change() -> None:
     """Regression test: the cached quantizer must serve payloads of
     different ``dh`` without corrupting outputs.
 
-    Previously ``IntQuantizer`` stored ``last_dim_hint`` on the cached
+    Previously ``IntQuant`` stored ``last_dim_hint`` on the cached
     instance; a quantizer reused for two payloads of different ``dh``
     would unpack the second at the first's width. The fix moves
     ``original_last`` to an explicit kwarg so the registry stays pure.
@@ -221,7 +216,7 @@ def test_quant_round_trip_converges_for_smooth_signals() -> None:
     """
     x = torch.linspace(-3, 3, 100).unsqueeze(0)
     for bits in (4, 8):
-        q = IntQuantizer(bits=bits, symmetric=True, per_channel=True)
+        q = IntQuant(bits=bits, symmetric=True, per_channel=True)
         payload = quantize_tensor(x, dtype=f"int{bits}", symmetric=True, per_channel=True)
         packed, scale, zp = payload["q"], payload["scale"], payload["zero_point"]
         x_hat = q.dequantize(
@@ -246,8 +241,8 @@ def test_quant_per_group_smaller_error_than_per_tensor() -> None:
             torch.linspace(0, 1, 50) * 10.0,  # large range
         ]
     ).unsqueeze(0)
-    q_per_tensor = IntQuantizer(bits=4, symmetric=True, per_channel=False)
-    q_per_group = IntQuantizer(bits=4, symmetric=True, per_channel=False, group_size=20)
+    q_per_tensor = IntQuant(bits=4, symmetric=True, per_channel=False)
+    q_per_group = IntQuant(bits=4, symmetric=True, per_channel=False, group_size=20)
     p1_t = quantize_tensor(x, dtype="int4", symmetric=True, per_channel=False)
     p2_g = quantize_tensor(x, dtype="int4", symmetric=True, per_channel=False, group_size=20)
     err_t = (

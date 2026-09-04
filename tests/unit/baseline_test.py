@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.lowrank import Low
-from kvfold.core.quantization_only import IntQuant
+from kvfold.core.low import Low
+from kvfold.core.int_quant import IntQuant
 
 
 @pytest.fixture

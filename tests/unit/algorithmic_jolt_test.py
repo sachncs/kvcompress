@@ -11,7 +11,7 @@ import math
 
 import torch
 
-from kvfold.core.flashjolt import FlashJolt, flashjolt_cap
+from kvfold.core.flash import Flash, LinearCap
 from kvfold.core.jolt import Jolt
 
 
@@ -93,7 +93,7 @@ def test_flashjolt_short_context_matches_exact_jolt() -> None:
     K = torch.randn(2, 256, 32)
     V = torch.randn(2, 256, 32)
     jolt = Jolt(compression_ratio=3.0, bits=(0, 4, 8))
-    fjolt = FlashJolt(compression_ratio=3.0, bits=(0, 4, 8))
+    fjolt = Flash(compression_ratio=3.0, bits=(0, 4, 8))
     kp_j, vp_j = jolt.compress(K, V)
     kp_f, vp_f = fjolt.compress(K, V)
     K_j, V_j = jolt.decompress(kp_j, vp_j)
@@ -111,12 +111,12 @@ def test_flashjolt_at_long_context_uses_cap() -> None:
     """At long contexts (T > 1024), FlashJoLT's cap policy should
     actually apply — verify the q_cap is bounded.
     """
-    assert flashjolt_cap(2048, 3.0) == 64
-    assert flashjolt_cap(8192, 3.0) == 256
-    assert flashjolt_cap(32768, 3.0) == 512  # capped
+    assert LinearCap().cap(2048, 3.0) == 64
+    assert LinearCap().cap(8192, 3.0) == 256
+    assert LinearCap().cap(32768, 3.0) == 512  # capped
     # At T ≤ 1024, cap == q_min (no-op policy).
-    assert flashjolt_cap(512, 3.0) == 32
-    assert flashjolt_cap(1024, 3.0) == 32
+    assert LinearCap().cap(512, 3.0) == 32
+    assert LinearCap().cap(1024, 3.0) == 32
 
 
 def test_jolt_full_rank_reconstructs_input() -> None:

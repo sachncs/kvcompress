@@ -65,7 +65,7 @@ QuantDType = Literal["fp16", "bf16", "fp8_e4m3", "fp8_e5m2", "int8", "int4", "in
 class Quantizer(Protocol):
     """Quantize / dequantize a tensor with the same dtype on both sides."""
 
-    name: QuantDType
+    name: str
 
     def quantize(
         self,
@@ -95,7 +95,7 @@ class Quantizer(Protocol):
 class FloatCast:
     """Casts to a low-precision float and back; scale is always 1.0."""
 
-    name: QuantDType = "fp16"
+    name: str = "fp16"
 
     def __post_init__(self) -> None:
         if self.name == "fp16":
@@ -306,7 +306,7 @@ class IntQuant:
 
     @property
     def name(self) -> str:
-        return f"int{self.bits}"  # type: ignore[return-value]
+        return f"int{self.bits}"
 
     def quantize(
         self,
@@ -484,7 +484,7 @@ def get_quantizer(
         key = f"float:{name}"
         return get_or_create(
             key,
-            lambda: FloatCast(name=name),  # type: ignore[arg-type]
+            lambda: FloatCast(name=name),
         )
     if name in ("int2", "int4", "int8"):
         bits = int(name[3:])
