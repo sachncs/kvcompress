@@ -60,7 +60,7 @@ def test_compress_help(runner: CliRunner) -> None:
 
 def test_compress_help_lists_supported_methods(runner: CliRunner) -> None:
     result = runner.invoke(cli.app, ["compress", "--help"])
-    assert "flashjolt" in result.stdout
+    assert "flash" in result.stdout
     assert "jolt" in result.stdout
 
 

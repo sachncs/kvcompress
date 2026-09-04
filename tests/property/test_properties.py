@@ -101,7 +101,7 @@ def test_jolt_compressor_handles_arbitrary_shapes(m: int, T: int, dh: int) -> No
     rank_d = min(dh // 2, 4)
     K = make_smooth_tensor(m, T, dh, rank_T, rank_d)
     V = make_smooth_tensor(m, T, dh, rank_T, rank_d)
-    comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 4, 8))
+    comp = JoLTCompressor(ratio=2.0, bits=(0, 4, 8))
     kp, vp = comp.compress(K, V)
     k_hat, v_hat = comp.decompress(kp, vp)
     assert k_hat.shape == K.shape
@@ -122,7 +122,7 @@ def test_jolt_roundtrip_is_bounded() -> None:
     torch.manual_seed(0)
     K = make_smooth_tensor(m=2, T=64, dh=16, rank_T=8, rank_d=4)
     V = make_smooth_tensor(m=2, T=64, dh=16, rank_T=8, rank_d=4)
-    comp = JoLTCompressor(compression_ratio=2.0, bits=(0, 4, 8))
+    comp = JoLTCompressor(ratio=2.0, bits=(0, 4, 8))
     kp, vp = comp.compress(K, V)
     k_hat, v_hat = comp.decompress(kp, vp)
     rel_err = torch.linalg.norm(K - k_hat) / torch.linalg.norm(K)

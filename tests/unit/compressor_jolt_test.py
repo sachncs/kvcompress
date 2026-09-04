@@ -22,9 +22,9 @@ def test_jolt_compress_decompress_roundtrip(
     small_kv: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
     k, v = small_kv
-    comp = Jolt(compression_ratio=2.0, bits=(0, 4, 8))
+    comp = Jolt(ratio=2.0, bits=(0, 4, 8))
     k_p, v_p = comp.compress(k, v)
-    k_hat, v_hat = comp.decompress(k_p, v_p)
+    k_hat, v_hat = comp.restore(k_p, v_p)
     assert k_hat.shape == k.shape
     assert v_hat.shape == v.shape
     # Relative Frobenius error should be bounded (not exact).
@@ -34,11 +34,11 @@ def test_jolt_compress_decompress_roundtrip(
     assert rel_err_v < 1.0
 
 
-def test_jolt_compression_ratio_metadata(
+def test_jolt_ratio_metadata(
     small_kv: tuple[torch.Tensor, torch.Tensor],
 ) -> None:
     k, v = small_kv
-    comp = Jolt(compression_ratio=3.0)
+    comp = Jolt(ratio=3.0)
     k_p, v_p = comp.compress(k, v)
     assert "r_token" in k_p.metadata
     assert "r_feature" in k_p.metadata
@@ -47,7 +47,7 @@ def test_jolt_compression_ratio_metadata(
 
 def test_jolt_bytes_reduced(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     k, v = small_kv
-    comp = Jolt(compression_ratio=2.0, bits=(4, 8))
+    comp = Jolt(ratio=2.0, bits=(4, 8))
     k_p, v_p = comp.compress(k, v)
     original = k.numel() * k.element_size() * 2
     compressed = k_p.bytes_compressed + v_p.bytes_compressed
@@ -57,15 +57,15 @@ def test_jolt_bytes_reduced(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None
 def test_jolt_works_with_bits_zero(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     """Allocator can pick bits=0 (no residual); should still round-trip."""
     k, v = small_kv
-    comp = Jolt(compression_ratio=8.0, bits=(0, 2, 4))
+    comp = Jolt(ratio=8.0, bits=(0, 2, 4))
     k_p, v_p = comp.compress(k, v)
-    k_hat, v_hat = comp.decompress(k_p, v_p)
+    k_hat, v_hat = comp.restore(k_p, v_p)
     assert k_hat.shape == k.shape
 
 
 def test_jolt_payload_stats(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     k, v = small_kv
-    comp = Jolt(compression_ratio=2.0)
+    comp = Jolt(ratio=2.0)
     comp.compress(k, v)
     s = comp.stats()
     assert "call_count" in s
@@ -76,12 +76,12 @@ def test_jolt_payload_stats(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None
 
 
 def test_jolt_invalid_ratio() -> None:
-    with pytest.raises(ValueError, match="compression_ratio"):
-        Jolt(compression_ratio=0.5)
+    with pytest.raises(ValueError, match="ratio"):
+        Jolt(ratio=0.5)
 
 
 def test_jolt_shape_mismatch() -> None:
-    comp = Jolt(compression_ratio=2.0)
+    comp = Jolt(ratio=2.0)
     k = torch.randn(4, 16, 8)
     v = torch.randn(4, 8, 8)  # wrong
     with pytest.raises(ValueError, match="K/V shape"):
@@ -89,7 +89,7 @@ def test_jolt_shape_mismatch() -> None:
 
 
 def test_jolt_non_3d_raises() -> None:
-    comp = Jolt(compression_ratio=2.0)
+    comp = Jolt(ratio=2.0)
     k = torch.randn(4, 16)
     v = torch.randn(4, 16)
     with pytest.raises(ValueError, match="3-D"):
@@ -97,7 +97,7 @@ def test_jolt_non_3d_raises() -> None:
 
 
 def test_jolt_method_name() -> None:
-    comp = Jolt(compression_ratio=2.0)
+    comp = Jolt(ratio=2.0)
     assert comp.name == "jolt"
     assert comp.stats()["method"] == "jolt"
 
@@ -111,35 +111,35 @@ def test_flash_cap_policy() -> None:
     assert LinearCap().cap(32768, 3.0) == 512  # ⌈32768/32⌉ = 1024, capped at 512
 
 
-def test_flashjolt_compress_decompress() -> None:
+def test_flash_compress_decompress() -> None:
     torch.manual_seed(0)
     k = torch.randn(4, 64, 16, dtype=torch.float32)
     v = torch.randn(4, 64, 16, dtype=torch.float32)
-    comp = Flash(compression_ratio=2.0, bits=(0, 4, 8))
+    comp = Flash(ratio=2.0, bits=(0, 4, 8))
     k_p, v_p = comp.compress(k, v)
-    k_hat, v_hat = comp.decompress(k_p, v_p)
+    k_hat, v_hat = comp.restore(k_p, v_p)
     assert k_hat.shape == k.shape
     assert v_hat.shape == v.shape
 
 
-def test_flashjolt_method_name() -> None:
-    comp = Flash(compression_ratio=2.0)
-    assert comp.name == "flashjolt"
+def test_flash_method_name() -> None:
+    comp = Flash(ratio=2.0)
+    assert comp.name == "flash"
 
 
-def test_flashjolt_speedup_no_quality_loss() -> None:
+def test_flash_speedup_no_quality_loss() -> None:
     """Flash and exact JoLT should give similar reconstructions."""
     torch.manual_seed(0)
     k = torch.randn(4, 64, 16, dtype=torch.float32)
     v = torch.randn(4, 64, 16, dtype=torch.float32)
 
-    comp_exact = Jolt(compression_ratio=3.0, bits=(0, 4, 8))
-    comp_fast = Flash(compression_ratio=3.0, bits=(0, 4, 8))
+    comp_exact = Jolt(ratio=3.0, bits=(0, 4, 8))
+    comp_fast = Flash(ratio=3.0, bits=(0, 4, 8))
 
     kp_e, vp_e = comp_exact.compress(k, v)
     kp_f, vp_f = comp_fast.compress(k, v)
-    k_e, v_e = comp_exact.decompress(kp_e, vp_e)
-    k_f, v_f = comp_fast.decompress(kp_f, vp_f)
+    k_e, v_e = comp_exact.restore(kp_e, vp_e)
+    k_f, v_f = comp_fast.restore(kp_f, vp_f)
     err_e_k = (torch.linalg.norm(k - k_e) / torch.linalg.norm(k)).item()
     err_f_k = (torch.linalg.norm(k - k_f) / torch.linalg.norm(k)).item()
     # Flash should be within slack of exact.

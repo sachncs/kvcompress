@@ -69,7 +69,7 @@ def test_mode_n_unfold_invertible() -> None:
         )
 
 
-def test_full_rank_tucker_is_identity() -> None:
+def test_full_rank_tucker_is_pass() -> None:
     """A tensor of rank ``(T, d)`` reconstructed with full ranks equals the input."""
     torch.manual_seed(0)
     X, _ = make_rank_r_tensor(m=4, T=16, dh=8, rank_T=12, rank_d=6)
@@ -79,8 +79,8 @@ def test_full_rank_tucker_is_identity() -> None:
     assert rel_err < 1e-4, f"full-rank reconstruction error too high: {rel_err}"
 
 
-def test_st_hosvd_reconstruction_close_to_identity_at_full_rank() -> None:
-    """ST-HOSVD with full ranks is *not* the identity: it uses sequential
+def test_st_hosvd_reconstruction_close_to_pass_at_full_rank() -> None:
+    """ST-HOSVD with full ranks is *not* the pass: it uses sequential
     truncation which is an approximation of HOSVD. The reconstruction
     error is bounded by the spectral numerics; for a typical tensor
     it's well below 5% even when no truncation is requested.
@@ -157,7 +157,7 @@ def test_truncation_increases_error_monotonically() -> None:
 
 
 def test_mode_pinning_preserves_head_axis() -> None:
-    """The head/layer mode is *pinned* to identity: shuffling mode-0
+    """The head/layer mode is *pinned* to pass: shuffling mode-0
     doesn't change the reconstruction error."""
     torch.manual_seed(0)
     X = torch.randn(2, 16, 8)
@@ -166,7 +166,7 @@ def test_mode_pinning_preserves_head_axis() -> None:
     err_original = torch.linalg.norm(X - X_hat) / torch.linalg.norm(X)
 
     # Permute mode-0 of X; the error should be the same because the
-    # ST-HOSVD mode-0 basis is identity (per the paper's "mode pinning"
+    # ST-HOSVD mode-0 basis is pass (per the paper's "mode pinning"
     # design).
     perm = torch.tensor([1, 0])
     X_perm = X[perm]

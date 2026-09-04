@@ -65,7 +65,7 @@ def test_install_dispatches() -> None:
     from kvfold.store.manager import Pool
     from kvfold.core.jolt import Jolt
 
-    mgr = Pool(compressor=Jolt(compression_ratio=3.0))
+    mgr = Pool(compressor=Jolt(ratio=3.0))
     # Should not raise.
     install(model_type="llama", model=model, cache_manager=mgr)
 
@@ -75,14 +75,14 @@ def test_install_unknown_uses_generic() -> None:
     from kvfold.store.manager import Pool
     from kvfold.core.jolt import Jolt
 
-    mgr = Pool(compressor=Jolt(compression_ratio=3.0))
+    mgr = Pool(compressor=Jolt(ratio=3.0))
     # Should not raise even though no shim exists.
     install(model_type="nonexistent", model=model, cache_manager=mgr)
 
 
 def test_enable_compression_on_fake_model() -> None:
     model = FakeModel("llama")
-    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    handle = enable_compression(model, method="flash", ratio=2.0)
     try:
         assert isinstance(handle, CompressionHandle)
         assert handle.model is model
@@ -92,7 +92,7 @@ def test_enable_compression_on_fake_model() -> None:
 
 def test_enable_compression_disables() -> None:
     model = FakeModel("mistral")
-    handle = enable_compression(model, method="jolt", compression_ratio=3.0)
+    handle = enable_compression(model, method="jolt", ratio=3.0)
     handle.disable()
     # No assertion on internal state; just that it doesn't raise.
 
@@ -119,11 +119,11 @@ def test_target_memory_parses() -> None:
 
 def test_handle_stats_dict() -> None:
     model = FakeModel("qwen2")
-    handle = enable_compression(model, method="flashjolt", target_memory="33%")
+    handle = enable_compression(model, method="flash", target_memory="33%")
     try:
         d = handle.stats_dict()
         assert "compress_calls" in d
-        assert "compression_ratio" in d
+        assert "ratio" in d
     finally:
         handle.disable()
 
@@ -131,7 +131,7 @@ def test_handle_stats_dict() -> None:
 def test_enable_compression_unknown_method_raises() -> None:
     model = FakeModel("llama")
     with pytest.raises(NotImplementedError, match="not supported"):
-        enable_compression(model, method="not-a-method", compression_ratio=2.0)
+        enable_compression(model, method="not-a-method", ratio=2.0)
 
 
 def test_enable_disables_leak_free_when_no_prior_attr() -> None:
@@ -139,7 +139,7 @@ def test_enable_disables_leak_free_when_no_prior_attr() -> None:
     behind on a generation_config that didn't have the attribute.
     """
     model = FakeModel("llama", has_cache_impl=False)
-    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    handle = enable_compression(model, method="flash", ratio=2.0)
     assert model.generation_config.cache_implementation == "dynamic"
     handle.disable()
     assert not hasattr(model.generation_config, "cache_implementation")
@@ -160,7 +160,7 @@ def test_enable_restores_prior_cache_implementation() -> None:
         generation_config = GenConfig()
 
     model = Model()
-    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    handle = enable_compression(model, method="flash", ratio=2.0)
     assert model.generation_config.cache_implementation == "dynamic"
     handle.disable()
     assert model.generation_config.cache_implementation == "static"
@@ -171,17 +171,17 @@ def test_double_enable_raises_runtime_error() -> None:
     ``RuntimeError`` instead of silently no-oping.
     """
     model = FakeModel("llama")
-    h1 = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    h1 = enable_compression(model, method="flash", ratio=2.0)
     try:
         with pytest.raises(RuntimeError, match="already"):
-            enable_compression(model, method="jolt", compression_ratio=3.0)
+            enable_compression(model, method="jolt", ratio=3.0)
     finally:
         h1.disable()
 
 
 def test_handle_is_active_property() -> None:
     model = FakeModel("llama")
-    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    handle = enable_compression(model, method="flash", ratio=2.0)
     assert handle.is_active is True
     handle.disable()
     assert handle.is_active is False
@@ -190,7 +190,7 @@ def test_handle_is_active_property() -> None:
 def test_disable_is_idempotent() -> None:
     """Calling ``disable()`` twice doesn't raise."""
     model = FakeModel("llama")
-    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    handle = enable_compression(model, method="flash", ratio=2.0)
     handle.disable()
     handle.disable()  # no-op
     assert handle.is_active is False
@@ -220,8 +220,8 @@ def test_enable_rolls_back_on_failure() -> None:
     model = FakeModel("llama", has_cache_impl=False)
     adapter = HF(
         model=model,
-        method="flashjolt",
-        compression_ratio=2.0,
+        method="flash",
+        ratio=2.0,
     )
     try:
         with pytest.raises(RuntimeError, match="simulated"):

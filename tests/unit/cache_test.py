@@ -8,17 +8,14 @@ import torch
 from kvfold.store.compress import Cache
 from kvfold.store.manager import Pool
 from kvfold.store.metadata import Meta, LayerMeta
-from kvfold.core.base import (
-    Payload,
-    Stats,
-    Compressor,
-)
+from kvfold.core.base import Payload, Stats
+from kvfold.core.identity import Pass
 
 
-class Identity(Compressor):
+class Identity(Pass):
     """Test compressor that stores K and V as fp16 with no actual compression."""
 
-    name = "identity-test"
+    name = "pass-test"
 
     def __init__(self) -> None:
         super().__init__()
@@ -26,7 +23,7 @@ class Identity(Compressor):
 
     def compress(self, key: torch.Tensor, value: torch.Tensor):
         kp = Payload(
-            method="identity-test",
+            method="pass-test",
             shape=tuple(key.shape),
             dtype=key.dtype,
             metadata={"r_token": 0, "r_feature": 0, "bits": 0},
@@ -34,7 +31,7 @@ class Identity(Compressor):
             stats=Stats(bytes_original=key.numel() * key.element_size()),
         )
         vp = Payload(
-            method="identity-test",
+            method="pass-test",
             shape=tuple(value.shape),
             dtype=value.dtype,
             metadata={"r_token": 0, "r_feature": 0, "bits": 0},
@@ -44,7 +41,7 @@ class Identity(Compressor):
         self.calls += 1
         return kp, vp
 
-    def decompress(self, kp: Payload, vp: Payload):
+    def restore(self, kp: Payload, vp: Payload):
         return kp.data["value"].to(kp.dtype), vp.data["value"].to(vp.dtype)
 
 
@@ -124,7 +121,7 @@ def test_stats(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     assert s["n_layers"] == 1
     assert "bytes_original" in s
     assert "bytes_compressed" in s
-    assert s["method"] == "identity-test"
+    assert s["method"] == "pass-test"
 
 
 def test_metadata(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
@@ -147,7 +144,7 @@ def test_payload_access(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -
     cache = Cache(compressor=comp)
     cache.store(layer=0, key=kv[0], value=kv[1])
     p = cache.payload(0, "key")
-    assert p.method == "identity-test"
+    assert p.method == "pass-test"
     with pytest.raises(ValueError, match="kind"):
         cache.payload(0, "weird")
 
@@ -156,9 +153,8 @@ def test_metadata_layer_roundtrip() -> None:
     meta = Meta(
         method="jolt",
         dtype="float16",
-        layer_groups=1,
-        bits_allowed=(0, 2, 4, 8),
     )
+
     meta.add_layer(
         LayerMeta(
             layer=0,
@@ -173,6 +169,7 @@ def test_metadata_layer_roundtrip() -> None:
             bytes_compressed=2048,
         )
     )
+
     d = meta.to_dict()
     meta2 = Meta.from_dict(d)
     assert meta2.method == "jolt"

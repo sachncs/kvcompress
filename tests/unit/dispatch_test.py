@@ -46,9 +46,9 @@ def test_supported_methods_is_complete() -> None:
     """Every entry in :data:`METHODS` is reachable from ``supported_methods``."""
     methods = supported_methods()
     assert set(methods) == set(REGISTRY.entries.keys())
-    # README documents 9 methods (jolt/flashjolt/lowrank/int2/int4/int8/fp8/fp16/identity).
+    # README documents 9 methods (jolt/flash/low/int2/int4/int8/fp8/fp16/pass).
     # We added bf16 on top; ensure at least the documented set is present.
-    required = {"jolt", "flashjolt", "lowrank", "int2", "int4", "int8", "fp8", "fp16", "identity"}
+    required = {"jolt", "flash", "low", "int2", "int4", "int8", "fp8", "fp16", "pass"}
     assert required.issubset(set(methods))
 
 
@@ -69,24 +69,24 @@ def test_int_methods_allow_caller_bits_override() -> None:
     assert c.bits == 8
 
 
-def test_lowrank_forwards_rank() -> None:
-    c = build_compressor("lowrank", rank=128)
+def test_low_forwards_rank() -> None:
+    c = build_compressor("low", rank=128)
     assert c.rank == 128
 
 
 def test_fp16_forces_dtype() -> None:
     c = build_compressor("fp16")
-    assert c.factor_dtype == torch.float16
+    assert c.dtype == torch.float16
 
 
 def test_bf16_forces_dtype() -> None:
     c = build_compressor("bf16")
-    assert c.factor_dtype == torch.bfloat16
+    assert c.dtype == torch.bfloat16
 
 
-def test_jolt_forwards_compression_ratio() -> None:
-    c = build_compressor("jolt", compression_ratio=4.0)
-    assert c.compression_ratio == pytest.approx(4.0)
+def test_jolt_forwards_ratio() -> None:
+    c = build_compressor("jolt", ratio=4.0)
+    assert c.ratio == pytest.approx(4.0)
 
 
 # ---------------------------------------------------------------------------
@@ -105,10 +105,10 @@ def test_unknown_kwarg_raises_with_actionable_message() -> None:
         build_compressor("int4", per_chanel=True)
 
 
-def test_int_kwargs_rejected_on_identity() -> None:
+def test_int_kwargs_rejected_on_pass() -> None:
     """``per_channel`` is meaningless for Pass — reject."""
     with pytest.raises(ValueError, match="unexpected kwargs"):
-        build_compressor("identity", per_channel=True)
+        build_compressor("pass", per_channel=True)
 
 
 def test_method_is_case_insensitive() -> None:
@@ -123,7 +123,7 @@ def test_method_is_case_insensitive() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("method", ["jolt", "flashjolt", "lowrank", "int2", "int4", "int8"])
+@pytest.mark.parametrize("method", ["jolt", "flash", "low", "int2", "int4", "int8"])
 def test_round_trip_on_tiny_tensor(method: str) -> None:
     """Each method's ``compress``/``decompress`` returns the right shape.
 
@@ -134,14 +134,14 @@ def test_round_trip_on_tiny_tensor(method: str) -> None:
     torch.manual_seed(0)
     k = torch.randn(2, 8, 4)
     v = torch.randn(2, 8, 4)
-    if method in ("jolt", "flashjolt"):
-        c = build_compressor(method, compression_ratio=2.0)
-    elif method == "lowrank":
+    if method in ("jolt", "flash"):
+        c = build_compressor(method, ratio=2.0)
+    elif method == "low":
         c = build_compressor(method, rank=4)
     else:
         c = build_compressor(method)
     kp, vp = c.compress(k, v)
-    k_hat, v_hat = c.decompress(kp, vp)
+    k_hat, v_hat = c.restore(kp, vp)
     assert k_hat.shape == k.shape
     assert v_hat.shape == v.shape
     assert k_hat.dtype == k.dtype

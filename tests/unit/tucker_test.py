@@ -50,7 +50,7 @@ def test_partial_tucker_reconstruction_improves_with_rank(
     assert err_high < err_low
 
 
-def test_full_rank_is_identity(tensor: torch.Tensor) -> None:
+def test_full_rank_is_pass(tensor: torch.Tensor) -> None:
     m, t, d = tensor.shape
     factors = partial_tucker_st_hosvd(tensor, r_token=t, r_feature=d)
     x_hat = reconstruct_partial_tucker(factors, tensor.shape)

@@ -32,7 +32,7 @@ def test_module_imports_without_vllm() -> None:
 
 def test_handler_attributes() -> None:
     """The handler exposes the expected public attributes."""
-    comp = Jolt(compression_ratio=3.0)
+    comp = Jolt(ratio=3.0)
     handler = Offload(compressor=comp, block_shape=(4, 2, 16, 8))
     assert handler.name == "jolt-offload"
     assert hasattr(handler, "compress_block")
@@ -49,7 +49,7 @@ def test_handler_instantiation_with_real_vllm() -> None:
     and binds it into the MRO via __getattr__ forwarding.
     """
     pytest.importorskip("vllm")
-    comp = Jolt(compression_ratio=3.0)
+    comp = Jolt(ratio=3.0)
     handler = Offload(compressor=comp)
     assert handler.name == "jolt-offload"
     assert handler.base_class is not None
@@ -69,7 +69,7 @@ def test_handler_instantiation_without_vllm() -> None:
             raise ImportError(f"simulated missing module: {name}")
         return real_import(name, *args, **kwargs)
 
-    comp = Jolt(compression_ratio=3.0)
+    comp = Jolt(ratio=3.0)
     builtins.__import__ = fake_import
     try:
         handler = Offload(compressor=comp)
@@ -110,7 +110,7 @@ def test_thread_safe_pool_round_trip() -> None:
 
 def test_compress_decompress_round_trip_separates_kv() -> None:
     """Regression: compress_block must not store K as both K and V."""
-    comp = Pass(factor_dtype=torch.float32)
+    comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
     # vLLM's standard layout: (num_layers, num_kv, T, dh).
     torch.manual_seed(0)
@@ -123,7 +123,7 @@ def test_compress_decompress_round_trip_separates_kv() -> None:
     for layer in range(num_layers):
         assert (layer, "key") in stored
         assert (layer, "value") in stored
-        # K and V payloads must differ (identity keeps them distinct).
+        # K and V payloads must differ (pass keeps them distinct).
         assert not torch.equal(
             stored[(layer, "key")].data["value"],
             stored[(layer, "value")].data["value"],
@@ -139,7 +139,7 @@ def test_compress_decompress_round_trip_separates_kv() -> None:
 
 def test_compress_block_handles_tuple_input() -> None:
     """Accepts ``(K_block, V_block)`` tuple as well as the 4-D tensor."""
-    comp = Pass(factor_dtype=torch.float32)
+    comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
     torch.manual_seed(0)
     K_orig = torch.randn(2, 4, 8)
@@ -163,7 +163,7 @@ def test_compress_block_rejects_unknown_layout() -> None:
 
 def test_decompress_block_returns_list_of_tuples_for_list_input() -> None:
     """vLLM may pass a list of layer indices; we return one (K, V) per layer."""
-    comp = Pass(factor_dtype=torch.float32)
+    comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
     torch.manual_seed(0)
     K_orig = torch.randn(3, 4, 8)
@@ -182,7 +182,7 @@ def test_decompress_block_returns_list_of_tuples_for_list_input() -> None:
 
 def test_transfer_async_records_job_completion() -> None:
     """A successful transfer_async enqueues a finished job; get_finished drains."""
-    comp = Pass(factor_dtype=torch.float32)
+    comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
 
     class _FakeSpec:
@@ -206,7 +206,7 @@ def test_transfer_async_records_failure_on_exception() -> None:
     """A transfer_async that raises still enqueues a (job_id, success=False)."""
     from kvfold.adapter import vllm_offload as mod
 
-    comp = Pass(factor_dtype=torch.float32)
+    comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
 
     # Force run_transfer to raise.
@@ -228,7 +228,7 @@ def test_transfer_async_records_failure_on_exception() -> None:
 def test_wait_returns_when_jobs_finish() -> None:
     """``wait`` polls and returns once all requested job IDs are in
     the finished list."""
-    comp = Pass(factor_dtype=torch.float32)
+    comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
 
     class _FakeSpec:
@@ -241,7 +241,7 @@ def test_wait_returns_when_jobs_finish() -> None:
 
 def test_wait_times_out_on_missing_jobs() -> None:
     """``wait`` returns on timeout instead of looping forever."""
-    comp = Pass(factor_dtype=torch.float32)
+    comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
     # The default 60s deadline is too long for tests; monkey-patch.
     import time as _time

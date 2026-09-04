@@ -176,7 +176,7 @@ class Cache:
             raise KeyError(f"layer {layer} not in cache")
         if entry.key is None or entry.value is None:
             raise KeyError(f"layer {layer} is not fully populated")
-        k, v = self.compressor.decompress(entry.key, entry.value)
+        k, v = self.compressor.restore(entry.key, entry.value)
         if self.device is not None:
             k = k.to(self.device)
             v = v.to(self.device)

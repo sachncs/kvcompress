@@ -54,7 +54,7 @@ def test_validate_callable() -> None:
     validate_fn(skip_hf=True)
 
 
-def test_validate_reports_flashjolt_callable() -> None:
+def test_validate_reports_flash_callable() -> None:
     """Direct call: validate() runs both JoLT and Flash paths."""
     from kvfold.cli import validate as validate_fn
 
@@ -73,7 +73,7 @@ def test_validate_runs_synthetic_round_trip() -> None:
     assert "kvfold validate: OK" in result.stdout
 
 
-def test_validate_reports_flashjolt_error() -> None:
+def test_validate_reports_flash_error() -> None:
     """The validate command runs Flash too and reports its rel_err."""
     result = runner.invoke(app, ["validate", "--skip-hf"])
     assert result.exit_code == 0
@@ -247,7 +247,7 @@ def test_profile_direct_invokes_subprocess() -> None:
             model="gpt2",
             ratio=3.0,
             max_new=10,
-            method="flashjolt",
+            method="flash",
             seed=0,
             bits="0,2,4,8",
             layer_groups=1,
@@ -277,7 +277,7 @@ def test_compress_direct_requires_hf_dependencies(monkeypatch: pytest.MonkeyPatc
     # typer.Exit is a subclass of click.exceptions.Exit which is a
     # subclass of RuntimeError. Catch it loosely.
     with pytest.raises((SystemExit, Exception)):
-        compress_fn(model="gpt2", method="identity", target="100%", prompt="Hi", max_new=2)
+        compress_fn(model="gpt2", method="pass", target="100%", prompt="Hi", max_new=2)
 
 
 def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -317,7 +317,7 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
     with mock.patch.object(echo, "__call__", return_value=None):
         compress_fn(
             model="gpt2",
-            method="identity",
+            method="pass",
             target="100%",
             prompt="Hello",
             max_new=2,
@@ -381,7 +381,7 @@ def test_profile_runs_subprocess() -> None:
     with mock.patch("kvfold.cli.run_subprocess", return_value=True) as m:
         result = runner.invoke(
             app,
-            ["profile", "--model", "gpt2", "--ratio", "3.0", "--method", "flashjolt"],
+            ["profile", "--model", "gpt2", "--ratio", "3.0", "--method", "flash"],
         )
     assert result.exit_code == 0
     assert m.called
@@ -452,7 +452,7 @@ def test_compress_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
             "--model",
             "gpt2",
             "--method",
-            "identity",
+            "pass",
             "--target",
             "100%",
             "--prompt",

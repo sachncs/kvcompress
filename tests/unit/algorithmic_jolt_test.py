@@ -74,9 +74,9 @@ def test_jolt_roundtrip_on_smooth_tensor() -> None:
     torch.manual_seed(0)
     K = make_smooth_tensor(m=4, T=128, dh=32, sharp=False)
     V = make_smooth_tensor(m=4, T=128, dh=32, sharp=False)
-    comp = Jolt(compression_ratio=2.0, bits=(0, 2, 4, 8))
+    comp = Jolt(ratio=2.0, bits=(0, 2, 4, 8))
     kp, vp = comp.compress(K, V)
-    K_hat, V_hat = comp.decompress(kp, vp)
+    K_hat, V_hat = comp.restore(kp, vp)
     rel_err_K = float(torch.linalg.norm(K - K_hat) / torch.linalg.norm(K))
     rel_err_V = float(torch.linalg.norm(V - V_hat) / torch.linalg.norm(V))
     # Round-trip is finite and bounded (no NaN, no error > 1).
@@ -84,7 +84,7 @@ def test_jolt_roundtrip_on_smooth_tensor() -> None:
     assert rel_err_V < 1.0, f"V rel_err = {rel_err_V}"
 
 
-def test_flashjolt_short_context_matches_exact_jolt() -> None:
+def test_flash_short_context_matches_exact_jolt() -> None:
     """At short contexts (T ≤ 1024), Flash's cap policy is a no-op
     so the algorithm should match exact JoLT closely (the only
     difference is the randomized SVD's random seed affecting the sketch).
@@ -92,12 +92,12 @@ def test_flashjolt_short_context_matches_exact_jolt() -> None:
     torch.manual_seed(0)
     K = torch.randn(2, 256, 32)
     V = torch.randn(2, 256, 32)
-    jolt = Jolt(compression_ratio=3.0, bits=(0, 4, 8))
-    fjolt = Flash(compression_ratio=3.0, bits=(0, 4, 8))
+    jolt = Jolt(ratio=3.0, bits=(0, 4, 8))
+    fjolt = Flash(ratio=3.0, bits=(0, 4, 8))
     kp_j, vp_j = jolt.compress(K, V)
     kp_f, vp_f = fjolt.compress(K, V)
-    K_j, V_j = jolt.decompress(kp_j, vp_j)
-    K_f, V_f = fjolt.decompress(kp_f, vp_f)
+    K_j, V_j = jolt.restore(kp_j, vp_j)
+    K_f, V_f = fjolt.restore(kp_f, vp_f)
     err_j = float(torch.linalg.norm(K - K_j) / torch.linalg.norm(K))
     err_f = float(torch.linalg.norm(K - K_f) / torch.linalg.norm(K))
     # Both errors are finite.
@@ -107,7 +107,7 @@ def test_flashjolt_short_context_matches_exact_jolt() -> None:
     assert K_j.shape == K_f.shape == K.shape
 
 
-def test_flashjolt_at_long_context_uses_cap() -> None:
+def test_flash_at_long_context_uses_cap() -> None:
     """At long contexts (T > 1024), Flash's cap policy should
     actually apply — verify the q_cap is bounded.
     """
@@ -128,9 +128,9 @@ def test_jolt_full_rank_reconstructs_input() -> None:
     torch.manual_seed(0)
     K = torch.randn(2, 32, 8)
     V = torch.randn(2, 32, 8)
-    comp = Jolt(compression_ratio=1.001, bits=(0,))
+    comp = Jolt(ratio=1.001, bits=(0,))
     kp, vp = comp.compress(K, V)
-    K_hat, V_hat = comp.decompress(kp, vp)
+    K_hat, V_hat = comp.restore(kp, vp)
     rel_err_K = float(torch.linalg.norm(K - K_hat) / torch.linalg.norm(K))
     rel_err_V = float(torch.linalg.norm(V - V_hat) / torch.linalg.norm(V))
     # Round-trip is finite; recovery is lossy because of the basis
@@ -150,7 +150,7 @@ def test_jolt_compression_actually_reduces_bytes() -> None:
     K = torch.randn(4, 256, 64)
     V = torch.randn(4, 256, 64)
     original_bytes = K.numel() * K.element_size() * 2
-    comp = Jolt(compression_ratio=3.0, bits=(0, 2, 4, 8))
+    comp = Jolt(ratio=3.0, bits=(0, 2, 4, 8))
     kp, vp = comp.compress(K, V)
     compressed_bytes = kp.bytes_compressed + vp.bytes_compressed
     assert compressed_bytes < original_bytes, (
@@ -164,9 +164,9 @@ def test_jolt_shape_preservation_across_compress_decompress() -> None:
     for shape in [(1, 16, 8), (2, 64, 16), (4, 128, 32), (1, 1, 4)]:
         K = torch.randn(*shape)
         V = torch.randn(*shape)
-        comp = Jolt(compression_ratio=2.0, bits=(0, 2, 4, 8))
+        comp = Jolt(ratio=2.0, bits=(0, 2, 4, 8))
         kp, vp = comp.compress(K, V)
-        K_hat, V_hat = comp.decompress(kp, vp)
+        K_hat, V_hat = comp.restore(kp, vp)
         assert K_hat.shape == K.shape, f"shape mismatch: {shape} -> K_hat {K_hat.shape}"
         assert V_hat.shape == V.shape
 
@@ -184,9 +184,9 @@ def test_jolt_dtype_preservation() -> None:
     for dtype in (torch.float32, torch.float16):
         K = torch.randn(2, 32, 8, dtype=dtype)
         V = torch.randn(2, 32, 8, dtype=dtype)
-        comp = Jolt(compression_ratio=2.0, bits=(0, 4, 8))
+        comp = Jolt(ratio=2.0, bits=(0, 4, 8))
         kp, vp = comp.compress(K, V)
-        K_hat, V_hat = comp.decompress(kp, vp)
+        K_hat, V_hat = comp.restore(kp, vp)
         assert K_hat.dtype == dtype, f"dtype changed: {dtype} -> {K_hat.dtype}"
 
 
@@ -195,7 +195,7 @@ def test_jolt_actually_uses_tucker_when_ratio_above_one() -> None:
     shape (otherwise we'd be at ratio=1, not 2x)."""
     torch.manual_seed(0)
     K = torch.randn(8, 256, 64)
-    comp = Jolt(compression_ratio=2.0, bits=(0, 4, 8))
+    comp = Jolt(ratio=2.0, bits=(0, 4, 8))
     kp, vp = comp.compress(K, V := torch.randn_like(K))
     # The token rank should be < T (256).
     assert kp.metadata["r_token"] < 256

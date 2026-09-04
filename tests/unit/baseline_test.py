@@ -15,16 +15,16 @@ def kv() -> tuple[torch.Tensor, torch.Tensor]:
     return torch.randn(4, 32, 16), torch.randn(4, 32, 16)
 
 
-def test_lowrank_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None:
+def test_low_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     K, V = kv
     comp = Low(rank=4)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.decompress(kp, vp)
+    k_hat, v_hat = comp.restore(kp, vp)
     assert k_hat.shape == K.shape
     assert v_hat.shape == V.shape
 
 
-def test_lowrank_bytes_smaller(kv: tuple[torch.Tensor, torch.Tensor]) -> None:
+def test_low_bytes_smaller(kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     K, V = kv
     comp = Low(rank=4)
     kp, vp = comp.compress(K, V)
@@ -36,7 +36,7 @@ def test_int_quant_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     K, V = kv
     comp = IntQuant(bits=4)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.decompress(kp, vp)
+    k_hat, v_hat = comp.restore(kp, vp)
     assert k_hat.shape == K.shape
 
 
@@ -44,7 +44,7 @@ def test_int_quant_int8_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None
     K, V = kv
     comp = IntQuant(bits=8)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.decompress(kp, vp)
+    k_hat, v_hat = comp.restore(kp, vp)
     assert k_hat.shape == K.shape
 
 
@@ -52,7 +52,7 @@ def test_int_quant_int2_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None
     K, V = kv
     comp = IntQuant(bits=2)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.decompress(kp, vp)
+    k_hat, v_hat = comp.restore(kp, vp)
     assert k_hat.shape == K.shape
 
 
@@ -66,7 +66,7 @@ def test_int_quant_accepts_arbitrary_shape() -> None:
     assert vp.shape == (2, 4)
 
 
-def test_lowrank_shape_mismatch() -> None:
+def test_low_shape_mismatch() -> None:
     comp = Low(rank=4)
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 16, 16)

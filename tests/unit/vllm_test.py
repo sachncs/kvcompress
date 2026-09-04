@@ -62,8 +62,8 @@ def test_export_writes_safetensors(fake_model: Any, tmp_path: Path) -> None:
     meta = export_kv(
         fake_model,
         str(out),
-        method="flashjolt",
-        compression_ratio=2.0,
+        method="flash",
+        ratio=2.0,
     )
 
     assert out.exists()
@@ -79,8 +79,8 @@ def test_export_resolves_compressor_correctly(fake_model: Any, tmp_path: Path) -
     from kvfold.adapter.vllm import export_kv
 
     out = tmp_path / "kv2.safetensors"
-    meta = export_kv(fake_model, str(out), method="jolt", compression_ratio=2.0)
-    assert meta.method in ("jolt", "flashjolt")  # JoLT method string
+    meta = export_kv(fake_model, str(out), method="jolt", ratio=2.0)
+    assert meta.method in ("jolt", "flash")  # JoLT method string
     assert len(meta.layers) > 0
 
 
@@ -89,7 +89,7 @@ def test_export_uses_passed_compressor(fake_model: Any, tmp_path: Path) -> None:
     from kvfold import Jolt
     from kvfold.adapter.vllm import export_kv
 
-    comp = Jolt(compression_ratio=4.0)
+    comp = Jolt(ratio=4.0)
     out = tmp_path / "kv3.safetensors"
     meta = export_kv(fake_model, str(out), compressor=comp)
     # Allocation decisions should reflect the 4x target.
@@ -123,7 +123,7 @@ def test_import_round_trip_recovers_kv_separately(fake_model: Any, tmp_path: Pat
     from kvfold.adapter.vllm import export_kv, import_kv
 
     out = tmp_path / "kv.safetensors"
-    export_kv(fake_model, str(out), method="flashjolt", compression_ratio=2.0)
+    export_kv(fake_model, str(out), method="flash", ratio=2.0)
 
     # New model with the same shape — same layers, all zeros.
     torch.manual_seed(1)
