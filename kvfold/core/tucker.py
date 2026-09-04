@@ -33,7 +33,7 @@ from dataclasses import dataclass
 
 import torch
 
-from kvcompress.compressor.svd import SVD
+from kvfold.compressor.svd import SVD
 
 log = logging.getLogger(__name__)
 

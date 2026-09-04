@@ -37,12 +37,12 @@ from typing import Any
 
 import torch
 
-from kvcompress.compressor.base import (
+from kvfold.compressor.base import (
     CompressedPayload,
     CompressorStats,
     KVCompressor,
 )
-from kvcompress.compressor.quantization import (
+from kvfold.compressor.quantization import (
     IntQuantizer,
     dequantize_tensor,
     quantize_tensor,

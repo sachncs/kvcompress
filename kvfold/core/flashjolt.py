@@ -28,13 +28,13 @@ from typing import Any
 
 import torch
 
-from kvcompress.compressor.jolt import JoLTCompressor, JoLTFactors
-from kvcompress.compressor.residual import (
+from kvfold.compressor.jolt import JoLTCompressor, JoLTFactors
+from kvfold.compressor.residual import (
     ResidualPayload,
     encode_residual,
 )
-from kvcompress.compressor.svd import SVD
-from kvcompress.compressor.tucker import (
+from kvfold.compressor.svd import SVD
+from kvfold.compressor.tucker import (
     partial_tucker_st_hosvd,
     reconstruct_partial_tucker,
 )
@@ -175,7 +175,7 @@ class CapWrapper:
     Implements the same ``__call__(a, rank=..., cap=...)`` interface as
     :class:`SVD` but injects ``cap=cap`` so the sketch size is bounded.
 
-    Why a wrapper: :func:`~kvcompress.compressor.tucker.partial_tucker_st_hosvd`
+    Why a wrapper: :func:`~kvfold.compressor.tucker.partial_tucker_st_hosvd`
     calls ``SVD.__call__``, not ``SVD.randomise`` directly. The cap policy
     lives at the FlashJoLT level, so we wrap the SVD instance to inject
     the cap at every call site without changing the Tucker API.

@@ -3,7 +3,7 @@
 A :class:`KVCompressor` takes raw key/value tensors at one layer and produces a
 :class:`CompressedPayload` that captures the layout, ranks, residual bit-widths,
 and serialized factors. Decompression is a deterministic function of the
-payload. Every concrete compressor in :mod:`kvcompress.compressor` is a
+payload. Every concrete compressor in :mod:`kvfold.compressor` is a
 subclass.
 
 The contract is intentionally minimal:

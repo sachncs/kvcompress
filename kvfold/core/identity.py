@@ -17,7 +17,7 @@ from typing import Any
 
 import torch
 
-from kvcompress.compressor.base import (
+from kvfold.compressor.base import (
     CompressedPayload,
     CompressorStats,
     KVCompressor,

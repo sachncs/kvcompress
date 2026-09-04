@@ -1,8 +1,8 @@
 """Unified compressor dispatch.
 
 Public surface: :func:`build_compressor` is the single source of truth for
-mapping the ``method`` string in :func:`kvcompress.api.enable_compression`
-to a concrete :class:`~kvcompress.compressor.base.KVCompressor` subclass.
+mapping the ``method`` string in :func:`kvfold.api.enable_compression`
+to a concrete :class:`~kvfold.compressor.base.KVCompressor` subclass.
 
 Why one place: the same dispatch was duplicated across
 ``adapters/huggingface.py`` and ``adapters/vllm.py`` and only handled three
@@ -24,7 +24,7 @@ from typing import Any
 
 import torch
 
-from kvcompress.compressor.base import KVCompressor
+from kvfold.compressor.base import KVCompressor
 
 __all__ = ["METHODS", "build_compressor", "supported_methods"]
 
@@ -77,49 +77,49 @@ IDENTITY_KWARGS = frozenset({"factor_dtype"})
 
 METHODS: dict[str, dict[str, Any]] = {
     "jolt": {
-        "class_path": ("kvcompress.compressor.jolt", "JoLTCompressor"),
+        "class_path": ("kvfold.compressor.jolt", "JoLTCompressor"),
         "allowed_kwargs": JOLT_KWARGS,
     },
     "flashjolt": {
-        "class_path": ("kvcompress.compressor.flashjolt", "FlashJoLTCompressor"),
+        "class_path": ("kvfold.compressor.flashjolt", "FlashJoLTCompressor"),
         "allowed_kwargs": JOLT_KWARGS,
     },
     "lowrank": {
-        "class_path": ("kvcompress.compressor.lowrank", "LowRankCompressor"),
+        "class_path": ("kvfold.compressor.lowrank", "LowRankCompressor"),
         "allowed_kwargs": LOWRANK_KWARGS,
     },
     "int2": {
-        "class_path": ("kvcompress.compressor.quantization_only", "IntQuantOnlyCompressor"),
+        "class_path": ("kvfold.compressor.quantization_only", "IntQuantOnlyCompressor"),
         "allowed_kwargs": INT_KWARGS,
         "bits_override": 2,
     },
     "int4": {
-        "class_path": ("kvcompress.compressor.quantization_only", "IntQuantOnlyCompressor"),
+        "class_path": ("kvfold.compressor.quantization_only", "IntQuantOnlyCompressor"),
         "allowed_kwargs": INT_KWARGS,
         "bits_override": 4,
     },
     "int8": {
-        "class_path": ("kvcompress.compressor.quantization_only", "IntQuantOnlyCompressor"),
+        "class_path": ("kvfold.compressor.quantization_only", "IntQuantOnlyCompressor"),
         "allowed_kwargs": INT_KWARGS,
         "bits_override": 8,
     },
     "fp8": {
-        "class_path": ("kvcompress.compressor.identity", "IdentityCompressor"),
+        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
         "allowed_kwargs": IDENTITY_KWARGS,
         "dtype_override": torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.float16,
     },
     "fp16": {
-        "class_path": ("kvcompress.compressor.identity", "IdentityCompressor"),
+        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
         "allowed_kwargs": IDENTITY_KWARGS,
         "dtype_override": torch.float16,
     },
     "bf16": {
-        "class_path": ("kvcompress.compressor.identity", "IdentityCompressor"),
+        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
         "allowed_kwargs": IDENTITY_KWARGS,
         "dtype_override": torch.bfloat16,
     },
     "identity": {
-        "class_path": ("kvcompress.compressor.identity", "IdentityCompressor"),
+        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
         "allowed_kwargs": IDENTITY_KWARGS,
     },
 }

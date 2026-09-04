@@ -9,19 +9,19 @@ Combines:
 
 The compressor takes K and V at one layer, applies the allocator to decide
 ranks and residual bit-widths jointly for K and V, compresses each, and
-returns two :class:`~kvcompress.compressor.base.CompressedPayload`
+returns two :class:`~kvfold.compressor.base.CompressedPayload`
 objects ready for storage.
 
 Algorithm (per compress() call):
 
-1. Build two :class:`~kvcompress.compressor.allocator.Cell` instances (one
+1. Build two :class:`~kvfold.compressor.allocator.Cell` instances (one
    each for K and V) describing the cell shape and budget knobs.
 2. Call :meth:`JointAllocator.optimize` to get the per-cell
    ``(r_token, r_feature, bits)`` decisions.
 3. For each cell: run ST-HOSVD via
-   :func:`~kvcompress.compressor.tucker.partial_tucker_st_hosvd`,
+   :func:`~kvfold.compressor.tucker.partial_tucker_st_hosvd`,
    compute the residual, JL-rotate and quantise it via
-   :func:`~kvcompress.compressor.residual.encode_residual`.
+   :func:`~kvfold.compressor.residual.encode_residual`.
 4. Package the core + bases + residual payload into a
    :class:`CompressedPayload` and return the K and V payloads.
 
@@ -37,23 +37,23 @@ from typing import Any
 
 import torch
 
-from kvcompress.compressor.allocator import (
+from kvfold.compressor.allocator import (
     AllocationResult,
     Cell,
     JointAllocator,
 )
-from kvcompress.compressor.base import (
+from kvfold.compressor.base import (
     CompressedPayload,
     CompressorStats,
     KVCompressor,
 )
-from kvcompress.compressor.residual import (
+from kvfold.compressor.residual import (
     ResidualPayload,
     decode_residual,
     encode_residual,
 )
-from kvcompress.compressor.svd import SVD
-from kvcompress.compressor.tucker import (
+from kvfold.compressor.svd import SVD
+from kvfold.compressor.tucker import (
     TuckerFactors,
     partial_tucker_st_hosvd,
     reconstruct_partial_tucker,
@@ -168,7 +168,7 @@ class JoLTCompressor(KVCompressor):
 
         Returns:
             A ``(key_payload, value_payload)`` pair ready for storage in
-            :class:`~kvcompress.cache.compress.CompressedKVCache`.
+            :class:`~kvfold.cache.compress.CompressedKVCache`.
 
         Raises:
             ValueError: if K and V have different shapes or are not 3-D.
@@ -282,7 +282,7 @@ class JoLTCompressor(KVCompressor):
             2. Reconstruct the partial Tucker approximation and compute
                the residual ``R = x - x̂``.
             3. JL-rotate and quantise ``R`` at ``bits`` via
-               :func:`~kvcompress.compressor.residual.encode_residual`.
+               :func:`~kvfold.compressor.residual.encode_residual`.
                The ``bits == 0`` branch skips the residual entirely
                (pure-Tucker mode).
             4. Return a :class:`JoLTFactors` bundling Tucker factors,

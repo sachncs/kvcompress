@@ -47,12 +47,12 @@ from typing import Any
 
 import torch
 
-from kvcompress.compressor.base import (
+from kvfold.compressor.base import (
     CompressedPayload,
     CompressorStats,
     KVCompressor,
 )
-from kvcompress.compressor.svd import SVD
+from kvfold.compressor.svd import SVD
 
 __all__ = ["LowRankCompressor"]
 
@@ -94,7 +94,7 @@ class LowRankCompressor(KVCompressor):
         """Truncated-SVD compress K and V at the given rank.
 
         Reshapes each side to ``(m·T, dh)`` and computes the rank-``r``
-        SVD via :class:`~kvcompress.compressor.svd.SVD`. The reconstruction
+        SVD via :class:`~kvfold.compressor.svd.SVD`. The reconstruction
         error is bounded by the discarded tail Frobenius mass::
 
             ||X - X̂||_F / ||X||_F ≤ sqrt(Σ_{k>r} s_k² / Σ s²)
@@ -170,7 +170,7 @@ class LowRankCompressor(KVCompressor):
 
         Returns:
             A :class:`CompressedPayload` ready for storage in
-            :class:`~kvcompress.cache.compress.CompressedKVCache`.
+            :class:`~kvfold.cache.compress.CompressedKVCache`.
         """
         u = svd_res.u.to(self.factor_dtype).contiguous()
         s = svd_res.s.to(self.factor_dtype).contiguous()

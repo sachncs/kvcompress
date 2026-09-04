@@ -32,8 +32,8 @@ from dataclasses import dataclass
 
 import torch
 
-from kvcompress.compressor.jl import JLDistribution, cached_projection
-from kvcompress.compressor.quantization import (
+from kvfold.compressor.jl import JLDistribution, cached_projection
+from kvfold.compressor.quantization import (
     dequantize_tensor,
     quantize_tensor,
 )

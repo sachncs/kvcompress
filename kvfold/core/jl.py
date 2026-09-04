@@ -16,7 +16,7 @@ implemented because the paper's residual path uses a square rotation.
 Projections are deterministic given a seed and the input shape. They are
 cached by shape + seed so the same cell never pays the projection cost
 twice. The cache is process-wide; it's the only global mutable state in
-:mod:`kvcompress.compressor`. Call :func:`clear_projection_cache` from
+:mod:`kvfold.compressor`. Call :func:`clear_projection_cache` from
 test fixtures to reset between cases.
 """
 
@@ -195,7 +195,7 @@ def cached_projection(
     """Return a cached JL projection keyed by (shape, distribution, seed).
 
     The cache is process-wide and is the *only* place that constructs JL
-    matrices inside :mod:`kvcompress`. Tests can clear it via
+    matrices inside :mod:`kvfold`. Tests can clear it via
     :func:`clear_projection_cache`.
     """
     key = (
