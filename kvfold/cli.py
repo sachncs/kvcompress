@@ -1,16 +1,16 @@
-"""kvcompress CLI.
+"""kvfold CLI.
 
 Top-level Typer app exposing the user-facing commands:
 
-* ``kvcompress version`` — print the installed version.
-* ``kvcompress validate`` — run a smoke test on synthetic K/V and, if
+* ``kvfold version`` — print the installed version.
+* ``kvfold validate`` — run a smoke test on synthetic K/V and, if
   ``transformers`` is installed, on a small HF model.
-* ``kvcompress benchmark`` — orchestrate the memory / speed /
+* ``kvfold benchmark`` — orchestrate the memory / speed /
   reconstruction benchmarks. Spawns each benchmark module as a
   subprocess so a failure in one doesn't take down the others.
-* ``kvcompress profile`` — run a single model through ``model.generate``
+* ``kvfold profile`` — run a single model through ``model.generate``
   with compression enabled, printing cumulative stats.
-* ``kvcompress compress`` — one-shot compression on a single prompt.
+* ``kvfold compress`` — one-shot compression on a single prompt.
 
 Why subprocess for benchmarks: a misbehaving benchmark (e.g. an OOM)
 should fail loudly without aborting the orchestration. Each benchmark
@@ -28,16 +28,16 @@ from pathlib import Path
 
 import typer
 
-from kvcompress import __version__
+from kvfold import __version__
 
 log = logging.getLogger(__name__)
 
-app = typer.Typer(help="kvcompress — KV cache compression for decoder-only LLMs")
+app = typer.Typer(help="kvfold — KV cache compression for decoder-only LLMs")
 
 
 @app.command()
 def version() -> None:
-    """Print the kvcompress version."""
+    """Print the kvfold version."""
     typer.echo(__version__)
 
 
@@ -55,13 +55,13 @@ def validate(
     3. End-to-end generation with GPT-2 (unless ``--skip-hf`` is given
        or ``transformers`` isn't installed).
     """
-    import kvcompress
+    import kvfold
     import torch
 
-    typer.echo(f"kvcompress {kvcompress.__version__}")
+    typer.echo(f"kvfold {kvfold.__version__}")
 
     # 1. JoLT round-trip.
-    from kvcompress import JoLTCompressor, FlashJoLTCompressor
+    from kvfold import JoLTCompressor, FlashJoLTCompressor
 
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 32, 16)
@@ -85,7 +85,7 @@ def validate(
     if not skip_hf:
         try:
             from transformers import GPT2LMHeadModel, GPT2Tokenizer
-            from kvcompress import enable_compression
+            from kvfold import enable_compression
 
             tok = GPT2Tokenizer.from_pretrained("gpt2")
             model = GPT2LMHeadModel.from_pretrained("gpt2")
@@ -106,7 +106,7 @@ def validate(
         except Exception as e:
             typer.echo(f"  HF smoke test skipped: {e}")
 
-    typer.echo("kvcompress validate: OK")
+    typer.echo("kvfold validate: OK")
 
 
 def run_subprocess(args: list[str], label: str, timeout: float = 600.0) -> bool:
@@ -159,7 +159,7 @@ def benchmark(
                     [
                         sys.executable,
                         "-m",
-                        "kvcompress.benchmarks.memory",
+                        "kvfold.benchmarks.memory",
                         "--T",
                         "1024",
                         "--dh",
@@ -191,7 +191,7 @@ def benchmark(
                     [
                         sys.executable,
                         "-m",
-                        "kvcompress.benchmarks.throughput",
+                        "kvfold.benchmarks.throughput",
                         "--T",
                         "1024",
                         "--dh",
@@ -215,7 +215,7 @@ def benchmark(
                     [
                         sys.executable,
                         "-m",
-                        "kvcompress.benchmarks.reconstruction",
+                        "kvfold.benchmarks.reconstruction",
                         "--T",
                         "1024",
                         "--ratio",
@@ -282,19 +282,19 @@ def compress(
     bits: str = typer.Option("0,2,4,8", help="comma-separated residual bit-widths"),
     layer_groups: int = typer.Option(1, help="number of layer groups"),
     cache_implementation: str = typer.Option(
-        "kvcompress",
+        "kvfold",
         help="HF cache_implementation value (always overridden to 'dynamic' under the hood)",
     ),
 ) -> None:
     """Run a one-shot compression pass on a prompt and print the output.
 
-    Mirrors :func:`kvcompress.api.enable_compression` kwarg-for-kwarg so
+    Mirrors :func:`kvfold.api.enable_compression` kwarg-for-kwarg so
     CLI users get the same surface as the Python API.
     """
     try:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        from kvcompress import enable_compression
+        from kvfold import enable_compression
 
         tok = AutoTokenizer.from_pretrained(model)
         mdl = AutoModelForCausalLM.from_pretrained(model)

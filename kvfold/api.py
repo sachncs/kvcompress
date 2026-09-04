@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
 
-    from kvfold.adapters.huggingface import HuggingFaceAdapter
+    from kvfold.adapter.huggingface import HuggingFaceAdapter
 
 log = logging.getLogger(__name__)
 
@@ -183,7 +183,7 @@ def enable_compression(
         type(model).__name__,
     )
 
-    from kvfold.adapters.huggingface import HuggingFaceAdapter
+    from kvfold.adapter.huggingface import HuggingFaceAdapter
 
     # Translate the public ``target_memory="100%"`` shortcut into the
     # identity compressor to avoid spinning up the allocator at ratio=1.

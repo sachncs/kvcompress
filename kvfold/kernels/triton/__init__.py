@@ -14,6 +14,6 @@ The package contains:
   the cached binary.
 """
 
-from kvcompress.kernels.triton.compression import is_triton_available
+from kvfold.kernels.triton.compression import is_triton_available
 
 __all__ = ["is_triton_available"]

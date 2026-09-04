@@ -46,9 +46,9 @@ LAZY_EXPORTS = {
     "Decomposer": ("kvfold.core.svd", "Decomposer"),
     "Quantizer": ("kvfold.core.quant", "Quantizer"),
     "CompressedKVCache": ("kvfold.cache.compress", "CompressedKVCache"),
-    "CacheManager": ("kvfold.cache.manager", "CacheManager"),
-    "CompressionMetadata": ("kvfold.cache.metadata", "CompressionMetadata"),
-    "LayerCompression": ("kvfold.cache.metadata", "LayerCompression"),
+    "Pool": ("kvfold.cache.manager", "Pool"),
+    "Meta": ("kvfold.cache.metadata", "Meta"),
+    "LayerMeta": ("kvfold.cache.metadata", "LayerMeta"),
 }
 
 

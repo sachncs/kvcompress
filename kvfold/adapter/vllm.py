@@ -4,11 +4,11 @@ These functions compress and dump a model's KV cache to disk (and load
 it back) so a user can:
 
 * Run a vLLM offline batch via ``vllm.LLM.generate(...)``, then
-  ``kvcompress.adapters.vllm.export_kv(model, \"kv.safetensors\")`` to save
+  ``kvfold.adapter.vllm.export_kv(model, \"kv.safetensors\")`` to save
   the compressed cache.
 * Reload the cache in a separate process (or even a different
   deployment) via
-  ``kvcompress.adapters.vllm.import_kv(model, \"kv.safetensors\")``.
+  ``kvfold.adapter.vllm.import_kv(model, \"kv.safetensors\")``.
 
 The compressed cache is stored as a single safetensors file holding
 one tensor per (layer, kind) cell plus a metadata sidecar JSON file.
@@ -21,13 +21,13 @@ Caveats:
 * The exported file embeds the *compressor* layout. Importing on a
   model with a different number of layers raises immediately.
 * This is a *user-driven* workflow — there's no automatic hook into
-  vLLM's scheduler. For that, see :mod:`kvcompress.adapters.vllm_kv_offload`.
+  vLLM's scheduler. For that, see :mod:`kvfold.adapter.vllm_kv_offload`.
 
 vLLM availability:
 
 The module is importable on systems without vLLM. :func:`export_kv`
 and :func:`import_kv` only need ``transformers``, which is a hard
-dependency. The :mod:`kvcompress.adapters.vllm_kv_offload` module is the
+dependency. The :mod:`kvfold.adapter.vllm_kv_offload` module is the
 optional Shape B integration that requires vLLM.
 """
 
@@ -38,12 +38,12 @@ from typing import Any
 
 import torch
 
-from kvcompress.api import parse_target_memory
-from kvcompress.cache.compress import CompressedKVCache
-from kvcompress.cache.metadata import CompressionMetadata
-from kvcompress.compressor.base import KVCompressor
-from kvcompress.compressor.dispatch import build_compressor
-from kvcompress.runtime.profiler import CompressionProfiler
+from kvfold.api import parse_target_memory
+from kvfold.cache.compress import CompressedKVCache
+from kvfold.cache.metadata import Meta
+from kvfold.core.base import Compressor
+from kvfold.core.dispatch import build_compressor
+from kvfold.runtime.profiler import CompressionProfiler
 
 __all__ = [
     "build_compressor",
@@ -92,8 +92,8 @@ def export_kv(
     compression_ratio: float = 3.0,
     bits: tuple[int, ...] = (0, 2, 4, 8),
     seed: int = 0,
-    compressor: KVCompressor | None = None,
-) -> CompressionMetadata:
+    compressor: Compressor | None = None,
+) -> Meta:
     """Compress the model's live KV cache and write it to ``path``.
 
     The output is a single safetensors file with one tensor per
@@ -111,7 +111,7 @@ def export_kv(
             from ``method``, ``compression_ratio``, ``bits``, ``seed``.
 
     Returns:
-        The :class:`CompressionMetadata` describing the saved cache.
+        The :class:`Meta` describing the saved cache.
 
     Raises:
         RuntimeError: if no KV cache is found on the model.
@@ -185,7 +185,7 @@ def export_kv(
     meta_path = path + ".meta.json"
     meta = tmp_cache.metadata()
     meta_dict = meta.to_dict()
-    # Ponytail: stash the per-cell metadata (which CompressionMetadata
+    # Ponytail: stash the per-cell metadata (which Meta
     # flattens) under a ``cell_metadata`` key so import_kv can rebuild
     # the residual projection faithfully. Without this, the residual
     # is reconstructed against an invented seed and the round-tripped
@@ -211,7 +211,7 @@ def import_kv(
     method: str = "flashjolt",
     bits: tuple[int, ...] = (0, 2, 4, 8),
     seed: int = 0,
-) -> CompressionMetadata:
+) -> Meta:
     """Load a compressed cache from ``path`` and populate the model's cache.
 
     Reads ``path`` (safetensors) plus ``path.meta.json`` (sidecar written
@@ -223,7 +223,7 @@ def import_kv(
     Args:
         model: HF or vLLM-style model with a writable DynamicCache.
         path: source safetensors path.
-        target_memory: passed to :func:`kvcompress.enable_compression`
+        target_memory: passed to :func:`kvfold.enable_compression`
             if the model hasn't been compressed yet (default ``"100%"``
             = identity).
         compression_ratio: optional ratio override.
@@ -232,7 +232,7 @@ def import_kv(
         seed: RNG seed.
 
     Returns:
-        The :class:`CompressionMetadata` describing the loaded cache.
+        The :class:`Meta` describing the loaded cache.
     """
     try:
         from safetensors.torch import load_file
@@ -290,11 +290,11 @@ def import_kv(
     # Reconstruct K and V separately per cell.
     reconstructed: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
 
-    from kvcompress.compressor.tucker import (
+    from kvfold.core.tucker import (
         TuckerFactors,
         reconstruct_partial_tucker,
     )
-    from kvcompress.compressor.residual import ResidualPayload, decode_residual
+    from kvfold.core.residual import ResidualPayload, decode_residual
 
     for (layer_idx, kind), data in by_cell.items():
         cell_key = f"{layer_idx}/{kind}"

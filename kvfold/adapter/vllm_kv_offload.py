@@ -17,7 +17,7 @@ The data flowing through the handler is a ``TransferSpec`` —
 blocks by index. vLLM pre-allocates the int8 buffers; we don't own
 the tensors. Compression happens at the spec level: each block's
 bytes are read from the source buffer, run through our
-:class:`KVCompressor`, and written into the destination buffer.
+:class:`Compressor`, and written into the destination buffer.
 
 Caveats
 =======
@@ -41,8 +41,8 @@ example):
 .. code-block:: python
 
     from vllm import LLM
-    from kvcompress.adapters.vllm_kv_offload import JoLTOffloadHandler
-    from kvcompress import build_compressor
+    from kvfold.adapter.vllm_kv_offload import JoLTOffloadHandler
+    from kvfold import build_compressor
 
     compressor = build_compressor("flashjolt", compression_ratio=3.0)
     handler = JoLTOffloadHandler(compressor=compressor)
@@ -57,7 +57,7 @@ import logging
 import threading
 from typing import Any
 
-from kvcompress.compressor.base import KVCompressor
+from kvfold.core.base import Compressor
 
 __all__ = [
     "JoLTOffloadHandler",
@@ -150,7 +150,7 @@ class JoLTOffloadHandler:
     2. The :class:`vllm.v1.kv_offload.worker.OffloadingWorker` calls
        our :meth:`transfer_async` with a ``(src_spec, dst_spec)``
        ``TransferSpec``; both specs name a list of int8 page buffers.
-    3. We compress the source bytes via our :class:`KVCompressor` and
+    3. We compress the source bytes via our :class:`Compressor` and
        write the compressed payload into the destination buffer.
     4. The scheduler polls :meth:`get_finished` and learns which jobs
        are done.
@@ -161,7 +161,7 @@ class JoLTOffloadHandler:
     insulation.
 
     Args:
-        compressor: the :class:`KVCompressor` to use.
+        compressor: the :class:`Compressor` to use.
         eviction_pool: optional payload storage. Defaults to an
             in-memory :class:`ThreadSafeEvictionPool`. Supply a custom
             pool (Redis, disk) for production offload.
@@ -176,7 +176,7 @@ class JoLTOffloadHandler:
 
     def __init__(
         self,
-        compressor: KVCompressor,
+        compressor: Compressor,
         eviction_pool: ThreadSafeEvictionPool | None = None,
         **kwargs: Any,
     ) -> None:
@@ -276,9 +276,9 @@ class JoLTOffloadHandler:
         Returns:
             Mapping ``(layer, kind) -> payload`` for every cell.
         """
-        from kvcompress.cache.manager import CacheManager
+        from kvfold.cache.manager import Pool
 
-        mgr = CacheManager(compressor=self.compressor)
+        mgr = Pool(compressor=self.compressor)
         if isinstance(block, tuple) and len(block) == 2:
             K_block, V_block = block
             self.store_block(mgr, K_block, V_block)

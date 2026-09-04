@@ -6,7 +6,7 @@ Llama uses ``LlamaAttention`` with rotary embeddings and standard
 this shim exists as a documented no-op so the registry can dispatch to
 a family-specific module.
 
-For RoPE pre/post handling on keys, see :class:`kvcompress.compressor.jolt`
+For RoPE pre/post handling on keys, see :class:`kvfold.core.jolt`
 which compresses pre-RoPE by default (the paper's Appendix C shows this
 reduces key-error by 22-44% on LLaMA-2-13B).
 """

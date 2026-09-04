@@ -6,8 +6,8 @@ import hypothesis
 import hypothesis.strategies as st
 import torch
 
-from kvcompress.compressor.jolt import JoLTCompressor
-from kvcompress.compressor.quantization import (
+from kvfold.core.jolt import JoLTCompressor
+from kvfold.core.quantization import (
     IntQuantizer,
     bit_packing_signed,
     bit_unpacking_signed,

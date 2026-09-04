@@ -9,7 +9,7 @@ import torch
 @pytest.mark.integration
 def test_gpt2_identity_matches_baseline(gpt2_model_with_pad) -> None:
     """With identity compressor, output should match uncompressed exactly."""
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     tok, model = gpt2_model_with_pad
     ids = tok.encode("The quick brown fox", return_tensors="pt")
@@ -33,7 +33,7 @@ def test_gpt2_identity_matches_baseline(gpt2_model_with_pad) -> None:
 @pytest.mark.integration
 def test_gpt2_flashjolt_runs(gpt2_model_with_pad) -> None:
     """FlashJoLT compression on GPT-2 should run without error."""
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     tok, model = gpt2_model_with_pad
     ids = tok.encode("The quick brown fox", return_tensors="pt")
@@ -59,7 +59,7 @@ def test_gpt2_flashjolt_runs(gpt2_model_with_pad) -> None:
 @pytest.mark.integration
 def test_gpt2_disable_restores_behavior(gpt2_model_with_pad) -> None:
     """After disable, output should be identical to baseline."""
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     tok, model = gpt2_model_with_pad
     ids = tok.encode("Hello world", return_tensors="pt")
@@ -84,7 +84,7 @@ def test_gpt2_disable_restores_behavior(gpt2_model_with_pad) -> None:
 @pytest.mark.integration
 def test_gpt2_method_switch(gpt2_model_with_pad) -> None:
     """Switching between methods should be supported."""
-    from kvcompress import enable_compression
+    from kvfold import enable_compression
 
     tok, model = gpt2_model_with_pad
     ids = tok.encode("Hello", return_tensors="pt")

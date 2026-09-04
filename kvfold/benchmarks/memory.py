@@ -1,14 +1,14 @@
 """Memory benchmark — bytes occupied by compressed vs uncompressed cache.
 
-Compares :class:`~kvcompress.IdentityCompressor` against
-:class:`~kvcompress.JoLTCompressor`,
-:class:`~kvcompress.FlashJoLTCompressor`, and
-:class:`~kvcompress.LowRankCompressor` across a sweep of compression
+Compares :class:`~kvfold.IdentityCompressor` against
+:class:`~kvfold.JoLTCompressor`,
+:class:`~kvfold.FlashJoLTCompressor`, and
+:class:`~kvfold.LowRankCompressor` across a sweep of compression
 ratios. Reports the achieved bytes per method and ratio.
 
 Usage::
 
-    python -m kvcompress.benchmarks.memory --T 1024 --dh 128 --m 8 --ratio 3.0
+    python -m kvfold.benchmarks.memory --T 1024 --dh 128 --m 8 --ratio 3.0
 
 The benchmark runs purely on synthetic tensors so it does not require
 GPU resources.
@@ -22,10 +22,10 @@ import logging
 
 import torch
 
-from kvcompress.compressor.flashjolt import FlashJoLTCompressor
-from kvcompress.compressor.identity import IdentityCompressor
-from kvcompress.compressor.jolt import JoLTCompressor
-from kvcompress.compressor.lowrank import LowRankCompressor
+from kvfold.core.flashjolt import FlashJoLTCompressor
+from kvfold.core.identity import IdentityCompressor
+from kvfold.core.jolt import JoLTCompressor
+from kvfold.core.lowrank import LowRankCompressor
 
 log = logging.getLogger(__name__)
 

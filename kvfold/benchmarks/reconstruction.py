@@ -35,10 +35,10 @@ from dataclasses import dataclass
 
 import torch
 
-from kvcompress.compressor.flashjolt import FlashJoLTCompressor
-from kvcompress.compressor.jolt import JoLTCompressor
-from kvcompress.compressor.lowrank import LowRankCompressor
-from kvcompress.compressor.quantization_only import IntQuantOnlyCompressor
+from kvfold.core.flashjolt import FlashJoLTCompressor
+from kvfold.core.jolt import JoLTCompressor
+from kvfold.core.lowrank import LowRankCompressor
+from kvfold.core.quantization_only import IntQuantOnlyCompressor
 
 log = logging.getLogger(__name__)
 

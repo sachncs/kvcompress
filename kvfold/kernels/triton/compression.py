@@ -7,7 +7,7 @@ Provides:
 * ``quantize_int8`` — fused per-channel int8 quantization.
 
 These are *no-op fallbacks* on systems without ``triton``; the public
-functions in :mod:`kvcompress.compressor` always go through PyTorch. The
+functions in :mod:`kvfold.core` always go through PyTorch. The
 fallback ensures the library is importable on every platform (CPU,
 MPS, no-CUDA) without a hard dependency on Triton.
 
@@ -86,7 +86,7 @@ def quantize_int8(x):
         Tuple ``(packed, scale, zero_point)`` matching
         :meth:`IntQuantizer.quantize`.
     """
-    from kvcompress.compressor.quantization import IntQuantizer
+    from kvfold.core.quantization import IntQuantizer
 
     q = IntQuantizer(bits=8, symmetric=True, per_channel=True)
     return q.quantize(x)

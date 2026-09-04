@@ -91,19 +91,25 @@ class CompressorRegistry:
         if config_cls is None:
             try:
                 config_cls = CONFIG_REGISTRY.resolve(method)
-            except KeyError as exc:
-                raise MethodConfigError(method, "config", f"no MethodConfig registered for {method!r}") from exc
+            except KeyError:
+                config_cls = None  # type: ignore[assignment]
 
         if factory is None:
-            config_fields = {f.name for f in dataclasses.fields(config_cls)}
-            compressor_params = compressor_cls.__init__.__code__.co_varnames
+            if config_cls is None:
+                def no_config_factory(config: MethodConfig) -> Compressor:
+                    return compressor_cls()
 
-            def default_factory(config: MethodConfig) -> Compressor:
-                config_dict = dataclasses.asdict(config)
-                kwargs = {k: v for k, v in config_dict.items() if k in config_fields and k in compressor_params}
-                return compressor_cls(**kwargs)
+                factory = no_config_factory
+            else:
+                config_fields = {f.name for f in dataclasses.fields(config_cls)}
+                compressor_params = compressor_cls.__init__.__code__.co_varnames
 
-            factory = default_factory
+                def default_factory(config: MethodConfig) -> Compressor:
+                    config_dict = dataclasses.asdict(config)
+                    kwargs = {k: v for k, v in config_dict.items() if k in config_fields and k in compressor_params}
+                    return compressor_cls(**kwargs)
+
+                factory = default_factory
 
         entry = CompressorEntry(
             method=method,

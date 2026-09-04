@@ -1,12 +1,12 @@
 """Compression / decompression speed benchmark.
 
-Measures mean wall time for :meth:`KVCompressor.compress` and
-:meth:`KVCompressor.decompress` across JoLT, FlashJoLT, and the low-rank
+Measures mean wall time for :meth:`Compressor.compress` and
+:meth:`Compressor.decompress` across JoLT, FlashJoLT, and the low-rank
 baseline. Includes warm-up iterations to amortise first-call cache effects.
 
 Usage::
 
-    python -m kvcompress.benchmarks.throughput --T 1024 --dh 128 --ratio 3
+    python -m kvfold.benchmarks.throughput --T 1024 --dh 128 --ratio 3
 
 On CPU the three methods are roughly comparable at small T; FlashJoLT
 pulls ahead at T ≥ 1024 once the SVD becomes the bottleneck.
@@ -21,9 +21,9 @@ import time
 
 import torch
 
-from kvcompress.compressor.flashjolt import FlashJoLTCompressor
-from kvcompress.compressor.jolt import JoLTCompressor
-from kvcompress.compressor.lowrank import LowRankCompressor
+from kvfold.core.flashjolt import FlashJoLTCompressor
+from kvfold.core.jolt import JoLTCompressor
+from kvfold.core.lowrank import LowRankCompressor
 
 log = logging.getLogger(__name__)
 

@@ -3,11 +3,11 @@
 Imports are lazy so the package can be imported even when individual modules
 are still stubbed out.
 
-* :mod:`.memory` defines :class:`~kvcompress.runtime.memory.MemoryPool`,
+* :mod:`.memory` defines :class:`~kvfold.runtime.memory.MemoryPool`,
   a small object pool that reuses contiguous tensors across compress /
   decompress calls to reduce allocator pressure during long-context
   generation.
-* :mod:`.profiler` defines :class:`~kvcompress.runtime.profiler.CompressionProfiler`,
+* :mod:`.profiler` defines :class:`~kvfold.runtime.profiler.CompressionProfiler`,
   a context-manager-style timer used by the benchmark suite.
 """
 
@@ -16,12 +16,12 @@ from __future__ import annotations
 from typing import Any  # noqa: F401
 
 if False:  # TYPE_CHECKING
-    from kvcompress.runtime.memory import MemoryPool  # noqa: F401
-    from kvcompress.runtime.profiler import CompressionProfiler  # noqa: F401
+    from kvfold.runtime.memory import MemoryPool  # noqa: F401
+    from kvfold.runtime.profiler import CompressionProfiler  # noqa: F401
 
 LAZY_EXPORTS = {
-    "MemoryPool": ("kvcompress.runtime.memory", "MemoryPool"),
-    "CompressionProfiler": ("kvcompress.runtime.profiler", "CompressionProfiler"),
+    "MemoryPool": ("kvfold.runtime.memory", "MemoryPool"),
+    "CompressionProfiler": ("kvfold.runtime.profiler", "CompressionProfiler"),
 }
 
 
@@ -34,7 +34,7 @@ def __getattr__(name: str) -> Any:
         value = getattr(module, attr)
         globals()[name] = value
         return value
-    raise AttributeError(f"module 'kvcompress.runtime' has no attribute {name!r}")
+    raise AttributeError(f"module 'kvfold.runtime' has no attribute {name!r}")
 
 
 __all__ = list(LAZY_EXPORTS)

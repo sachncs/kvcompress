@@ -8,8 +8,8 @@ The adapter works in two ways:
    imported it (``transformers.generation.utils``, the model class, etc.)
    so the patched class is the one that gets instantiated.
 
-2. The user-facing API is :func:`kvcompress.api.enable_compression` which
-   returns a :class:`~kvcompress.api.CompressionHandle` to disable the
+2. The user-facing API is :func:`kvfold.api.enable_compression` which
+   returns a :class:`~kvfold.api.CompressionHandle` to disable the
    patch later.
 
 Why we patch *multiple* module symbol tables
@@ -37,13 +37,13 @@ The patched subclass overrides two methods:
 
 * ``update`` — after the parent's ``super().update(...)`` concatenates
   the new K/V slice, we read the just-appended layer's tensors and call
-  :meth:`CacheManager.store` to compress and stash them.
+  :meth:`Pool.store` to compress and stash them.
 * ``__getitem__`` — before returning the layer's K/V, we ask the
   manager to reconstruct them. This is the path the attention layer
   hits when reading past keys.
 
-Both paths also bump the :class:`~kvcompress.api.CompressionStats`
-counters wired by :func:`kvcompress.api.enable_compression`.
+Both paths also bump the :class:`~kvfold.api.CompressionStats`
+counters wired by :func:`kvfold.api.enable_compression`.
 """
 
 from __future__ import annotations
@@ -55,19 +55,19 @@ from typing import Any
 
 import torch
 
-from kvcompress.adapters.registry import install as registry_install
-from kvcompress.cache.manager import CacheManager
-from kvcompress.compressor.base import KVCompressor
-from kvcompress.compressor.dispatch import build_compressor as _build_compressor
+from kvfold.adapter.registry import install as registry_install
+from kvfold.cache.manager import Pool
+from kvfold.core.base import Compressor
+from kvfold.api import build_compressor as _build_compressor
 
 __all__ = ["HuggingFaceAdapter", "build_compressor", "is_compression_active"]
 
 
 log = logging.getLogger(__name__)
 
-# Re-export so existing callers (``from kvcompress.adapters.huggingface
+# Re-export so existing callers (``from kvfold.adapter.huggingface
 # import build_compressor``) keep working. New code should import from
-# ``kvcompress.compressor.dispatch`` directly.
+# ``kvfold.core.dispatch`` directly.
 # ponytail: weak-keyed registry of installed adapters keyed by id(model).
 # ``weakref.WeakValueDictionary`` lets GC reclaim adapters when the model
 # goes out of scope (e.g. between test cases) without us having to thread
@@ -82,17 +82,17 @@ def is_compression_active(model: object) -> bool:
     return id(model) in INSTALLED_ADAPTERS
 
 
-def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
-    """Backwards-compat shim — dispatch lives in ``kvcompress.compressor.dispatch``."""
+def build_compressor(method: str, **kwargs: Any) -> Compressor:
+    """Backwards-compat shim — dispatch lives in ``kvfold.core.dispatch``."""
     return _build_compressor(method, **kwargs)
 
 
 class HuggingFaceAdapter:
-    """Adapter that wires a :class:`KVCompressor` into an HF model.
+    """Adapter that wires a :class:`Compressor` into an HF model.
 
     The adapter is **stateful** in two ways:
 
-    * It owns a :class:`CacheManager` which holds the compressed payloads
+    * It owns a :class:`Pool` which holds the compressed payloads
       (created lazily by :meth:`enable`).
     * It remembers which ``transformers.*`` modules it patched
       (``self.patched_modules``) so :meth:`disable` can put them back.
@@ -132,12 +132,12 @@ class HuggingFaceAdapter:
         self.layer_groups = int(layer_groups)
         self.bits = tuple(bits)
         # Hugging Face maintains a strict allow-list of cache
-        # implementations. "kvcompress" isn't on it; we route through
+        # implementations. "kvfold" isn't on it; we route through
         # "dynamic" (the standard paged-DynamicCache backend) and let
         # the patched class intercept writes instead.
         if cache_implementation not in ("dynamic", "dynamic_full"):
             log.debug(
-                "kvcompress: ignoring cache_implementation=%r; using 'dynamic'",
+                "kvfold: ignoring cache_implementation=%r; using 'dynamic'",
                 cache_implementation,
             )
             cache_implementation = "dynamic"
@@ -164,10 +164,10 @@ class HuggingFaceAdapter:
         )
         self.compressor = compressor
 
-        # ``stats`` is wired by kvcompress.api.enable_compression after
+        # ``stats`` is wired by kvfold.api.enable_compression after
         # the CompressionHandle is built. We keep it as an untyped
-        # attribute to avoid an import cycle with kvcompress.api.
-        self.manager: CacheManager | None = None
+        # attribute to avoid an import cycle with kvfold.api.
+        self.manager: Pool | None = None
         self.enabled = False
         self.enable_rolled_back = False
         # Snapshot of state we mutated during enable(); populated as we
@@ -197,16 +197,16 @@ class HuggingFaceAdapter:
         """
         if self.enabled:
             raise RuntimeError(
-                "kvcompress: enable() called twice on the same adapter; "
+                "kvfold: enable() called twice on the same adapter; "
                 "call handle.disable() first."
             )
         if is_compression_active(self.model):
             raise RuntimeError(
-                "kvcompress: a different adapter is already installed on this model; "
+                "kvfold: a different adapter is already installed on this model; "
                 "call its handle.disable() first."
             )
         log.info(
-            "kvcompress: enabling %s on %s",
+            "kvfold: enabling %s on %s",
             self.method,
             type(self.model).__name__,
         )
@@ -219,7 +219,7 @@ class HuggingFaceAdapter:
 
     def enable_inner(self) -> None:
         """Inner enable; assumes caller handles rollback on failure."""
-        self.manager = CacheManager(
+        self.manager = Pool(
             compressor=self.compressor,
             device=self.device,
         )
@@ -245,7 +245,7 @@ class HuggingFaceAdapter:
                 model=self.model,
                 cache_manager=self.manager,
             )
-            log.info("kvcompress: installed family shim for %s", model_type)
+            log.info("kvfold: installed family shim for %s", model_type)
 
         self.enabled = True
         INSTALLED_ADAPTERS[id(self.model)] = self
@@ -260,7 +260,7 @@ class HuggingFaceAdapter:
             try:
                 self.uninstall_dynamic_cache()
             except Exception:  # noqa: BLE001 -- best-effort rollback
-                log.exception("kvcompress: rollback failed during uninstall_dynamic_cache")
+                log.exception("kvfold: rollback failed during uninstall_dynamic_cache")
         # Undo generation_config mutation.
         if hasattr(self.model, "generation_config"):
             try:
@@ -274,7 +274,7 @@ class HuggingFaceAdapter:
                     except AttributeError:
                         pass
             except Exception:  # noqa: BLE001
-                log.exception("kvcompress: rollback failed for cache_implementation")
+                log.exception("kvfold: rollback failed for cache_implementation")
         self.manager = None
 
     def disable(self) -> None:
@@ -296,7 +296,7 @@ class HuggingFaceAdapter:
         self.uninstall_dynamic_cache()
         self.enabled = False
         INSTALLED_ADAPTERS.pop(id(self.model), None)
-        log.info("kvcompress: disabled compression on %s", type(self.model).__name__)
+        log.info("kvfold: disabled compression on %s", type(self.model).__name__)
 
     # ------------------------------------------------------------------
     # DynamicCache patching
@@ -314,7 +314,7 @@ class HuggingFaceAdapter:
 
         Both also bump ``cache.stats_ref`` (the CompressionStats on the
         handle) so users can read cumulative counts via
-        :meth:`~kvcompress.api.CompressionHandle.stats_dict`.
+        :meth:`~kvfold.api.CompressionHandle.stats_dict`.
 
         Args:
             dynamic_cache_cls: the original :class:`DynamicCache` class
@@ -338,7 +338,7 @@ class HuggingFaceAdapter:
 
                 After the underlying HF cache stores K/V for this layer,
                 we read them back out of ``self.layers[layer_idx]`` and
-                delegate to :meth:`CacheManager.store` for the
+                delegate to :meth:`Pool.store` for the
                 compressed-cache mirror.
 
                 Args:
@@ -432,7 +432,7 @@ class HuggingFaceAdapter:
         self.patched_modules.clear()
 
 
-def generic_install(model: object, cache_manager: CacheManager) -> None:
+def generic_install(model: object, cache_manager: Pool) -> None:
     """Default install for unrecognized model types.
 
     Returns ``None`` so the registry's ``install`` dispatch knows the

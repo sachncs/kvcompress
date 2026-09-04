@@ -1,7 +1,7 @@
 """Model family registry.
 
 Maps ``config.model_type`` (as exposed by Hugging Face ``transformers``) to
-the appropriate shim module that knows how to wire :class:`KVCompressor`
+the appropriate shim module that knows how to wire :class:`Compressor`
 into that family's attention layer.
 
 Adding a new family: write ``adapters/<name>.py`` exposing
@@ -28,18 +28,18 @@ log = logging.getLogger(__name__)
 # Registry of supported model types. Keys are HF ``config.model_type``
 # strings; values are dotted module paths to the family shim.
 REGISTRY: dict[str, str] = {
-    "llama": "kvcompress.adapters.llama",
-    "mistral": "kvcompress.adapters.mistral",
-    "qwen2": "kvcompress.adapters.qwen",
-    "qwen2_moe": "kvcompress.adapters.qwen",
-    "gemma": "kvcompress.adapters.gemma",
-    "gemma2": "kvcompress.adapters.gemma",
-    "phi": "kvcompress.adapters.phi",
-    "phi3": "kvcompress.adapters.phi",
-    "mixtral": "kvcompress.adapters.mixtral",
-    "falcon": "kvcompress.adapters.falcon",
-    "deepseek": "kvcompress.adapters.deepseek",
-    "internlm": "kvcompress.adapters.internlm",
+    "llama": "kvfold.adapter.llama",
+    "mistral": "kvfold.adapter.mistral",
+    "qwen2": "kvfold.adapter.qwen",
+    "qwen2_moe": "kvfold.adapter.qwen",
+    "gemma": "kvfold.adapter.gemma",
+    "gemma2": "kvfold.adapter.gemma",
+    "phi": "kvfold.adapter.phi",
+    "phi3": "kvfold.adapter.phi",
+    "mixtral": "kvfold.adapter.mixtral",
+    "falcon": "kvfold.adapter.falcon",
+    "deepseek": "kvfold.adapter.deepseek",
+    "internlm": "kvfold.adapter.internlm",
 }
 
 
@@ -77,7 +77,7 @@ def install(model: object, cache_manager: object, model_type: str) -> Callable[[
 
     Args:
         model: the HF model being patched.
-        cache_manager: the :class:`CacheManager` to pass to the shim.
+        cache_manager: the :class:`Pool` to pass to the shim.
         model_type: HF ``config.model_type``.
 
     Returns:
@@ -87,10 +87,10 @@ def install(model: object, cache_manager: object, model_type: str) -> Callable[[
     module_path = resolve(model_type)
     if module_path is None:
         log.warning(
-            "kvcompress: no shim for model_type=%s; using generic interception",
+            "kvfold: no shim for model_type=%s; using generic interception",
             model_type,
         )
-        from kvcompress.adapters.huggingface import generic_install
+        from kvfold.adapter.huggingface import generic_install
 
         generic_install(model, cache_manager)
         return None

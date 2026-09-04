@@ -1,6 +1,6 @@
 """Model-family adapters and the Hugging Face entry point.
 
-This subpackage holds everything needed to integrate kvcompress with a
+This subpackage holds everything needed to integrate kvfold with a
 specific serving framework. The :mod:`.huggingface` module is the primary
 integration (it patches Hugging Face's :class:`~transformers.cache_utils.DynamicCache`
 so any HF causal LM gets compressed transparently). The
@@ -21,18 +21,18 @@ from typing import Any
 
 def __getattr__(name: str) -> Any:
     if name == "HuggingFaceAdapter":
-        from kvcompress.adapters.huggingface import HuggingFaceAdapter
+        from kvfold.adapter.huggingface import HuggingFaceAdapter
 
         return HuggingFaceAdapter
     if name in ("export_kv", "import_kv", "is_vllm_available", "resolve_cache"):
-        from kvcompress.adapters import vllm
+        from kvfold.adapter import vllm
 
         return getattr(vllm, name)
     if name in ("JoLTOffloadHandler", "ThreadSafeEvictionPool", "is_vllm_kv_offload_available"):
-        from kvcompress.adapters import vllm_kv_offload
+        from kvfold.adapter import vllm_kv_offload
 
         return getattr(vllm_kv_offload, name)
-    raise AttributeError(f"module 'kvcompress.adapters' has no attribute {name!r}")
+    raise AttributeError(f"module 'kvfold.adapter' has no attribute {name!r}")
 
 
 __all__ = [
