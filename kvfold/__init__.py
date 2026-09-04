@@ -45,10 +45,10 @@ LAZY_EXPORTS = {
     "Projector": ("kvfold.core.jl", "Projector"),
     "Decomposer": ("kvfold.core.svd", "Decomposer"),
     "Quantizer": ("kvfold.core.quant", "Quantizer"),
-    "CompressedKVCache": ("kvfold.cache.compress", "CompressedKVCache"),
-    "Pool": ("kvfold.cache.manager", "Pool"),
-    "Meta": ("kvfold.cache.metadata", "Meta"),
-    "LayerMeta": ("kvfold.cache.metadata", "LayerMeta"),
+    "CompressedKVCache": ("kvfold.store.compress", "CompressedKVCache"),
+    "Pool": ("kvfold.store.manager", "Pool"),
+    "Meta": ("kvfold.store.metadata", "Meta"),
+    "LayerMeta": ("kvfold.store.metadata", "LayerMeta"),
 }
 
 

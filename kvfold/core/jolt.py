@@ -174,7 +174,7 @@ class Jolt(Compressor):
 
         Returns:
             A ``(key_payload, value_payload)`` pair ready for storage in
-            :class:`~kvfold.cache.compress.CompressedKVCache`.
+            :class:`~kvfold.store.compress.CompressedKVCache`.
 
         Raises:
             ValueError: if K and V have different shapes or are not 3-D.

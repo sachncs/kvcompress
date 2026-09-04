@@ -62,7 +62,7 @@ def test_registry_register_duplicate_raises() -> None:
 
 def test_install_dispatches() -> None:
     model = FakeModel("llama")
-    from kvfold.cache.manager import CacheManager
+    from kvfold.store.manager import CacheManager
     from kvfold.core.jolt import Jolt
 
     mgr = CacheManager(compressor=Jolt(compression_ratio=3.0))
@@ -72,7 +72,7 @@ def test_install_dispatches() -> None:
 
 def test_install_unknown_uses_generic() -> None:
     model = FakeModel("nonexistent")
-    from kvfold.cache.manager import CacheManager
+    from kvfold.store.manager import CacheManager
     from kvfold.core.jolt import Jolt
 
     mgr = CacheManager(compressor=Jolt(compression_ratio=3.0))

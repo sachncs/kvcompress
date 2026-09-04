@@ -39,8 +39,8 @@ from typing import Any
 import torch
 
 from kvfold.api import parse_target_memory
-from kvfold.cache.compress import CompressedKVCache
-from kvfold.cache.metadata import Meta
+from kvfold.store.compress import CompressedKVCache
+from kvfold.store.metadata import Meta
 from kvfold.core.base import Compressor
 from kvfold.core.dispatch import build_compressor
 from kvfold.runtime.profile import Profile

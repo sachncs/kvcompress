@@ -56,7 +56,7 @@ from typing import Any
 import torch
 
 from kvfold.adapter.registry import install as registry_install
-from kvfold.cache.manager import Pool
+from kvfold.store.manager import Pool
 from kvfold.core.base import Compressor
 from kvfold.api import build_compressor as _build_compressor
 

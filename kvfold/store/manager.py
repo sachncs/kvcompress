@@ -25,8 +25,8 @@ from typing import Any
 
 import torch
 
-from kvfold.cache.compress import Cache
-from kvfold.cache.metadata import Meta
+from kvfold.store.compress import Cache
+from kvfold.store.metadata import Meta
 from kvfold.core.base import Compressor
 
 log = logging.getLogger(__name__)

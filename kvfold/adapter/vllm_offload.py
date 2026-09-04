@@ -276,7 +276,7 @@ class Offload:
         Returns:
             Mapping ``(layer, kind) -> payload`` for every cell.
         """
-        from kvfold.cache.manager import Pool
+        from kvfold.store.manager import Pool
 
         mgr = Pool(compressor=self.compressor)
         if isinstance(block, tuple) and len(block) == 2:

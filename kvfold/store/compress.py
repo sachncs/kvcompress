@@ -12,7 +12,7 @@ Public surface:
 * :class:`LayerEntry` — one (layer, K, V) record held inside the cache.
 * :func:`normalize_kv` — reshape HF-style K/V to ``(m, T, dh)``.
 * :func:`payload_to_meta` — convert a payload to a
-  :class:`~kvfold.cache.metadata.LayerMeta`.
+  :class:`~kvfold.store.metadata.LayerMeta`.
 
 The split mirrors ``DynamicCache``'s split between raw storage and the
 model-facing API.
@@ -47,7 +47,7 @@ from typing import Any
 
 import torch
 
-from kvfold.cache.metadata import Meta, LayerMeta
+from kvfold.store.metadata import Meta, LayerMeta
 from kvfold.core.base import Payload, Compressor
 
 __all__ = ["Cache", "LayerEntry", "normalize_kv", "payload_to_meta"]

@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.cache.compress import CompressedKVCache
-from kvfold.cache.manager import CacheManager
-from kvfold.cache.metadata import CompressionMetadata, LayerCompression
+from kvfold.store.compress import CompressedKVCache
+from kvfold.store.manager import CacheManager
+from kvfold.store.metadata import CompressionMetadata, LayerCompression
 from kvfold.core.base import (
     Payload,
     Stats,
