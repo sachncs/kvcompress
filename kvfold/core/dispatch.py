@@ -1,177 +1,186 @@
-"""Unified compressor dispatch.
+"""Unified compressor dispatch and registry.
 
-Public surface: :func:`build_compressor` is the single source of truth for
-mapping the ``method`` string in :func:`kvfold.api.enable_compression`
-to a concrete :class:`~kvfold.compressor.base.KVCompressor` subclass.
+:class:`CompressorRegistry` is the single source of truth for mapping a
+method string to a concrete :class:`Compressor` subclass and its
+:class:`MethodConfig`. Each registered entry binds:
 
-Why one place: the same dispatch was duplicated across
-``adapters/huggingface.py`` and ``adapters/vllm.py`` and only handled three
-methods (``jolt``, ``flashjolt``, ``identity``) while the public API and
-README advertised nine (``int2``, ``int4``, ``int8``, ``fp8``, ``fp16``,
-``bf16``, ``lowrank``, ``jolt``, ``flashjolt``, ``identity``). Collapsing
-the duplication closes the doc/code drift.
+* a public method name (``"jolt"``, ``"flash"``, ...),
+* the :class:`Compressor` subclass that implements it,
+* the :class:`MethodConfig` subclass that configures it,
+* an optional kwarg adapter for backwards-friendly defaults.
 
-Per-method supported kwargs are documented inline. The dispatch filters
-unknown kwargs at the call site rather than forwarding them to the
-compressor constructor — a typo (``per_chanel=True`` instead of
-``per_channel=True``) becomes a clear error instead of a silent drop.
+Adding a new method means: subclass :class:`Compressor` and
+:class:`MethodConfig`, then call :meth:`CompressorRegistry.register`.
+
+The legacy :func:`build_compressor` function is a thin façade that calls
+:func:`kvfold.api.build_compressor`; users should import from the public
+``kvfold`` namespace.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import importlib
 import logging
-from typing import Any
+from typing import Any, Callable, Mapping, Type
 
-import torch
-
-from kvfold.compressor.base import KVCompressor
-
-__all__ = ["METHODS", "build_compressor", "supported_methods"]
-
+from kvfold.config import MethodConfig, REGISTRY as CONFIG_REGISTRY
+from kvfold.core.base import Compressor
+from kvfold.errors import MethodConfigError, UnsupportedMethodError
 
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Per-method keyword argument allow-list
-# ---------------------------------------------------------------------------
-#
-# Only the kwargs listed here are forwarded to the compressor constructor.
-# ``enable_compression(**kwargs)`` rejects unknown kwargs with a clear
-# error message at the API boundary so a typo (e.g. ``per_chanel=True``)
-# fails fast rather than being silently dropped.
-# ---------------------------------------------------------------------------
 
-INT_KWARGS = frozenset(
-    {
-        "bits",
-        "per_channel",
-        "symmetric",
-        "group_size",
-        "factor_dtype",
-    }
-)
+class CompressorEntry:
+    """Binding between a method name, its config class, and its compressor class.
 
-FLOAT_KWARGS = frozenset({"factor_dtype"})
+    The :attr:`factory` callable is the adapter that turns a
+    :class:`MethodConfig` into a configured :class:`Compressor` instance.
+    It is computed once at registration time and cached.
+    """
 
-LOWRANK_KWARGS = frozenset({"rank", "factor_dtype", "seed"})
+    def __init__(
+        self,
+        method: str,
+        config_cls: Type[MethodConfig],
+        compressor_cls: Type[Compressor],
+        factory: Callable[[MethodConfig], Compressor],
+    ) -> None:
+        self.method = method
+        self.config_cls = config_cls
+        self.compressor_cls = compressor_cls
+        self.factory = factory
 
-JOLT_KWARGS = frozenset(
-    {
-        "compression_ratio",
-        "bits",
-        "factor_dtype",
-        "jl_distribution",
-        "symmetric_quant",
-        "per_channel_quant",
-        "group_size",
-        "layer_groups",
-        "seed",
-    }
-)
 
-IDENTITY_KWARGS = frozenset({"factor_dtype"})
+class CompressorRegistry:
+    """Process-wide registry of compression methods.
 
-# ---------------------------------------------------------------------------
-# Method catalog
-# ---------------------------------------------------------------------------
+    The KV store maps method name → :class:`CompressorEntry`. Registration
+    is append-only; the same name cannot be bound twice.
+    """
 
-METHODS: dict[str, dict[str, Any]] = {
-    "jolt": {
-        "class_path": ("kvfold.compressor.jolt", "JoLTCompressor"),
-        "allowed_kwargs": JOLT_KWARGS,
-    },
-    "flashjolt": {
-        "class_path": ("kvfold.compressor.flashjolt", "FlashJoLTCompressor"),
-        "allowed_kwargs": JOLT_KWARGS,
-    },
-    "lowrank": {
-        "class_path": ("kvfold.compressor.lowrank", "LowRankCompressor"),
-        "allowed_kwargs": LOWRANK_KWARGS,
-    },
-    "int2": {
-        "class_path": ("kvfold.compressor.quantization_only", "IntQuantOnlyCompressor"),
-        "allowed_kwargs": INT_KWARGS,
-        "bits_override": 2,
-    },
-    "int4": {
-        "class_path": ("kvfold.compressor.quantization_only", "IntQuantOnlyCompressor"),
-        "allowed_kwargs": INT_KWARGS,
-        "bits_override": 4,
-    },
-    "int8": {
-        "class_path": ("kvfold.compressor.quantization_only", "IntQuantOnlyCompressor"),
-        "allowed_kwargs": INT_KWARGS,
-        "bits_override": 8,
-    },
-    "fp8": {
-        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
-        "allowed_kwargs": IDENTITY_KWARGS,
-        "dtype_override": torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.float16,
-    },
-    "fp16": {
-        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
-        "allowed_kwargs": IDENTITY_KWARGS,
-        "dtype_override": torch.float16,
-    },
-    "bf16": {
-        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
-        "allowed_kwargs": IDENTITY_KWARGS,
-        "dtype_override": torch.bfloat16,
-    },
-    "identity": {
-        "class_path": ("kvfold.compressor.identity", "IdentityCompressor"),
-        "allowed_kwargs": IDENTITY_KWARGS,
-    },
-}
+    def __init__(self) -> None:
+        self.entries: dict[str, CompressorEntry] = {}
+
+    def register(
+        self,
+        method: str,
+        compressor_cls: Type[Compressor],
+        factory: Callable[[MethodConfig], Compressor] | None = None,
+        config_cls: Type[MethodConfig] | None = None,
+    ) -> Type[Compressor]:
+        """Bind ``method`` to ``compressor_cls``.
+
+        Args:
+            method: public method name (e.g. ``"jolt"``).
+            compressor_cls: subclass of :class:`Compressor`.
+            factory: optional callable ``(MethodConfig) -> Compressor``.
+                If omitted, the default factory uses :meth:`Compressor.from_config`.
+            config_cls: optional :class:`MethodConfig` subclass. If omitted,
+                the currently-registered config in :data:`CONFIG_REGISTRY`
+                is used.
+
+        Returns:
+            The ``compressor_cls`` argument (for use as a decorator).
+        """
+        if method in self.entries:
+            raise ValueError(f"method {method!r} is already registered to {self.entries[method].compressor_cls.__name__}")
+        if not issubclass(compressor_cls, Compressor):
+            raise TypeError(f"{compressor_cls.__name__} must inherit from Compressor")
+
+        if config_cls is None:
+            try:
+                config_cls = CONFIG_REGISTRY.resolve(method)
+            except KeyError as exc:
+                raise MethodConfigError(method, "config", f"no MethodConfig registered for {method!r}") from exc
+
+        if factory is None:
+            config_fields = {f.name for f in dataclasses.fields(config_cls)}
+            compressor_params = compressor_cls.__init__.__code__.co_varnames
+
+            def default_factory(config: MethodConfig) -> Compressor:
+                config_dict = dataclasses.asdict(config)
+                kwargs = {k: v for k, v in config_dict.items() if k in config_fields and k in compressor_params}
+                return compressor_cls(**kwargs)
+
+            factory = default_factory
+
+        entry = CompressorEntry(
+            method=method,
+            config_cls=config_cls,
+            compressor_cls=compressor_cls,
+            factory=factory,
+        )
+        self.entries[method] = entry
+        return compressor_cls
+
+    def names(self) -> tuple[str, ...]:
+        """Return the registered method names in insertion order."""
+        return tuple(self.entries)
+
+    def resolve(self, method: str) -> CompressorEntry:
+        """Return the entry for ``method`` or raise :class:`UnsupportedMethodError`."""
+        try:
+            return self.entries[method]
+        except KeyError:
+            raise UnsupportedMethodError(method=method, supported=self.names()) from None
+
+    def build(self, method: str, **kwargs: Any) -> Compressor:
+        """Build a configured :class:`Compressor` from kwargs.
+
+        The kwargs are validated against the method's :class:`MethodConfig`,
+        then the entry's factory is invoked.
+        """
+        config = CONFIG_REGISTRY.build(method, **kwargs)
+        entry = self.resolve(method)
+        compressor = entry.factory(config)
+        if not isinstance(compressor, Compressor):
+            raise TypeError(
+                f"factory for {method!r} returned {type(compressor).__name__}, expected Compressor"
+            )
+        return compressor
+
+
+REGISTRY: CompressorRegistry = CompressorRegistry()
+"""Process-wide registry; populated by module import side effects."""
+
+
+def register(
+    method: str,
+    compressor_cls: Type[Compressor],
+    factory: Callable[[MethodConfig], Compressor] | None = None,
+) -> Type[Compressor]:
+    """Module-level helper to register a compressor.
+
+    Usage::
+
+        @register("jolt", Jolt)
+        class Jolt(Compressor):
+            ...
+    """
+    return REGISTRY.register(method, compressor_cls, factory)
 
 
 def supported_methods() -> tuple[str, ...]:
     """Tuple of every compression method the dispatcher accepts."""
-    return tuple(METHODS.keys())
+    return REGISTRY.names()
 
 
-def build_compressor(method: str, **kwargs: Any) -> KVCompressor:
-    """Construct a compressor from its public method name.
-
-    Args:
-        method: one of :func:`supported_methods`.
-        **kwargs: forwarded to the compressor constructor. Unknown kwargs
-            raise :class:`ValueError` immediately so a typo is loud.
-
-    Returns:
-        A fresh :class:`KVCompressor` instance.
+def build_compressor(method: str, **kwargs: Any) -> Compressor:
+    """Construct a configured compressor from its public method name.
 
     Raises:
-        ValueError: if ``method`` is unknown, or if any kwarg isn't on
-            the method's allow-list.
+        UnsupportedMethodError: if ``method`` is not registered.
+        MethodConfigError: if any kwarg is unknown or out of range.
     """
-    import importlib
+    return REGISTRY.build(method, **kwargs)
 
-    method = method.lower()
-    spec = METHODS.get(method)
-    if spec is None:
-        supported = ", ".join(repr(m) for m in METHODS)
-        raise NotImplementedError(
-            f"compressor method {method!r} is not supported; supported methods: {supported}."
-        )
 
-    allowed = spec["allowed_kwargs"]
-    unknown = set(kwargs) - allowed - {"compression_ratio", "bits", "seed", "layer_groups"}
-    if unknown:
-        raise ValueError(
-            f"compressor method {method!r} got unexpected kwargs: "
-            f"{sorted(unknown)!r}; supported: {sorted(allowed)!r}."
-        )
-
-    if "bits_override" in spec:
-        kwargs.setdefault("bits", spec["bits_override"])
-    if "dtype_override" in spec:
-        kwargs.setdefault("factor_dtype", spec["dtype_override"])
-
-    module_name, attr = spec["class_path"]
-    cls = getattr(importlib.import_module(module_name), attr)
-    result = cls(**kwargs)
-    # ponytail: cast away the Any introduced by `**kwargs`.
-    if not isinstance(result, KVCompressor):
-        raise TypeError(f"{cls.__name__} did not return a KVCompressor")
-    return result
+__all__ = [
+    "CompressorRegistry",
+    "CompressorEntry",
+    "REGISTRY",
+    "register",
+    "supported_methods",
+    "build_compressor",
+]
