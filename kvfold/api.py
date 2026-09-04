@@ -191,7 +191,10 @@ def enable_compression(
     # passthrough compressor to avoid spinning up the allocator at ratio=1.
     extra: dict[str, Any] = dict(kwargs)
     if method == "pass":
-        extra.pop("rank", None)
+        # Pass doesn't accept bits / seed / layer_groups — drop them
+        # so build_compressor() doesn't reject them as unknown kwargs.
+        for k in ("bits", "layer_groups"):
+            extra.pop(k, None)
 
     adapter = HF(
         model=model,

@@ -48,6 +48,7 @@ counters wired by :func:`kvfold.api.enable_compression`.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import sys
 import weakref
@@ -167,13 +168,22 @@ class HF:
                 device = "cpu"
         self.device = torch.device(device) if isinstance(device, str) else device
 
-        compressor = _build_compressor(
-            method,
-            ratio=ratio,
-            bits=bits,
-            seed=seed,
-            **kwargs,
-        )
+        # Build compressor kwargs: pass-through methods don't accept bits/seed;
+        # only forward kwargs the chosen method's config actually accepts.
+        from kvfold.config import REGISTRY as CONFIG_REGISTRY
+        try:
+            config_cls = CONFIG_REGISTRY.resolve(method)
+            valid_fields = {f.name for f in dataclasses.fields(config_cls)}
+        except KeyError:
+            valid_fields = set()
+        compressor_kwargs: dict[str, Any] = {k: v for k, v in kwargs.items() if k in valid_fields}
+        if "ratio" in valid_fields:
+            compressor_kwargs["ratio"] = ratio
+        if "bits" in valid_fields:
+            compressor_kwargs["bits"] = bits
+        if "seed" in valid_fields:
+            compressor_kwargs["seed"] = seed
+        compressor = _build_compressor(method, **compressor_kwargs)
         self.compressor = compressor
 
         # ``stats`` is wired by kvfold.api.enable_compression after

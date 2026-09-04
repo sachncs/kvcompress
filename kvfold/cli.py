@@ -65,9 +65,9 @@ def validate(
 
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 32, 16)
-    comp = JoLTCompressor(compression_ratio=2.0)
+    comp = Jolt(ratio=2.0)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.decompress(kp, vp)
+    k_hat, v_hat = comp.restore(kp, vp)
     rel_err = float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K))
     typer.echo(f"  JoLT round-trip rel error: {rel_err:.4f}")
     if rel_err > 1.0:
@@ -75,9 +75,9 @@ def validate(
         raise typer.Exit(code=1)
 
     # 2. Flash round-trip.
-    fj = Flash(compression_ratio=2.0)
+    fj = Flash(ratio=2.0)
     kp, vp = fj.compress(K, V)
-    k_hat, v_hat = fj.decompress(kp, vp)
+    k_hat, v_hat = fj.restore(kp, vp)
     rel_err = float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K))
     typer.echo(f"  Flash round-trip rel error: {rel_err:.4f}")
 
@@ -90,7 +90,7 @@ def validate(
             tok = GPT2Tokenizer.from_pretrained("gpt2")
             model = GPT2LMHeadModel.from_pretrained("gpt2")
             model.eval()
-            handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+            handle = enable_compression(model, method="flashjolt", ratio=2.0)
             try:
                 ids = tok.encode("Hello", return_tensors="pt")
                 with torch.no_grad():
@@ -280,7 +280,6 @@ def compress(
     max_new: int = typer.Option(20, help="tokens to generate"),
     seed: int = typer.Option(0, help="RNG seed"),
     bits: str = typer.Option("0,2,4,8", help="comma-separated residual bit-widths"),
-    layer_groups: int = typer.Option(1, help="number of layer groups"),
     cache_implementation: str = typer.Option(
         "kvfold",
         help="HF cache_implementation value (always overridden to 'dynamic' under the hood)",
@@ -306,7 +305,6 @@ def compress(
             target_memory=target,
             seed=seed,
             bits=bits_tuple,
-            layer_groups=layer_groups,
             cache_implementation=cache_implementation,
         )
         try:

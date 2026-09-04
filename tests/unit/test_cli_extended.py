@@ -323,7 +323,6 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
             max_new=2,
             seed=0,
             bits="0",
-            layer_groups=1,
             cache_implementation="kvfold",
         )
 
