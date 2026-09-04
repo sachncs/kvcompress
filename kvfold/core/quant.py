@@ -92,7 +92,7 @@ class Quantizer(Protocol):
 
 
 @dataclass
-class FloatCast:
+class FloatCastQuantizer:
     """Casts to a low-precision float and back; scale is always 1.0."""
 
     name: str = "fp16"
@@ -484,7 +484,7 @@ def get_quantizer(
         key = f"float:{name}"
         return get_or_create(
             key,
-            lambda: FloatCast(name=name),
+            lambda: FloatCastQuantizer(name=name),
         )
     if name in ("int2", "int4", "int8"):
         bits = int(name[3:])

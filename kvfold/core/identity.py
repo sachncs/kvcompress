@@ -41,6 +41,9 @@ class Pass(Compressor):
     method: str = "pass"
 
     def __init__(self, *, dtype: torch.dtype | None = None, **unused: Any) -> None:
+        if unused:
+            from kvfold.errors import MethodConfigError
+            raise MethodConfigError("pass", ",".join(sorted(unused.keys())), f"unknown field(s); pass accepts only dtype")
         self.dtype = dtype if dtype is not None else torch.float16
 
     @classmethod

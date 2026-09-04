@@ -226,7 +226,7 @@ def build_compressor(method: str, **kwargs: Any) -> Any:
         MethodConfigError: if any kwarg is unknown or out of range.
     """
     from kvfold.core.dispatch import REGISTRY
-    return REGISTRY.build(method, **kwargs)
+    return REGISTRY.build(method.lower() if isinstance(method, str) else method, **kwargs)
 
 
 def supported_methods() -> tuple[str, ...]:

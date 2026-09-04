@@ -125,9 +125,14 @@ class CompressorRegistry:
         return tuple(self.entries)
 
     def resolve(self, method: str) -> CompressorEntry:
-        """Return the entry for ``method`` or raise :class:`UnsupportedMethodError`."""
+        """Return the entry for ``method`` or raise :class:`UnsupportedMethodError`.
+
+        Method names are matched case-insensitively: ``"INT4"`` resolves
+        the same as ``"int4"``.
+        """
+        key = method.lower() if isinstance(method, str) else method
         try:
-            return self.entries[method]
+            return self.entries[key]
         except KeyError:
             raise UnsupportedMethodError(method=method, supported=self.names()) from None
 
