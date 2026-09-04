@@ -1,100 +1,178 @@
-"""Model family registry.
+"""Family registry — collapses the 9 per-family shims into one module.
 
-Maps ``config.model_type`` (as exposed by Hugging Face ``transformers``) to
-the appropriate shim module that knows how to wire :class:`Compressor`
-into that family's attention layer.
+Each :class:`Family` instance owns the install/uninstall logic for one
+HF ``config.model_type``. The :class:`FamilyRegistry` is a single
+mapping ``model_type -> Family``. Adding a new family means
+``@register("name")`` decorating a :class:`Family` subclass.
 
-Adding a new family: write ``adapters/<name>.py`` exposing
-``install(model, cache_manager)`` and add an entry to :data:`REGISTRY`.
-
-Today every entry is a no-op shim because the :class:`HF`'s
-:class:`~transformers.cache_utils.DynamicCache` subclass already covers the
-standard cache layout. The registry exists so future model-specific hooks
-(custom attention kernels, MLA, fused QKV) have a place to land.
-
-Thread-safety: the registry is mutated only at import time and via
-:func:`register`. The module uses a module-level dict without locking;
-callers that register at runtime must do so before any
-:class:`HF` is constructed.
+Today every entry is a no-op :class:`NoOpFamily` because the HF
+:class:`~transformers.cache_utils.DynamicCache` subclass already
+covers the standard cache layout. The registry exists so future
+model-specific hooks (custom attention kernels, MLA, fused QKV) have a
+place to land without scattering no-op modules across the package.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from abc import ABC, abstractmethod
+from typing import Callable, Type
 
 log = logging.getLogger(__name__)
 
-# Registry of supported model types. Keys are HF ``config.model_type``
-# strings; values are dotted module paths to the family shim.
-REGISTRY: dict[str, str] = {
-    "llama": "kvfold.adapter.llama",
-    "mistral": "kvfold.adapter.mistral",
-    "qwen2": "kvfold.adapter.qwen",
-    "qwen2_moe": "kvfold.adapter.qwen",
-    "gemma": "kvfold.adapter.gemma",
-    "gemma2": "kvfold.adapter.gemma",
-    "phi": "kvfold.adapter.phi",
-    "phi3": "kvfold.adapter.phi",
-    "mixtral": "kvfold.adapter.mixtral",
-    "falcon": "kvfold.adapter.falcon",
-    "deepseek": "kvfold.adapter.deepseek",
-    "internlm": "kvfold.adapter.internlm",
-}
+
+class Family(ABC):
+    """Base class for a per-model-family install/uninstall policy."""
+
+    name: str
+
+    @abstractmethod
+    def install(self, model: object, pool: object) -> Callable[[], None] | None:
+        """Install the family-specific hooks on ``model``."""
+
+    def uninstall(self, model: object, pool: object) -> None:
+        """Inverse of :meth:`install`. Default: no-op."""
+
+
+class NoOpFamily(Family):
+    """Family whose install is a no-op (the HF cache subclass covers it)."""
+
+    name: str = ""
+
+    def install(self, model: object, pool: object) -> Callable[[], None] | None:
+        return None
+
+
+class Llama(NoOpFamily):
+    name = "llama"
+
+
+class Mistral(NoOpFamily):
+    name = "mistral"
+
+
+class Qwen2(NoOpFamily):
+    name = "qwen2"
+
+
+class Qwen2Moe(NoOpFamily):
+    name = "qwen2_moe"
+
+
+class Gemma(NoOpFamily):
+    name = "gemma"
+
+
+class Gemma2(NoOpFamily):
+    name = "gemma2"
+
+
+class Phi(NoOpFamily):
+    name = "phi"
+
+
+class Phi3(NoOpFamily):
+    name = "phi3"
+
+
+class Mixtral(NoOpFamily):
+    name = "mixtral"
+
+
+class Falcon(NoOpFamily):
+    name = "falcon"
+
+
+class DeepSeek(NoOpFamily):
+    name = "deepseek"
+
+
+class InternLM(NoOpFamily):
+    name = "internlm"
+
+
+class FamilyRegistry:
+    """Registry of :class:`Family` strategies keyed by HF ``model_type``."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, Family] = {}
+
+    def register(self, family_cls: Type[Family]) -> Type[Family]:
+        """Bind ``family_cls.name`` to a fresh instance of ``family_cls``."""
+        if not family_cls.name:
+            raise ValueError(f"{family_cls.__name__} must set the `name` class attribute")
+        if family_cls.name in self.entries:
+            raise ValueError(f"family {family_cls.name!r} is already registered")
+        self.entries[family_cls.name] = family_cls()
+        return family_cls
+
+    def names(self) -> tuple[str, ...]:
+        return tuple(self.entries)
+
+    def resolve(self, model_type: str) -> Family | None:
+        return self.entries.get(model_type)
+
+    def install(self, model: object, pool: object, model_type: str) -> Callable[[], None] | None:
+        family = self.resolve(model_type)
+        if family is None:
+            log.warning(
+                "kvfold: no family shim for model_type=%s; using generic interception",
+                model_type,
+            )
+            return None
+        return family.install(model, pool)
+
+
+REGISTRY: FamilyRegistry = FamilyRegistry()
 
 
 def known_model_types() -> list[str]:
     """Sorted list of all registered ``model_type`` strings."""
-    return sorted(REGISTRY.keys())
+    return sorted(REGISTRY.names())
 
 
-def resolve(model_type: str) -> str | None:
-    """Return the dotted module path that handles ``model_type``, or None."""
-    return REGISTRY.get(model_type)
+def register(family_cls: Type[Family]) -> Type[Family]:
+    """Module-level decorator helper for family registration."""
+    return REGISTRY.register(family_cls)
 
 
-def register(model_type: str, module_path: str) -> None:
-    """Register a custom family shim.
-
-    Args:
-        model_type: the HF ``config.model_type`` string to dispatch.
-        module_path: dotted path to a module exposing ``install(model, cache_manager)``.
-
-    Raises:
-        ValueError: if ``model_type`` is already registered.
-    """
-    if model_type in REGISTRY:
-        raise ValueError(f"model_type {model_type!r} already registered")
-    REGISTRY[model_type] = module_path
+def resolve(model_type: str) -> Family | None:
+    """Return the family handling ``model_type`` or ``None``."""
+    return REGISTRY.resolve(model_type)
 
 
-def install(model: object, cache_manager: object, model_type: str) -> Callable[[], None] | None:
-    """Dispatch to the right family shim and invoke its ``install``.
+def install(model: object, pool: object, model_type: str) -> Callable[[], None] | None:
+    """Dispatch to the right family and invoke its install."""
+    return REGISTRY.install(model, pool, model_type)
 
-    If ``model_type`` isn't registered, falls through to the generic
-    path (``generic_install``) which is a no-op — the DynamicCache
-    subclass does the real work.
 
-    Args:
-        model: the HF model being patched.
-        cache_manager: the :class:`Pool` to pass to the shim.
-        model_type: HF ``config.model_type``.
+def _register_builtins() -> None:
+    for cls in (Llama, Mistral, Qwen2, Qwen2Moe, Gemma, Gemma2, Phi, Phi3, Mixtral, Falcon, DeepSeek, InternLM):
+        REGISTRY.register(cls)
 
-    Returns:
-        The shim's ``install`` callable (if a shim was used), or ``None``
-        for the generic path.
-    """
-    module_path = resolve(model_type)
-    if module_path is None:
-        log.warning(
-            "kvfold: no shim for model_type=%s; using generic interception",
-            model_type,
-        )
-        from kvfold.adapter.huggingface import generic_install
 
-        generic_install(model, cache_manager)
-        return None
-    import importlib
+_register_builtins()
 
-    module = importlib.import_module(module_path)
-    return module.install(model, cache_manager)
+
+__all__ = [
+    "Family",
+    "NoOpFamily",
+    "FamilyRegistry",
+    "REGISTRY",
+    "register",
+    "known_model_types",
+    "resolve",
+    "install",
+    "Llama",
+    "Mistral",
+    "Qwen2",
+    "Qwen2Moe",
+    "Gemma",
+    "Gemma2",
+    "Phi",
+    "Phi3",
+    "Mixtral",
+    "Falcon",
+    "DeepSeek",
+    "InternLM",
+]
