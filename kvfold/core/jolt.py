@@ -16,7 +16,7 @@ Algorithm (per compress() call):
 
 1. Build two :class:`~kvfold.core.allocator.Cell` instances (one
    each for K and V) describing the cell shape and budget knobs.
-2. Call :meth:`JointAllocator.optimize` to get the per-cell
+2. Call :meth:`Bisect.optimize` to get the per-cell
    ``(r_token, r_feature, bits)`` decisions.
 3. For each cell: run ST-HOSVD via
    :func:`~kvfold.core.tucker.partial_tucker_st_hosvd`,
@@ -38,10 +38,10 @@ from typing import Any
 import torch
 
 from kvfold.config import JoltConfig
-from kvfold.core.allocator import (
-    AllocationResult,
+from kvfold.core.budget import (
     Cell,
-    JointAllocator,
+    Bisect,
+    Plan,
 )
 from kvfold.core.base import (
     Payload,
@@ -94,7 +94,7 @@ class Jolt(Compressor):
         bits: residual bit-widths the allocator can choose from.
         dtype: dtype of stored Tucker factors (``fp16`` or ``fp32``).
         jl_distribution: ``"gaussian"`` or ``"rademacher"``.
-        allocator: optional pre-built :class:`JointAllocator`. If ``None``,
+        allocator: optional pre-built :class:`Bisect`. If ``None``,
             one is constructed from ``compression_ratio`` and ``bits``.
         svd: optional shared :class:`SVD` (for deterministic seeding).
         symmetric_quant: symmetric vs. asymmetric quantization.
@@ -113,7 +113,7 @@ class Jolt(Compressor):
         bits: tuple[int, ...] = (0, 2, 4, 8),
         dtype: torch.dtype = torch.float16,
         jl_distribution: str = "gaussian",
-        allocator: JointAllocator | None = None,
+        allocator: Bisect | None = None,
         svd: SVD | None = None,
         symmetric_quant: bool = True,
         per_channel_quant: bool = True,
@@ -133,7 +133,7 @@ class Jolt(Compressor):
         # ``element_size_bytes=...`` to match a fp32 cache (allocator
         # bytes budget then doubles and the achieved ratio lands at the
         # user-requested target instead of half).
-        self.allocator = allocator or JointAllocator(
+        self.allocator = allocator or Bisect(
             target_ratio=compression_ratio,
             bits_grid=self.bits,
             factor_dtype_bytes=dtype.itemsize,
@@ -160,7 +160,7 @@ class Jolt(Compressor):
         Steps:
             1. Build two :class:`Cell` objects (one for K, one for V)
                describing shape and candidate bit-widths.
-            2. Call :meth:`JointAllocator.optimize` to obtain the
+            2. Call :meth:`Bisect.optimize` to obtain the
                Lagrange-multiplier-optimal ``(rT, rd, bits)`` per cell.
             3. Run :meth:`compress_cell` for each side, producing a
                :class:`JoLTFactors` (Tucker factors + JL-rotated residual
@@ -201,7 +201,7 @@ class Jolt(Compressor):
                 candidate_bits=self.bits,
             ),
         ]
-        alloc_result: AllocationResult = self.allocator.optimize(cells)
+        alloc_result: Plan = self.allocator.optimize(cells)
 
         k_alloc, v_alloc = alloc_result.allocations
 

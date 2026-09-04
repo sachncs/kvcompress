@@ -34,11 +34,13 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 __all__ = [
-    "Allocation",
-    "AllocationResult",
+    "Allocator",
+    "AllocatorRegistry",
+    "Bisect",
     "Cell",
-    "GreedyAllocator",
-    "JointAllocator",
+    "Greedy",
+    "Pick",
+    "Plan",
 ]
 
 
@@ -48,7 +50,7 @@ log = logging.getLogger(__name__)
 # round-trip: 0 → 1 (no residual), 2 → 0.30, 4 → 0.10, 8 → 0.04.
 #
 # These are illustrative; the paper does not publish exact calibration
-# numbers. Override per-model with ``JointAllocator(epsilon_squared=...)``
+# numbers. Override per-model with ``Bisect(epsilon_squared=...)``
 # to improve the allocator's accuracy on a particular architecture.
 DEFAULT_EPSILON_SQUARED = {0: 1.0, 2: 0.30, 4: 0.10, 8: 0.04}
 
@@ -58,7 +60,7 @@ class Cell:
     """One (layer group, K/V) cell the allocator optimizes.
 
     A :class:`Cell` describes the *shape* and *budget knobs* of one
-    compression target. The allocator solves one :class:`Allocation`
+    compression target. The allocator solves one :class:`Pick`
     decision per cell.
 
     Attributes:
@@ -81,7 +83,7 @@ class Cell:
 
 
 @dataclass
-class Allocation:
+class Pick:
     """Per-cell allocation chosen by the optimizer.
 
     Attributes:
@@ -103,12 +105,47 @@ class Allocation:
         """``(r_token, r_feature, bits)`` triple — convenient for dict keys."""
         return (self.r_token, self.r_feature, self.bits)
 
+from abc import ABC, abstractmethod
+from typing import Sequence, Type
+
 
 @dataclass
-class AllocationResult:
-    """Output of :meth:`JointAllocator.optimize`."""
 
-    allocations: list[Allocation] = field(default_factory=list)
+
+class Allocator(ABC):
+    """Strategy for byte-budget allocation across (layer group, K/V) cells."""
+
+    @abstractmethod
+    def optimize(self, cells: Sequence[Cell]) -> "Plan": ...
+
+
+class AllocatorRegistry:
+    """Registry of :class:`Allocator` strategies."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, Type[Allocator]] = {}
+
+    def register(self, name: str, cls: Type[Allocator]) -> Type[Allocator]:
+        if not issubclass(cls, Allocator):
+            raise TypeError(f"{cls.__name__} must inherit from Allocator")
+        self.entries[name] = cls
+        return cls
+
+    def resolve(self, name: str) -> Type[Allocator]:
+        try:
+            return self.entries[name]
+        except KeyError:
+            raise KeyError(f"unknown allocator {name!r}; available: {list(self.entries)}") from None
+
+
+REGISTRY: AllocatorRegistry = AllocatorRegistry()
+
+
+@dataclass
+class Plan:
+    """Output of :meth:`Bisect.optimize`."""
+
+    allocations: list[Pick] = field(default_factory=list)
     total_bytes: int = 0
     target_bytes: int = 0
     achieved_ratio: float = 1.0
@@ -121,8 +158,21 @@ class AllocationResult:
     def __len__(self) -> int:
         return len(self.allocations)
 
+    def validate(self, tolerance: float = 0.05) -> None:
+        """Raise :class:`AllocatorNoFeasibleError` if the plan overshoots the budget.
 
-class JointAllocator:
+        A plan is valid when ``achieved_ratio >= target_ratio * (1 - tolerance)``
+        and ``total_bytes <= target_bytes * (1 + tolerance)``.
+        """
+        from kvfold.errors import AllocatorNoFeasibleError
+        if self.target_ratio > 1.0 and self.achieved_ratio < self.target_ratio * (1.0 - tolerance):
+            raise AllocatorNoFeasibleError(
+                target_ratio=self.target_ratio,
+                achieved_ratio=self.achieved_ratio,
+            )
+
+
+class Bisect(Allocator):
     """Per-(layer group, K/V) Lagrangian allocator.
 
     The allocator solves the global optimisation problem from the paper
@@ -172,7 +222,7 @@ class JointAllocator:
         *,
         tau_table: dict[int, list[float]] | None = None,
         original_bytes: int | None = None,
-    ) -> AllocationResult:
+    ) -> Plan:
         """Allocate ranks and bits across cells to hit the target ratio.
 
         Algorithm (paper §4.2):
@@ -196,7 +246,7 @@ class JointAllocator:
                 ``Π cell.bytes_original()``.
 
         Returns:
-            :class:`AllocationResult` whose ``total_bytes`` is within
+            :class:`Plan` whose ``total_bytes`` is within
             rounding of the target. ``achieved_ratio`` may slightly
             overshoot because the cost grid is discrete.
 
@@ -205,7 +255,7 @@ class JointAllocator:
             by :class:`JoLTCompressor` at decompress time.
         """
         if not cells:
-            return AllocationResult(
+            return Plan(
                 allocations=[],
                 total_bytes=0,
                 target_bytes=0,
@@ -218,7 +268,7 @@ class JointAllocator:
         target_bytes = max(1, int(round(original_bytes / self.target_ratio)))
 
         # Per-cell candidate grid: (rT, rd, b).
-        per_cell_grid: list[list[Allocation]] = []
+        per_cell_grid: list[list[Pick]] = []
         original_per_cell: list[int] = []
         for idx, cell in enumerate(cells):
             original_per_cell.append(bytes_original(cell.shape, self.element_size_bytes))
@@ -238,7 +288,7 @@ class JointAllocator:
         # closest to the target ratio in log space (this gives a tighter
         # match in compression ratio than absolute byte distance, because
         # the cost grid is discrete and jumps).
-        candidates: list[tuple[float, int, list[Allocation], float]] = []
+        candidates: list[tuple[float, int, list[Pick], float]] = []
         # Dense logspace scan.
         log_lambdas = [-12 + 0.1 * i for i in range(180)]  # 1e-12 .. 1e+6
         for log_lam in log_lambdas:
@@ -311,7 +361,7 @@ class JointAllocator:
         cell: Cell,
         tau_table: dict[int, list[float]] | None,
         idx: int,
-    ) -> list[Allocation]:
+    ) -> list[Pick]:
         """Enumerate the ``(r_token, r_feature, bits)`` candidates for one cell.
 
         Cost is Eq. 1::
@@ -329,7 +379,7 @@ class JointAllocator:
             idx: cell index used to key into ``tau_table``.
 
         Returns:
-            All candidate :class:`Allocation` objects for this cell.
+            All candidate :class:`Pick` objects for this cell.
         """
         m, t, d = cell.shape
         c_bytes = self.factor_dtype_bytes
@@ -346,7 +396,7 @@ class JointAllocator:
             rt_max = min(t, self.max_token_rank)
             candidate_rt = candidate_token_ranks(rt_max)
 
-        grid: list[Allocation] = []
+        grid: list[Pick] = []
         for rt in candidate_rt:
             for rd in candidate_rd:
                 rt = min(rt, t)
@@ -364,7 +414,7 @@ class JointAllocator:
                     eps_b = eps.get(b, 1.0)
                     error = eps_b * tau
                     grid.append(
-                        Allocation(
+                        Pick(
                             r_token=rt,
                             r_feature=rd,
                             bits=b,
@@ -409,17 +459,17 @@ class JointAllocator:
 
     def argmin_per_cell(
         self,
-        per_cell_grid: list[list[Allocation]],
+        per_cell_grid: list[list[Pick]],
         lam: float,
-    ) -> list[Allocation]:
+    ) -> list[Pick]:
         """Per-cell minimizer of ``error + λ · cost``.
 
         Args:
-            per_cell_grid: per-cell list of :class:`Allocation` candidates.
+            per_cell_grid: per-cell list of :class:`Pick` candidates.
             lam: Lagrange multiplier.
 
         Returns:
-            The chosen :class:`Allocation` per cell.
+            The chosen :class:`Pick` per cell.
         """
         result = []
         for grid in per_cell_grid:
@@ -435,12 +485,12 @@ class JointAllocator:
 
     def make_result(
         self,
-        allocations: list[Allocation],
+        allocations: list[Pick],
         original_per_cell: list[int],
         target_bytes: int,
         lam_star: float = 0.0,
-    ) -> AllocationResult:
-        """Build an :class:`AllocationResult` from a candidate allocation.
+    ) -> Plan:
+        """Build an :class:`Plan` from a candidate allocation.
 
         Args:
             allocations: chosen allocation per cell.
@@ -449,14 +499,14 @@ class JointAllocator:
             lam_star: the Lagrange multiplier found.
 
         Returns:
-            An :class:`AllocationResult` with the achieved ratio
+            An :class:`Plan` with the achieved ratio
             ``original / total`` computed; if ``total`` is zero the
             achieved ratio collapses to ``1.0`` (no compression).
         """
         total = sum(a.cost_bytes for a in allocations)
         original = sum(original_per_cell)
         achieved = original / total if total > 0 else 1.0
-        return AllocationResult(
+        return Plan(
             allocations=allocations,
             total_bytes=total,
             target_bytes=target_bytes,
@@ -471,7 +521,7 @@ class JointAllocator:
 # ---------------------------------------------------------------------------
 
 
-class GreedyAllocator:
+class Greedy(Allocator):
     """Greedy baseline that picks (rT, rd, b) per cell by error reduction / byte.
 
     For ablation: this is what the paper calls "greedy" — no Lagrangian
@@ -495,7 +545,7 @@ class GreedyAllocator:
         self.max_token_rank = int(max_token_rank)
         self.bits_grid = tuple(bits_grid)
 
-    def optimize(self, cells: Sequence[Cell]) -> AllocationResult:
+    def optimize(self, cells: Sequence[Cell]) -> Plan:
         """Greedy ablation: pick the highest "error reduction per byte" move.
 
         No Lagrangian, no global budget-balancing. At each step we
@@ -508,11 +558,11 @@ class GreedyAllocator:
             cells: cells to allocate.
 
         Returns:
-            An :class:`AllocationResult` whose ``lambda_star`` is always
+            An :class:`Plan` whose ``lambda_star`` is always
             ``0.0`` (greedy doesn't use a multiplier).
         """
         if not cells:
-            return AllocationResult(
+            return Plan(
                 allocations=[],
                 total_bytes=0,
                 target_bytes=0,
@@ -522,13 +572,13 @@ class GreedyAllocator:
         original = sum(bytes_original(c.shape, self.element_size_bytes) for c in cells)
         target = max(1, int(round(original / self.target_ratio)))
         # Initial: largest rank, no bits.
-        current: list[Allocation] = []
+        current: list[Pick] = []
         for cell in cells:
             m, t, d = cell.shape
             rT = min(t, self.max_token_rank)
             rD = d
             cost = (m * rT * rD + t * rT + d * rD) * self.factor_dtype_bytes
-            current.append(Allocation(r_token=rT, r_feature=rD, bits=0, cost_bytes=cost, error=0.0))
+            current.append(Pick(r_token=rT, r_feature=rD, bits=0, cost_bytes=cost, error=0.0))
 
         def total_cost() -> int:
             # Capture the current cell allocations' total bytes.
@@ -569,7 +619,7 @@ class GreedyAllocator:
             a = current[best_idx]
             if a.bits < max(self.bits_grid):
                 next_b = next(b for b in self.bits_grid if b > a.bits)
-                current[best_idx] = Allocation(
+                current[best_idx] = Pick(
                     r_token=a.r_token,
                     r_feature=a.r_feature,
                     bits=next_b,
@@ -577,7 +627,7 @@ class GreedyAllocator:
                     error=0.05 * next_b,
                 )
             elif a.r_feature < d:
-                current[best_idx] = Allocation(
+                current[best_idx] = Pick(
                     r_token=a.r_token,
                     r_feature=a.r_feature + 1,
                     bits=a.bits,
@@ -585,7 +635,7 @@ class GreedyAllocator:
                     error=0.001,
                 )
             elif a.r_token < min(t, self.max_token_rank):
-                current[best_idx] = Allocation(
+                current[best_idx] = Pick(
                     r_token=a.r_token + 1,
                     r_feature=a.r_feature,
                     bits=a.bits,
@@ -595,7 +645,7 @@ class GreedyAllocator:
             else:
                 break
 
-        return AllocationResult(
+        return Plan(
             allocations=current,
             total_bytes=total_cost(),
             target_bytes=target,
@@ -652,3 +702,14 @@ def candidate_token_ranks(t_max: int) -> list[int]:
     base = list(range(1, 33))
     extras = sorted({48, 64, 96, 128, 192, 256, 384, 512, t_max})
     return base + [e for e in extras if e <= t_max]
+
+
+REGISTRY: AllocatorRegistry = AllocatorRegistry()
+
+
+def _register_builtins() -> None:
+    REGISTRY.register("bisect", Bisect)
+    REGISTRY.register("greedy", Greedy)
+
+
+_register_builtins()
