@@ -12,8 +12,9 @@ from __future__ import annotations
 import pytest
 import torch
 
+import kvfold.core.builtins  # noqa: F401 — ensures REGISTRY is populated
 from kvfold import build_compressor, supported_methods
-from kvfold.core.dispatch import METHODS
+from kvfold.core.dispatch import REGISTRY
 
 
 # ---------------------------------------------------------------------------
@@ -25,15 +26,15 @@ from kvfold.core.dispatch import METHODS
     ("method", "expected_class_name"),
     [
         ("jolt", "Jolt"),
-        ("flashjolt", "FlashJolt"),
-        ("lowrank", "Low"),
+        ("flash", "Flash"),
+        ("low", "Low"),
         ("int2", "IntQuant"),
         ("int4", "IntQuant"),
         ("int8", "IntQuant"),
-        ("fp8", "Pass"),
-        ("fp16", "Pass"),
-        ("bf16", "Pass"),
-        ("identity", "Pass"),
+        ("fp8", "Float8"),
+        ("fp16", "FloatCast"),
+        ("bf16", "FloatCast"),
+        ("pass", "Pass"),
     ],
 )
 def test_dispatch_returns_correct_class(method: str, expected_class_name: str) -> None:
@@ -44,7 +45,7 @@ def test_dispatch_returns_correct_class(method: str, expected_class_name: str) -
 def test_supported_methods_is_complete() -> None:
     """Every entry in :data:`METHODS` is reachable from ``supported_methods``."""
     methods = supported_methods()
-    assert set(methods) == set(METHODS.keys())
+    assert set(methods) == set(REGISTRY.entries.keys())
     # README documents 9 methods (jolt/flashjolt/lowrank/int2/int4/int8/fp8/fp16/identity).
     # We added bf16 on top; ensure at least the documented set is present.
     required = {"jolt", "flashjolt", "lowrank", "int2", "int4", "int8", "fp8", "fp16", "identity"}
