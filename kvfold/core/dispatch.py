@@ -150,7 +150,7 @@ def register(
     compressor_cls: Type[Compressor],
     factory: Callable[[MethodConfig], Compressor] | None = None,
 ) -> Type[Compressor]:
-    """Module-level helper to register a compressor.
+    """Module-level decorator helper for compressor registration.
 
     Usage::
 
@@ -161,26 +161,9 @@ def register(
     return REGISTRY.register(method, compressor_cls, factory)
 
 
-def supported_methods() -> tuple[str, ...]:
-    """Tuple of every compression method the dispatcher accepts."""
-    return REGISTRY.names()
-
-
-def build_compressor(method: str, **kwargs: Any) -> Compressor:
-    """Construct a configured compressor from its public method name.
-
-    Raises:
-        UnsupportedMethodError: if ``method`` is not registered.
-        MethodConfigError: if any kwarg is unknown or out of range.
-    """
-    return REGISTRY.build(method, **kwargs)
-
-
 __all__ = [
-    "CompressorRegistry",
     "CompressorEntry",
+    "CompressorRegistry",
     "REGISTRY",
     "register",
-    "supported_methods",
-    "build_compressor",
 ]

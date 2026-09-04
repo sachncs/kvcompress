@@ -251,8 +251,3 @@ class DecomposerRegistry:
 
 
 REGISTRY: DecomposerRegistry = DecomposerRegistry()
-
-
-def tail_mass_at(s: torch.Tensor, r: int) -> float:
-    """Public alias for :func:`tail_mass` for explicit semantics."""
-    return tail_mass(s, r)

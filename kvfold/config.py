@@ -343,20 +343,6 @@ REGISTRY: Final[MethodConfigRegistry] = MethodConfigRegistry()
 """Process-wide registry; populated by module import side effects."""
 
 
-def register_method(name: Method, config_cls: Type[MethodConfig]) -> Type[MethodConfig]:
-    """Decorator-style helper for class definition sites.
-
-    Usage::
-
-        @register_method("jolt", JoltConfig)
-        @dataclasses.dataclass(frozen=True)
-        class JoltConfig(MethodConfig):
-            ...
-    """
-    REGISTRY.register(name, config_cls)
-    return config_cls
-
-
 REGISTRY.register("jolt", JoltConfig)
 REGISTRY.register("flash", FlashConfig)
 REGISTRY.register("low", LowRankConfig)
@@ -370,21 +356,20 @@ REGISTRY.register("pass", PassConfig)
 
 
 __all__ = [
-    "Method",
-    "MethodConfig",
-    "MethodConfigRegistry",
-    "JoltConfig",
+    "Bf16Config",
+    "Float8Config",
+    "FloatConfig",
     "FlashConfig",
-    "LowRankConfig",
-    "IntConfig",
+    "Fp16Config",
     "Int2Config",
     "Int4Config",
     "Int8Config",
-    "FloatConfig",
-    "Float8Config",
-    "Fp16Config",
-    "Bf16Config",
+    "IntConfig",
+    "JoltConfig",
+    "LowRankConfig",
+    "Method",
+    "MethodConfig",
+    "MethodConfigRegistry",
     "PassConfig",
     "REGISTRY",
-    "register_method",
 ]

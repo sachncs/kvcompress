@@ -27,18 +27,17 @@ from typing import Literal
 
 import torch
 
-from kvfold.errors import DTypeError, ShapeError
+from kvfold.errors import ShapeError
 
 __all__ = [
-    "Projector",
+    "CACHE",
+    "Distribution",
     "Gaussian",
-    "Rademacher",
-    "Sparse",
+    "Projector",
     "Projection",
     "ProjectionCache",
-    "projection",
-    "projection_cache_info",
-    "clear_projection_cache",
+    "Rademacher",
+    "Sparse",
 ]
 
 
@@ -198,31 +197,14 @@ class ProjectionCache:
 CACHE: ProjectionCache = ProjectionCache()
 
 
-def projection(
-    out_dim: int,
-    in_dim: int,
-    *,
-    distribution: Distribution = "gaussian",
-    seed: int = 0,
-    device: torch.device | str = "cpu",
-    dtype: torch.dtype = torch.float32,
-    projector: Projector | None = None,
-) -> Projection:
-    """Get-or-build a cached :class:`Projection`."""
-    return CACHE.get_or_build(
-        out_dim,
-        in_dim,
-        distribution=distribution,
-        seed=seed,
-        device=device,
-        dtype=dtype,
-        projector=projector,
-    )
+__all__ = [
+    "CACHE",
+    "Distribution",
+    "Gaussian",
+    "Projector",
+    "Projection",
+    "ProjectionCache",
+    "Rademacher",
+    "Sparse",
+]
 
-
-def projection_cache_info() -> dict[str, int]:
-    return CACHE.info()
-
-
-def clear_projection_cache() -> None:
-    CACHE.clear()
