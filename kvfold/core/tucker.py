@@ -31,6 +31,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 
@@ -160,18 +161,19 @@ def mode_n_fold(mat: torch.Tensor, mode: int, shape: tuple[int, int, int]) -> to
 def reconstruct_partial_tucker(
     factors: Tucker,
     target_shape: tuple[int, int, int] | torch.Size,
+    *,
+    backend: Literal["torch", "triton"] = "torch",
 ) -> torch.Tensor:
     """Reconstruct ``X̂`` from partial Tucker factors.
 
     Args:
         factors: output of :func:`partial_tucker_st_hosvd`.
         target_shape: original tensor shape ``(m, T, dh)``.
+        backend: ``"torch"`` (default, einsum) or ``"triton"`` (fused kernel).
 
     Returns:
         Tensor of shape ``target_shape`` approximating the original input.
     """
-    # Convert Size to plain tuple to keep einsum labels unambiguous and
-    # to make shape validation cheap (avoid repeated .numel() calls).
     m, t, d = tuple(target_shape)
     rt, rd = factors.r_token, factors.r_feature
     if factors.core.shape != (m, rt, rd):
@@ -180,8 +182,13 @@ def reconstruct_partial_tucker(
         raise ValueError(f"u_token shape {factors.u_token.shape} != expected {(t, rt)}")
     if factors.u_feature.shape != (d, rd):
         raise ValueError(f"u_feature shape {factors.u_feature.shape} != expected {(d, rd)}")
-    # Reconstruction: X̂[m, t, d] = sum_{rt, rd} core[m, rt, rd] * U_T[t, rt] * U_d[d, rd].
-    # ``a`` = token rank, ``r`` = feature rank, ``m/t/d`` = actual axes.
+    if backend == "triton":
+        from kvfold.errors import KernelNotAvailableError
+        try:
+            from kvfold.kernel.triton.tucker import triton_tucker_reconstruct
+        except ImportError as exc:
+            raise KernelNotAvailableError(backend="triton", required="triton package") from exc
+        return triton_tucker_reconstruct(factors.core, factors.u_token, factors.u_feature)
     return torch.einsum(
         "mar,ta,dr->mtd",
         factors.core,
