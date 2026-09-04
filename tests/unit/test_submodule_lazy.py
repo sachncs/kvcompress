@@ -11,86 +11,74 @@ from __future__ import annotations
 import pytest
 
 
-def test_compressor_submodule_exports_jolt() -> None:
-    from kvcompress.compressor import JoLTCompressor
+def test_core_submodule_exports_jolt() -> None:
+    from kvfold.core import Jolt
 
-    assert JoLTCompressor is not None
-    assert JoLTCompressor.name == "jolt"
-
-
-def test_compressor_submodule_exports_flashjolt() -> None:
-    from kvcompress.compressor import FlashJoLTCompressor
-
-    assert FlashJoLTCompressor is not None
-    assert FlashJoLTCompressor.name == "flashjolt"
+    assert Jolt is not None
+    assert Jolt.method == "jolt"
 
 
-def test_compressor_submodule_exports_allocator_classes() -> None:
-    from kvcompress.compressor import (
-        Allocation,
-        AllocationResult,
-        Cell,
-        JointAllocator,
-    )
+def test_core_submodule_exports_flash() -> None:
+    from kvfold.core import Flash
+
+    assert Flash is not None
+    assert Flash.method == "flash"
+
+
+def test_core_submodule_exports_budget_classes() -> None:
+    from kvfold.core import Cell, JointAllocator
 
     assert JointAllocator.__name__ == "JointAllocator"
     assert Cell.__name__ == "Cell"
-    assert Allocation.__name__ == "Allocation"
-    assert AllocationResult.__name__ == "AllocationResult"
 
 
-def test_compressor_submodule_exports_base_classes() -> None:
-    from kvcompress.compressor import (
-        CompressedPayload,
-        CompressorStats,
-        IdentityCompressor,
-        IntQuantOnlyCompressor,
-        KVCompressor,
-        LowRankCompressor,
-    )
+def test_core_submodule_exports_base_classes() -> None:
+    from kvfold.core import Compressor, CompressorRegistry, Projector
 
-    assert KVCompressor is not None
-    assert CompressedPayload is not None
-    assert CompressorStats is not None
-    assert IdentityCompressor is not None
-    assert IntQuantOnlyCompressor is not None
-    assert LowRankCompressor is not None
+    assert Compressor is not None
+    assert CompressorRegistry is not None
+    assert Projector is not None
 
 
-def test_compressor_submodule_exports_dispatch_helpers() -> None:
-    from kvcompress.compressor import METHODS, supported_methods
+def test_core_submodule_exports_dispatch_helpers() -> None:
+    from kvfold.core import CONFIG_REGISTRY
 
-    methods = supported_methods()
-    assert "jolt" in methods
-    assert "flashjolt" in methods
-    assert "lowrank" in methods
-    assert "int2" in methods
-    assert "identity" in methods
-    # The METHODS dict has one entry per method.
-    assert set(METHODS.keys()) == set(methods)
+    names = CONFIG_REGISTRY.names()
+    assert "jolt" in names
+    assert "flash" in names
+    assert "low" in names
+    assert "int2" in names
+    assert "pass" in names
 
 
-def test_compressor_submodule_unknown_name_raises() -> None:
-    import kvcompress.compressor as sub
+def test_core_submodule_unknown_name_raises() -> None:
+    import kvfold.core as sub
 
     with pytest.raises(AttributeError, match="no attribute"):
         _ = sub.NotARealThing
 
 
 def test_runtime_submodule_exports_memory_pool() -> None:
-    from kvcompress.runtime import MemoryPool
+    from kvfold.runtime import MemoryPool
 
     assert MemoryPool.__name__ == "MemoryPool"
 
 
 def test_runtime_submodule_exports_profiler() -> None:
-    from kvcompress.runtime import CompressionProfiler
+    from kvfold.runtime import CompressionProfiler
 
     assert CompressionProfiler.__name__ == "CompressionProfiler"
 
 
+def test_runtime_submodule_exports_seed() -> None:
+    from kvfold.runtime.seed import Seed, generator
+
+    assert Seed is not None
+    assert generator is not None
+
+
 def test_runtime_submodule_unknown_name_raises() -> None:
-    import kvcompress.runtime as sub
+    import kvfold.runtime as sub
 
     with pytest.raises(AttributeError, match="no attribute"):
         _ = sub.PhantomSymbol
