@@ -29,17 +29,18 @@ labels.
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import torch
 
-from kvfold.core.svd import Exact
+from kvfold.core.svd import Exact, Decomposer
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
-class TuckerFactors:
+class Tucker:
     """Output of :func:`partial_tucker_st_hosvd`.
 
     The reconstruction is::
@@ -157,7 +158,7 @@ def mode_n_fold(mat: torch.Tensor, mode: int, shape: tuple[int, int, int]) -> to
 
 
 def reconstruct_partial_tucker(
-    factors: TuckerFactors,
+    factors: Tucker,
     target_shape: tuple[int, int, int] | torch.Size,
 ) -> torch.Tensor:
     """Reconstruct ``X̂`` from partial Tucker factors.
@@ -195,7 +196,7 @@ def partial_tucker_st_hosvd(
     r_token: int | None = None,
     r_feature: int | None = None,
     svd: Exact | None = None,
-) -> TuckerFactors:
+) -> Tucker:
     """Sequentially truncated HOSVD for partial Tucker decomposition.
 
     The head/layer axis (mode 0) is *pinned*: it receives an identity factor
@@ -208,7 +209,7 @@ def partial_tucker_st_hosvd(
         svd: shared :class:`SVD` instance (so ``seed`` is shared across calls).
 
     Returns:
-        :class:`TuckerFactors`.
+        :class:`Tucker`.
 
     Raises:
         ValueError: if ``x`` is not 3-D.
@@ -268,7 +269,7 @@ def partial_tucker_st_hosvd(
         token_tail_mass,
         feature_tail_mass,
     )
-    return TuckerFactors(
+    return Tucker(
         core=core.contiguous(),
         u_token=u_t.contiguous(),
         u_feature=u_dh.contiguous(),
@@ -323,3 +324,64 @@ def estimate_token_rank_for_budget(
     while rt > 1 and cost(rt) > budget:
         rt -= 1
     return rt
+
+
+class TuckerDecomposer(ABC):
+    """Strategy for partial Tucker decomposition."""
+
+    @abstractmethod
+    def decompose(self, x: torch.Tensor, r_token: int | None = None, r_feature: int | None = None) -> Tucker: ...
+
+
+class TuckerReconstructor(ABC):
+    """Strategy for partial Tucker reconstruction.
+
+    Implementations may use a fused Triton kernel for ``backend="triton"``
+    or the default PyTorch einsum for ``backend="torch"``.
+    """
+
+    backend: str = "torch"
+
+    @abstractmethod
+    def reconstruct(self, factors: Tucker, target_shape: tuple[int, int, int]) -> torch.Tensor: ...
+
+
+class HoSVDDecomposer(TuckerDecomposer):
+    """Sequentially-truncated HOSVD; the paper's default."""
+
+    def __init__(self, decomposer: Decomposer | None = None) -> None:
+        self.decomposer = decomposer or Exact()
+
+    def decompose(self, x: torch.Tensor, r_token: int | None = None, r_feature: int | None = None) -> Tucker:
+        return partial_tucker_st_hosvd(x, r_token=r_token, r_feature=r_feature, svd=self.decomposer)
+
+
+class TorchReconstructor(TuckerReconstructor):
+    """PyTorch ``einsum`` reconstructor; the default."""
+
+    backend: str = "torch"
+
+    def reconstruct(self, factors: Tucker, target_shape: tuple[int, int, int]) -> torch.Tensor:
+        return reconstruct_partial_tucker(factors, target_shape)
+
+
+class TuckerBackendRegistry:
+    """Registry of :class:`TuckerReconstructor` strategies keyed by backend name."""
+
+    def __init__(self) -> None:
+        self.entries: dict[str, TuckerReconstructor] = {
+            "torch": TorchReconstructor(),
+        }
+
+    def register(self, backend: str, reconstructor: TuckerReconstructor) -> TuckerReconstructor:
+        self.entries[backend] = reconstructor
+        return reconstructor
+
+    def resolve(self, backend: str) -> TuckerReconstructor:
+        try:
+            return self.entries[backend]
+        except KeyError:
+            raise KeyError(f"unknown tucker backend {backend!r}; available: {list(self.entries)}") from None
+
+
+BACKEND_REGISTRY: TuckerBackendRegistry = TuckerBackendRegistry()
