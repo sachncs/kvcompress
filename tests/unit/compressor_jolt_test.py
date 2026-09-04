@@ -68,11 +68,11 @@ def test_jolt_payload_stats(small_kv: tuple[torch.Tensor, torch.Tensor]) -> None
     comp = Jolt(ratio=2.0)
     comp.compress(k, v)
     s = comp.stats()
-    assert "call_count" in s
-    assert "compress_time_ms" in s
+    assert "history_size" in s
+    assert "compress_ms" in s
     assert "bytes_original" in s
     assert "bytes_compressed" in s
-    assert s["call_count"] == 1
+    assert s["history_size"] == len(comp.stats_history)
 
 
 def test_jolt_invalid_ratio() -> None:

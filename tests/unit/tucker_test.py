@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.svd import Exact
+from kvfold.core.svd import Exact, Randomized
+from kvfold.core.svd import Exact as SVD
 from kvfold.core.tucker import (
     mode_n_fold,
     mode_n_unfold,
@@ -79,8 +80,8 @@ def test_feature_rank_caps_at_d(tensor: torch.Tensor) -> None:
 def test_shared_svd_seed() -> None:
     torch.manual_seed(0)
     x = torch.randn(2, 8, 6)
-    a = partial_tucker_st_hosvd(x, r_token=3, r_feature=3, svd=SVD(seed=1))
-    b = partial_tucker_st_hosvd(x, r_token=3, r_feature=3, svd=SVD(seed=1))
+    a = partial_tucker_st_hosvd(x, r_token=3, r_feature=3, svd=Randomized(seed=1))
+    b = partial_tucker_st_hosvd(x, r_token=3, r_feature=3, svd=Randomized(seed=1))
     assert torch.allclose(a.u_token, b.u_token)
     assert torch.allclose(a.u_feature, b.u_feature)
 

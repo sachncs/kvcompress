@@ -86,7 +86,7 @@ def quantize_int8(x):
         Tuple ``(packed, scale, zero_point)`` matching
         :meth:`IntQuantizer.quantize`.
     """
-    from kvfold.core.quantization import IntQuantizer
+    from kvfold.core.quant import IntQuant as IntQuantizer
 
     q = IntQuantizer(bits=8, symmetric=True, per_channel=True)
     return q.quantize(x)

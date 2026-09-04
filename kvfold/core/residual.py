@@ -177,6 +177,8 @@ def encode_residual(
     Returns:
         :class:`Residual`.
     """
+    if distribution not in ("gaussian", "rademacher", "sparse"):
+        raise ValueError(f"unknown JL distribution: {distribution!r}")
     if bits not in (0, 2, 4, 8):
         raise ValueError(f"bits must be 0, 2, 4, or 8, got {bits}")
     if bits == 0:

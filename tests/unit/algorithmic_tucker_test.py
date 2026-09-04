@@ -12,7 +12,7 @@ import math
 
 import torch
 
-from kvfold.core.svd import Exact
+from kvfold.core.svd import Exact, Randomized
 from kvfold.core.tucker import (
     mode_n_fold,
     mode_n_unfold,
@@ -185,8 +185,8 @@ def test_svd_exact_tail_mass_definition() -> None:
     torch.manual_seed(0)
     A = torch.randn(40, 30)
     r = 5
-    svd = SVD(method="exact")
-    res = svd.exact(A, rank=r)
+    svd = Exact()
+    res = svd.decompose(A, rank=r)
     unfold_full = A
     s_full = torch.linalg.svdvals(unfold_full)
     true_tail = float(torch.sum(s_full[r:] ** 2) / torch.sum(s_full**2))
@@ -210,8 +210,8 @@ def test_svd_randomised_tail_mass_is_upper_bound() -> None:
     A = U @ torch.diag(s) @ V.t()
     r = 10
 
-    exact = SVD(method="exact").exact(A, rank=r)
-    rand = SVD(method="randomised", seed=0).randomise(A, rank=r)
+    exact = Exact().decompose(A, rank=r)
+    rand = Randomized(seed=0).decompose(A, rank=r)
 
     # Both tail masses must be small (sharp spectrum, kept most of it).
     assert exact.tail_mass < 0.05
