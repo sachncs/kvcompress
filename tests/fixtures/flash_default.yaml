@@ -1,0 +1,5 @@
+method: flash
+ratio: 3.0
+bits: [0, 2, 4, 8]
+cap_policy: linear
+seed: 0

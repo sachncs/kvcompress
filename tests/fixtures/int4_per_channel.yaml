@@ -1,0 +1,4 @@
+method: int4
+bits: 4
+symmetric: true
+per_channel: true

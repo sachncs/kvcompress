@@ -1,0 +1,154 @@
+"""Tests for :mod:`kvfold.core.dispatch`.
+
+The dispatcher is the public surface that maps the ``method`` string from
+:func:`kvfold.api.enable_compression` to a concrete compressor. Bugs
+here manifest as silently broken ``enable_compression(method="int4")``
+calls, so we cover the happy path for every method plus the failure
+modes that previously surfaced only at runtime.
+"""
+
+from __future__ import annotations
+
+import pytest
+import torch
+
+import kvfold.core.builtins  # noqa: F401 — ensures REGISTRY is populated
+from kvfold import build_compressor, supported_methods
+from kvfold.core.dispatch import REGISTRY
+
+
+# ---------------------------------------------------------------------------
+# Happy-path: every advertised method returns the right concrete class.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("method", "expected_class_name"),
+    [
+        ("jolt", "Jolt"),
+        ("flash", "Flash"),
+        ("low", "Low"),
+        ("int2", "IntQuant"),
+        ("int4", "IntQuant"),
+        ("int8", "IntQuant"),
+        ("fp8", "Float8"),
+        ("fp16", "FloatCast"),
+        ("bf16", "FloatCast"),
+        ("pass", "Pass"),
+    ],
+)
+def test_dispatch_returns_correct_class(method: str, expected_class_name: str) -> None:
+    c = build_compressor(method)
+    assert type(c).__name__ == expected_class_name
+
+
+def test_supported_methods_is_complete() -> None:
+    """Every entry in :data:`METHODS` is reachable from ``supported_methods``."""
+    methods = supported_methods()
+    assert set(methods) == set(REGISTRY.entries.keys())
+    # README documents 9 methods (jolt/flash/low/int2/int4/int8/fp8/fp16/pass).
+    # We added bf16 on top; ensure at least the documented set is present.
+    required = {"jolt", "flash", "low", "int2", "int4", "int8", "fp8", "fp16", "pass"}
+    assert required.issubset(set(methods))
+
+
+# ---------------------------------------------------------------------------
+# Argument plumbing
+# ---------------------------------------------------------------------------
+
+
+def test_int_methods_default_bits_to_method_name() -> None:
+    """``int4`` should set ``bits=4`` even if the caller didn't pass it."""
+    c = build_compressor("int4")
+    assert c.bits == 4
+
+
+def test_int_methods_allow_caller_bits_override() -> None:
+    """Caller-provided ``bits`` wins over the per-method default."""
+    c = build_compressor("int4", bits=8)
+    assert c.bits == 8
+
+
+def test_low_forwards_rank() -> None:
+    c = build_compressor("low", rank=128)
+    assert c.rank == 128
+
+
+def test_fp16_forces_dtype() -> None:
+    c = build_compressor("fp16")
+    assert c.dtype == torch.float16
+
+
+def test_bf16_forces_dtype() -> None:
+    c = build_compressor("bf16")
+    assert c.dtype == torch.bfloat16
+
+
+def test_jolt_forwards_ratio() -> None:
+    c = build_compressor("jolt", ratio=4.0)
+    assert c.ratio == pytest.approx(4.0)
+
+
+# ---------------------------------------------------------------------------
+# Failure modes: unknown method, unknown kwargs
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_method_raises_with_actionable_message() -> None:
+    from kvfold.errors import UnsupportedMethodError
+    with pytest.raises(UnsupportedMethodError, match="not-a-method"):
+        build_compressor("not-a-method")
+
+
+def test_unknown_kwarg_raises_with_actionable_message() -> None:
+    """A typo (``per_chanel`` instead of ``per_channel``) must fail loud."""
+    from kvfold.errors import MethodConfigError
+    with pytest.raises(MethodConfigError, match="per_chanel"):
+        build_compressor("int4", per_chanel=True)
+
+
+def test_int_kwargs_rejected_on_pass() -> None:
+    """``per_channel`` is meaningless for Pass — reject."""
+    from kvfold.errors import MethodConfigError
+    with pytest.raises(MethodConfigError, match="per_channel"):
+        build_compressor("pass", per_channel=True)
+
+
+def test_method_is_case_insensitive() -> None:
+    """Case-insensitive method names are normalised."""
+    a = build_compressor("INT4")
+    b = build_compressor("Int4")
+    from kvfold.core.int_quant import IntQuant
+    assert isinstance(a, IntQuant)
+    assert isinstance(b, IntQuant)
+    assert type(a) is type(b)
+
+
+# ---------------------------------------------------------------------------
+# Round-trip smoke test through dispatch (not just construction)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("method", ["jolt", "flash", "low", "int2", "int4", "int8"])
+def test_round_trip_on_tiny_tensor(method: str) -> None:
+    """Each method's ``compress``/``decompress`` returns the right shape.
+
+    We don't check reconstruction fidelity here — that lives in the
+    compressor-specific test files. This test only catches "the dispatch
+    wired up the wrong class" or "decompress returned a different shape".
+    """
+    torch.manual_seed(0)
+    k = torch.randn(2, 8, 4)
+    v = torch.randn(2, 8, 4)
+    if method in ("jolt", "flash"):
+        c = build_compressor(method, ratio=2.0)
+    elif method == "low":
+        c = build_compressor(method, rank=4)
+    else:
+        c = build_compressor(method)
+    kp, vp = c.compress(k, v)
+    k_hat, v_hat = c.restore(kp, vp)
+    assert k_hat.shape == k.shape
+    assert v_hat.shape == v.shape
+    assert k_hat.dtype == k.dtype
+    assert v_hat.dtype == v.dtype

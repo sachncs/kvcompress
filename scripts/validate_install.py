@@ -1,0 +1,85 @@
+"""Validate the install: run a smoke test end-to-end."""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+
+import torch
+
+log = logging.getLogger(__name__)
+
+
+def main() -> None:
+    _ = argparse.ArgumentParser(description="Validate install").parse_args()
+
+    log.info("kvfold validate: starting smoke test")
+    import kvfold
+
+    log.info("kvfold version: %s", kvfold.__version__)
+
+    # 1. Compress / decompress round-trip on synthetic K/V.
+    from kvfold import JoLTCompressor, FlashJoLTCompressor
+
+    K = torch.randn(4, 32, 16)
+    V = torch.randn(4, 32, 16)
+    comp = JoLTCompressor(compression_ratio=2.0)
+    kp, vp = comp.compress(K, V)
+    k_hat, v_hat = comp.decompress(kp, vp)
+    rel_err = float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K))
+    log.info("JoLT round-trip rel error: %.4f", rel_err)
+    assert rel_err < 1.0, f"unexpectedly large error: {rel_err}"
+
+    # 2. FlashJoLT.
+    fj = FlashJoLTCompressor(compression_ratio=2.0)
+    kp, vp = fj.compress(K, V)
+    k_hat, v_hat = fj.decompress(kp, vp)
+    log.info(
+        "FlashJoLT round-trip rel error: %.4f",
+        float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K)),
+    )
+
+    # 3. HF adapter smoke test. Distinguish network/import errors (which
+    # are user-environment failures and should be loud) from genuine
+    # smoke-test skips.
+    try:
+        from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
+        log.info("transformers available; loading GPT-2 for HF smoke test")
+    except ImportError as e:
+        log.error("HF smoke test failed: transformers not importable: %s", e)
+        return 1
+    try:
+        tok = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
+    except Exception as e:
+        log.error("HF smoke test failed: cannot load GPT-2: %s", e)
+        return 1
+    model.eval()
+    from kvfold import enable_compression
+
+    handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+    try:
+        ids = tok.encode("Hello", return_tensors="pt")
+        with torch.no_grad():
+            out = model.generate(
+                ids,
+                max_new_tokens=5,
+                do_sample=False,
+                pad_token_id=tok.eos_token_id,
+            )
+        log.info("HF smoke test output: %s", tok.decode(out[0]))
+    except Exception as e:
+        log.error("HF smoke test failed: %s", e)
+        return 1
+    finally:
+        handle.disable()
+
+    log.info("kvfold validate: OK")
+    return 0
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    sys.exit(main())

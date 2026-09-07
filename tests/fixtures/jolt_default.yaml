@@ -1,0 +1,9 @@
+method: jolt
+ratio: 3.0
+bits: [0, 2, 4, 8]
+dtype: float16
+distribution: gaussian
+symmetric: true
+per_channel: true
+layer_groups: 1
+seed: 0

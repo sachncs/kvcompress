@@ -1,0 +1,26 @@
+[
+  {
+    "method": "jolt",
+    "compress_ms": 21.533775195712224,
+    "decompress_ms": 0.44313339749351144,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "flashjolt",
+    "compress_ms": 17.56739179836586,
+    "decompress_ms": 0.43341659766156226,
+    "bytes_original": 1048576,
+    "bytes_compressed": 264520,
+    "ratio_achieved": 3.964070769696053
+  },
+  {
+    "method": "lowrank",
+    "compress_ms": 3.9741584041621536,
+    "decompress_ms": 0.20942479895893484,
+    "bytes_original": 1048576,
+    "bytes_compressed": 177492,
+    "ratio_achieved": 5.907736686723909
+  }
+]

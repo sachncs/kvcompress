@@ -1,0 +1,63 @@
+# Byte-compiled / optimised
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test / coverage artefacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.cache/
+
+# Type / lint caches
+.mypy_cache/
+.ruff_cache/
+.vscode/.ruff_cache/
+
+# Property-based testing
+.hypothesis/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artefacts
+*.pyc
+*.pyd
+
+# Benchmark artefacts (we keep docs/**/*.png and results/)
+benchmarks/output/
+benchmarks/plots/
+*.png
+!docs/**/*.png
+
+# Model caches (HF, vLLM, etc.)
+models/
+.cache/
+*.bin
+*.safetensors
+!tests/fixtures/**
+
+# venv scratch
+.python-version
+*.log
