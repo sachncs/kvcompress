@@ -1,11 +1,12 @@
 <p align="center">
-  <h1 align="center">kvcompress</h1>
+  <h1 align="center">kvfold</h1>
   <p align="center">Universal plug-and-play KV cache compression for decoder-only LLMs.</p>
   <p align="center">
     <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green" alt="License"></a>
     <a href="https://arxiv.org/abs/2607.12550"><img src="https://img.shields.io/badge/arXiv-2607.12550-red" alt="Paper"></a>
     <a href="https://github.com/sachncs/kvcompress/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachncs/kvcompress/ci.yaml?branch=master" alt="CI"></a>
+    <a href="https://sachncs.github.io/kvcompress/"><img src="https://img.shields.io/badge/docs-github%20pages-blue" alt="Docs"></a>
   </p>
 </p>
 
@@ -20,20 +21,20 @@ Based on the paper: [*Krishnan & Schulz (2026) arXiv:2607.12550*](https://arxiv.
 - **JoLT compressor:** partial Tucker decomposition on token and feature
   modes, with a JL-rotated low-bit residual; head and layer modes are
   pinned at full rank (the paper's empirical finding, Appendix B.2).
-- **FlashJoLT fast variant:** randomized-SVD token mode with a context-aware
+- **Flash fast variant:** randomized-SVD token mode with a context-aware
   cap `q_cap = min(max(q_min(R), ⌈T/32⌉), 512)`. 5–13× compression speedup
   at matched quality (paper §5).
 - **Joint Lagrangian allocator:** decouples the global byte budget across
   cells, bisects λ to hit the target ratio. τ model `max(1 − rT/T, 1 −
   rd/d)` matches the spectral behaviour the paper measures.
-- **Generic `KVCompressor` interface:** future compressors (quantization,
+- **Generic `Compressor` interface:** future compressors (quantization,
   sparsity, low-rank) plug in without touching the cache or adapter code.
-- **Hugging Face integration:** transparent `DynamicCache` interception
-  with per-family shims for Llama, Mistral, Qwen2, Qwen2-MoE, Gemma, Gemma2,
-  Phi, Phi3, Mixtral, Falcon, DeepSeek, InternLM.
+- **Hugging Face integration:** transparent `DynamicCache` interception.
+  Verified end-to-end on GPT-2 and Llama-family decoder-only LLMs (see
+  integration tests).
 - **vLLM integration:** Shape A (`export_kv` / `import_kv`) works
-  everywhere; Shape B (`JoLTOffloadWorker` subclass of
-  `vllm.v1.kv_offload`) for production GPU deployments.
+  everywhere; Shape B (`Offload` subclass of `vllm.v1.kv_offload`) for
+  production GPU deployments.
 - **Triton kernels:** fused Tucker reconstruction, JL projection, INT8
   quantize — optional, falls back to PyTorch `einsum` on non-NVIDIA systems.
 - **Pure PyTorch algorithm code:** no hidden device transfer; uses
@@ -47,7 +48,7 @@ Based on the paper: [*Krishnan & Schulz (2026) arXiv:2607.12550*](https://arxiv.
 ### From PyPI
 
 ```bash
-pip install kvcompress
+pip install kvfold
 ```
 
 ### From source
@@ -61,11 +62,11 @@ pip install -e .
 ### Optional extras
 
 ```bash
-pip install "kvcompress[triton]"    # Triton kernels for reconstruction / JL
-pip install "kvcompress[vllm]"      # vLLM adapter
-pip install "kvcompress[bench]"     # matplotlib, pandas, datasets
-pip install "kvcompress[dev]"       # pytest, ruff, hypothesis
-pip install "kvcompress[docs]"      # mkdocs
+pip install "kvfold[triton]"    # Triton kernels for reconstruction / JL
+pip install "kvfold[vllm]"      # vLLM adapter
+pip install "kvfold[bench]"     # matplotlib, pandas, datasets
+pip install "kvfold[dev]"       # pytest, ruff, hypothesis
+pip install "kvfold[docs]"      # mkdocs
 ```
 
 ---
@@ -74,12 +75,12 @@ pip install "kvcompress[docs]"      # mkdocs
 
 ```python
 from transformers import AutoModelForCausalLM
-from kvcompress import enable_compression
+from kvfold import enable_compression
 
 model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 enable_compression(
     model,
-    method="flashjolt",
+    method="flash",
     target_memory="25%",     # compress KV cache to 25% of original (4×)
 )
 
@@ -89,22 +90,22 @@ out = model.generate(...)    # KV cache is compressed transparently
 Other methods:
 
 ```python
-from kvcompress import enable_compression
+from kvfold import enable_compression
 
-enable_compression(model, method="jolt",      compression_ratio=3.0)
-enable_compression(model, method="flashjolt", compression_ratio=2.5)
-enable_compression(model, method="lowrank",   rank=128)
-enable_compression(model, method="int4",      per_channel=True)
+enable_compression(model, method="jolt", ratio=3.0)
+enable_compression(model, method="flash", ratio=2.5)
+enable_compression(model, method="low",   rank=128)
+enable_compression(model, method="int4",  per_channel=True)
 enable_compression(model, method="fp8")
-enable_compression(model, method="identity")  # baseline passthrough
+enable_compression(model, method="pass")  # baseline passthrough
 ```
 
 Inspect and disable:
 
 ```python
-from kvcompress import enable_compression
+from kvfold import enable_compression
 
-handle = enable_compression(model, method="flashjolt", compression_ratio=4.0)
+handle = enable_compression(model, method="flash", ratio=4.0)
 # ... do generation ...
 print(handle.stats_dict())
 handle.disable()  # restore the original behaviour
@@ -116,12 +117,12 @@ handle.disable()  # restore the original behaviour
 
 | Setting | `enable_compression` kwarg | Default | Description |
 |---|---|---|---|
-| Compression method | `method` | `"flashjolt"` | `"jolt"`, `"flashjolt"`, `"lowrank"`, `"int2"`, `"int4"`, `"int8"`, `"fp8"`, `"fp16"`, `"identity"` |
-| Target ratio | `compression_ratio` | — | Float > 1.0. Mutually exclusive with `target_memory`. |
-| Target memory | `target_memory` | — | `"25%"` / `0.25`. Mutually exclusive with `compression_ratio`. |
+| Compression method | `method` | `"flash"` | `"jolt"`, `"flash"`, `"low"`, `"int2"`, `"int4"`, `"int8"`, `"fp8"`, `"fp16"`, `"bf16"`, `"pass"` |
+| Target ratio | `ratio` | — | Float > 1.0. Mutually exclusive with `target_memory`. |
+| Target memory | `target_memory` | — | `"25%"` / `0.25`. Mutually exclusive with `ratio`. |
 | Layer groups | `layer_groups` | `1` | Number of contiguous layer groups the allocator splits the model into. Paper uses G = 1. |
 | Residual bit-widths | `bits` | `(0, 2, 4, 8)` | Tuple the allocator can choose from. |
-| Cache impl name | `cache_implementation` | `"kvcompress"` | Registered with HF's `cache_implementation` mechanism. |
+| Cache impl name | `cache_implementation` | `"kvfold"` | Registered with HF's `cache_implementation` mechanism. |
 | Seed | `seed` | `0` | Seed for randomized components (SVD, JL). |
 
 Per-compressor kwargs (e.g. `rank=`, `factor_dtype=`, `per_channel=`,
@@ -133,27 +134,27 @@ Per-compressor kwargs (e.g. `rank=`, `factor_dtype=`, `per_channel=`,
 
 | Symbol | Module | Description |
 |---|---|---|
-| `KVCompressor` | `compressor.base` | Abstract base for all KV cache compressors |
-| `JoLTCompressor` | `compressor.jolt` | Paper-faithful JoLT |
-| `FlashJoLTCompressor` | `compressor.flashjolt` | Randomised-SVD token mode + sublinear cap |
-| `IdentityCompressor` | `compressor.identity` | Passthrough baseline |
-| `LowRankCompressor` | `compressor.lowrank` | Matrix-SVD baseline |
-| `IntQuantOnlyCompressor` | `compressor.quantization_only` | Per-channel int quantisation baseline |
-| `JointAllocator` | `compressor.allocator` | Per-cell Lagrangian optimiser |
-| `GreedyAllocator` | `compressor.allocator` | Greedy ablation baseline |
-| `Allocation` / `Cell` | `compressor.allocator` | Per-cell decision dataclasses |
-| `CompressedKVCache` | `cache.compress` | Layer-indexed compressed cache |
-| `CacheManager` | `cache.manager` | High-level cache facade |
-| `CompressionMetadata` | `cache.metadata` | Layer-level metadata (ranks, bit-widths, layout) |
-| `enable_compression` | `api` | HF entry point — wraps a model's KV cache |
-| `disable_compression` | `api` | Restore the original behaviour |
-| `CompressionHandle` | `api` | Handle returned by `enable_compression` |
-| `CompressionStats` | `api` | Aggregated stats across one session |
-| `HuggingFaceAdapter` | `adapters.huggingface` | Adapter underlying `enable_compression` |
-| `SVD` / `SVDResult` | `compressor.svd` | Exact + randomised SVD with tail-mass semantics |
-| `JLProjection` | `compressor.jl` | Cached Johnson-Lindenstrauss projection |
-| `IntQuantizer` | `compressor.quantization` | Uniform int quantiser with bit-packing |
-| `ResidualPayload` | `compressor.residual` | Serialised JL-rotated residual |
+| `Compressor` | `kvfold.core.base` | ABC for all KV cache compressors |
+| `Jolt` | `kvfold.core.jolt` | Paper-faithful JoLT |
+| `Flash` | `kvfold.core.flash` | Randomised-SVD JoLT variant |
+| `Pass` | `kvfold.core.identity` | Passthrough baseline |
+| `Low` | `kvfold.core.low` | Matrix-SVD baseline |
+| `IntQuant` | `kvfold.core.int_quant` | Per-channel int quantisation baseline |
+| `Bisect` | `kvfold.core.budget` | Per-cell Lagrangian allocator |
+| `Greedy` | `kvfold.core.budget` | Greedy ablation baseline |
+| `Pick` / `Plan` | `kvfold.core.budget` | Per-cell decision + plan dataclasses |
+| `Cache` | `kvfold.store.compress` | Layer-indexed compressed cache |
+| `Pool` | `kvfold.store.manager` | High-level cache facade |
+| `Meta` / `LayerMeta` | `kvfold.store.metadata` | Layer-level metadata |
+| `enable_compression` | `kvfold.api` | HF entry point — wraps a model's KV cache |
+| `disable_compression` | `kvfold.api` | Restore the original behaviour |
+| `CompressionHandle` | `kvfold.api` | Handle returned by `enable_compression` |
+| `CompressionStats` | `kvfold.api` | Aggregated stats |
+| `HF` | `kvfold.adapter.huggingface` | HF adapter underlying `enable_compression` |
+| `Decomposer` / `Decomposition` | `kvfold.core.svd` | SVD strategy ABC + result |
+| `Projector` / `Projection` | `kvfold.core.jl` | JL strategy ABC + matrix |
+| `IntQuant` | `kvfold.core.quant` | Uniform int quantiser + bit-packing |
+| `Residual` | `kvfold.core.residual` | JL-rotated residual payload |
 
 ---
 
@@ -164,7 +165,7 @@ Per-compressor kwargs (e.g. `rank=`, `factor_dtype=`, `per_channel=`,
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from kvcompress import enable_compression, CompressionHandle
+from kvfold import enable_compression, CompressionHandle
 
 model = AutoModelForCausalLM.from_pretrained(
     "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
@@ -174,7 +175,7 @@ model = AutoModelForCausalLM.from_pretrained(
 tok = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
 handle: CompressionHandle = enable_compression(
-    model, method="flashjolt", target_memory="25%"
+    model, method="flash", target_memory="25%"
 )
 ids = tok("Hello, my name is", return_tensors="pt").input_ids.to(model.device)
 out = model.generate(ids, max_new_tokens=128, do_sample=False)
@@ -188,8 +189,8 @@ More examples in `examples/`:
 
 - `01_quickstart.py` — minimal HF integration
 - `02_direct_compression.py` — manual compress/decompress without an HF model
-- `03_custom_allocator.py` — swap `JointAllocator` for a custom one
-- `04_method_comparison.py` — JoLT vs. LowRank vs. Int4 vs. Identity side-by-side
+- `03_custom_allocator.py` — swap `Bisect` for a custom one
+- `04_method_comparison.py` — JoLT vs. Low vs. int4 vs. Pass side-by-side
 - `05_long_context.py` — needle-in-haystack at 8K context
 
 ---
@@ -211,68 +212,92 @@ explicit attribute checks so structural mismatches fail loudly.
 
 ## Performance
 
-- **Single-layer compress** (Mistral-7B layer shape, T=4096, dh=128,
-  fp16): JoLT ≈ 12 ms, FlashJoLT ≈ 1.8 ms on an RTX 4090.
-- **Compress throughput** dominated by the SVD on mode-1 (`O(m·T·rd)`)
-  and on mode-2 (`O(T·rd)`); FlashJoLT replaces mode-1 with a
-  randomised sketch at `q_cap ≤ 512`.
+Qualitative claims (paper §5; not yet measured in this re-implementation):
+
+- **Compression time** scales with token count `T` × feature rank `rd`.
+  Flash replaces the exact SVD with a randomised sketch capped at
+  `q_cap = min(max(q_min(R), ⌈T/32⌉), 512)`. On Mistral-7B layer
+  shapes, Flash is roughly an order of magnitude faster than exact JoLT
+  at matched quality.
 - **Decompress** is a single fused matmul-style kernel:
-  `einsum("mar,ta,dr->mtd", core, u_token, u_feature)`. Triton
-  implementation gives ~2× on NVIDIA vs. the PyTorch einsum.
+  `einsum("mar,ta,dr->mtd", core, u_token, u_feature)`. The Triton
+  implementation targets ~2× vs. the PyTorch einsum on NVIDIA.
 - **Bytes per layer** at 3× compression ≈ 4 × bytes_compressed of the
   Tucker core plus tiny residual payloads. See `docs/benchmarks/`.
+
+Run the benchmarks yourself with `scripts/run_memory_benchmark.py` and
+`scripts/run_speed_benchmark.py`; the published `results/` directory
+contains CPU-only reference numbers from the developer's machine and is
+*not* paper-reproduction data.
+
+---
+
+## Known limitations
+
+- **Best called before model instantiation.** The HF adapter patches
+  `transformers.DynamicCache` at call time. If a third-party module
+  imports `DynamicCache` after `enable_compression` is called, that
+  reference stays unpatched. Call `enable_compression` immediately
+  after `from_pretrained` to avoid the race.
+- **Encoder-decoder and Mamba-style models** are out of scope. The
+  allocator assumes a standard decoder-only attention layout.
+- **GPU benchmarks not in CI.** Reference numbers in `results/` are
+  CPU-only; the perf section above is qualitative.
 
 ---
 
 ## Project Structure
 
 ```
-kvcompress/                            (top-level package — flat layout)
+kvfold/                            (top-level package)
   __init__.py                — Lazy-export public surface
   api.py                     — enable_compression / disable_compression / CompressionHandle
   cli.py                     — Typer CLI: version, validate, benchmark, profile, compress
-  compressor/
-    base.py                  — KVCompressor ABC + CompressedPayload + CompressorStats
-    identity.py              — Passthrough baseline
-    lowrank.py               — Matrix-SVD baseline
-    quantization_only.py     — Int quantisation baseline
-    quantization.py          — Int/Fp quantiser primitives + bit-packing
-    residual.py              — JL-rotated residual payload
-    tucker.py                — Partial Tucker ST-HOSVD + reconstruction
-    svd.py                   — SVD class (exact + randomised Halko–Martinsson–Tropp)
-    jl.py                    — Johnson-Lindenstrauss projections + cache
-    allocator.py             — Joint Lagrangian + Greedy allocators
-    jolt.py                  — JoLTCompressor (ties everything together)
-    flashjolt.py             — FlashJoLTCompressor (randomised mode-1)
-  cache/
-    compress.py              — CompressedKVCache
-    manager.py               — CacheManager facade
-    metadata.py              — CompressionMetadata + LayerCompression
-  adapters/
+  config.py                  — Typed config objects + registry
+  errors.py                  — Error hierarchy
+  adapter/
+    base.py
     huggingface.py           — DynamicCache interception + family shim walk
     registry.py              — Per-family registry
     vllm.py                  — Shape A: export_kv / import_kv
-    vllm_kv_offload.py       — Shape B: JoLTOffloadWorker subclass
-    deepseek.py / falcon.py / gemma.py / internlm.py / llama.py /
-    mistral.py / mixtral.py / phi.py / qwen.py  — per-family shims
-  kernels/
-    triton/
-      compression.py         — Triton + PyTorch fallback ops
-      tucker_reconstruct.py  — Fused Tucker reconstruction kernel
+    vllm_offload.py          — Shape B: Offload (KVCacheOffloadWorker subclass)
+  core/
+    base.py                  — Compressor ABC + Payload + Stats
+    identity.py              — Passthrough baseline (Pass)
+    low.py                   — Matrix-SVD baseline (Low)
+    int_quant.py             — Int quantisation baseline (IntQuant)
+    float_cast.py            — dtype-haling cast (FloatCast)
+    float8.py                — E4M3/E5M2 fp8 baseline (Float8)
+    quant.py                 — Int/Fp quantiser primitives + bit-packing
+    residual.py              — encode/decode residual
+    tucker.py                — Partial Tucker ST-HOSVD + reconstruction
+    svd.py                   — Decomposer ABC (Exact + Randomized)
+    jl.py                    — Johnson-Lindenstrauss projections + cache
+    budget.py                — Bisect + Greedy allocators
+    dispatch.py              — Compressor dispatcher + registry
+    jolt.py                  — JoLT (ties everything together)
+    flash.py                 — Flash (randomised mode-1)
+  store/
+    compress.py              — Cache
+    manager.py               — Pool facade
+    metadata.py              — Meta + LayerMeta
   runtime/
-    memory.py                — MemoryPool (tensor recycling)
-    profiler.py              — Per-call recorder
-  benchmarks/
+    pool.py                  — MemoryPool (tensor recycling)
+    profile.py               — Per-call recorder
+  bench/
     memory.py                — Bytes-per-method sweep
-    reconstruction.py        — Paper Table 2 reproduction
-    throughput.py            — Compress / decompress wall-time
+    table2.py                — Paper Table 2 reproduction
+    speed.py                 — Compress / decompress wall-time
     plot.py                  — Matplotlib bar charts
+  kernel/
+    triton/
+      tucker.py              — Fused Tucker reconstruction kernel
 
 tests/
-  unit/                      — 200+ tests covering algorithms, API, contract
+  unit/                      — 416 tests covering algorithms, API, contract
   property/                  — Hypothesis property tests
-  integration/               — End-to-end HF tests (gated, no model downloads)
-  fixtures/                  — Tiny stand-in models (no real LLM weights)
+  integration/               — End-to-end HF tests
+  regression/                — Bug-regression guards
 
 scripts/                     — run_table2_reconstruction, run_memory_benchmark, etc.
 
@@ -292,11 +317,11 @@ docs/
 
 ```bash
 pip install -e ".[dev]"
-ruff check kvcompress tests examples scripts
-ruff format --check kvcompress tests examples scripts
-mypy kvcompress
-pytest tests/unit tests/property         # 353 tests, ~35s on CPU
-pytest --cov=kvcompress --cov-report=term-missing
+ruff check kvfold tests examples scripts
+ruff format --check kvfold tests examples scripts
+mypy kvfold
+pytest tests/unit tests/property         # 416 tests, ~5s on CPU
+pytest --cov=kvfold --cov-report=term-missing
 coverage report --fail-under=90
 ```
 
@@ -306,7 +331,7 @@ coverage report --fail-under=90
 commit per logical impact. A milestone may have many commits.
 
 ```
-feat: add q_cap auto-decoder for FlashJoLT
+feat: add q_cap auto-decoder for Flash
 fix: clamp barycentric coordinates to [0,1]
 docs: regenerate API reference from source
 refactor: extract AABB tree to dedicated module
@@ -323,11 +348,11 @@ pytest tests/unit                       # fast (no model downloads)
 pytest tests/property                   # Hypothesis property tests
 pytest -m "not slow and not integration and not gpu"
 pytest                                 # full suite
-pytest --cov=kvcompress                 # with coverage
+pytest --cov=kvfold                     # with coverage
 ```
 
-The suite has 4 skip markers: `slow`, `integration` (model downloads),
-`gpu` (CUDA required). All default `pytest -m` invocations skip them.
+The suite has skip markers: `slow`, `integration` (model downloads),
+`gpu` (CUDA required). The default `pytest -m` invocation skips them.
 
 ---
 
@@ -343,7 +368,7 @@ mkdocs serve                            # live-reload at http://127.0.0.1:8000
 
 ## Release
 
-1. Bump version in `pyproject.toml` and `kvcompress/__init__.py`.
+1. Bump version in `pyproject.toml` and `kvfold/__init__.py`.
 2. Update `CHANGELOG.md` (move entries from "Unreleased" to a dated
    section).
 3. Commit with `chore: release vX.Y.Z`.
@@ -378,7 +403,7 @@ mkdocs serve                            # live-reload at http://127.0.0.1:8000
 ### Medium priority
 
 - **vLLM Shape C — custom attention backend:** the third integration
-  shape, currently stubbed in `adapters/vllm.py`.
+  shape, currently stubbed in `adapter/vllm.py`.
 - **`vllm 0.x` → `vllm 1.0` API migration:** the
   `vllm.v1.kv_offload.base.KVCacheOffloadWorker` superclass is stable
   across `1.0` releases but the import path may move.
@@ -401,13 +426,13 @@ of conduct and the process for submitting pull requests.
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant v2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+This project follows the [Contributor Covenant v2.1](CODE_OF_CONDUCT.md).
 By participating you agree to abide by its terms.
 
 ## Security
 
 Report vulnerabilities to **sachncs@gmail.com** — see
-[SECURITY.md](SECURITY.md) if present (otherwise open a private issue).
+[SECURITY.md](SECURITY.md).
 
 ## License
 
