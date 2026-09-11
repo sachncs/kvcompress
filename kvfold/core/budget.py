@@ -109,9 +109,6 @@ from abc import ABC, abstractmethod
 from typing import Sequence, Type
 
 
-@dataclass
-
-
 class Allocator(ABC):
     """Strategy for byte-budget allocation across (layer group, K/V) cells."""
 
