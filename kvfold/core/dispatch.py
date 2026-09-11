@@ -71,6 +71,11 @@ class CompressorRegistry:
     ) -> Type[Compressor]:
         """Bind ``method`` to ``compressor_cls``.
 
+        Idempotent: re-registering the same ``(method, compressor_cls)``
+        pair is a no-op so ``importlib.reload`` and Jupyter re-import
+        paths do not blow up. Registering a different class under the
+        same name still raises.
+
         Args:
             method: public method name (e.g. ``"jolt"``).
             compressor_cls: subclass of :class:`Compressor`.
@@ -84,7 +89,11 @@ class CompressorRegistry:
             The ``compressor_cls`` argument (for use as a decorator).
         """
         if method in self.entries:
-            raise ValueError(f"method {method!r} is already registered to {self.entries[method].compressor_cls.__name__}")
+            if self.entries[method].compressor_cls is not compressor_cls:
+                raise ValueError(
+                    f"method {method!r} is already registered to {self.entries[method].compressor_cls.__name__}"
+                )
+            return compressor_cls
         if not issubclass(compressor_cls, Compressor):
             raise TypeError(f"{compressor_cls.__name__} must inherit from Compressor")
 
