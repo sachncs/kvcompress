@@ -77,7 +77,7 @@ from typing import Final
 class KVCompressError(Exception):
     """Base class for every error raised by kvfold."""
 
-    code: str = "kvcompress_error"
+    code: str = "kvfold_error"
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
         super().__init__(message)

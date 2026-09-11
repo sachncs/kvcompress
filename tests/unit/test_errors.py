@@ -54,7 +54,7 @@ def test_base_hierarchy() -> None:
 
 def test_kvcompress_error_code_and_hint() -> None:
     err = KVCompressError("boom", hint="try again")
-    assert err.code == "kvcompress_error"
+    assert err.code == "kvfold_error"
     assert err.message == "boom"
     assert err.hint == "try again"
     assert "boom" in str(err)
