@@ -88,14 +88,18 @@ class Tucker:
 
     @property
     def bytes_factors(self) -> int:
-        """Bytes occupied by all Tucker factors assuming fp16 storage.
+        """Bytes occupied by all Tucker factors using each tensor's actual dtype.
 
-        Assumes ``factor_dtype == fp16`` for the core + bases (default
-        for JoLT). Override the convention if you store fp32 factors.
+        Reads ``element_size()`` from each factor tensor so fp32 factors
+        report 4 bytes/scalar (not 2). Matches the ``bytes_compressed``
+        field in :class:`~kvfold.core.base.Payload`, which is built from
+        the same tensors after a ``.to(self.dtype)`` cast.
         """
-        # Stored as fp16 by convention.
-        elem = 2  # fp16
-        return int(self.core.numel() + self.u_token.numel() + self.u_feature.numel()) * elem
+        return int(
+            self.core.numel() * self.core.element_size()
+            + self.u_token.numel() * self.u_token.element_size()
+            + self.u_feature.numel() * self.u_feature.element_size()
+        )
 
 
 def mode_n_unfold(x: torch.Tensor, mode: int) -> torch.Tensor:
