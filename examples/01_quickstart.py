@@ -1,6 +1,6 @@
 """01 — Quickstart.
 
-The smallest possible example of using kvcompress with a Hugging Face
+The smallest possible example of using kvfold with a Hugging Face
 model. Loads GPT-2, enables 3x compression, generates a short
 continuation, and prints stats.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
-from kvcompress import enable_compression
+from kvfold import enable_compression
 
 
 def main() -> None:
@@ -18,7 +18,7 @@ def main() -> None:
     model = GPT2LMHeadModel.from_pretrained("gpt2")
     model.eval()
 
-    handle = enable_compression(model, method="flashjolt", compression_ratio=3.0)
+    handle = enable_compression(model, method="flash", ratio=3.0)
 
     try:
         ids = tok.encode("The capital of France is", return_tensors="pt")
