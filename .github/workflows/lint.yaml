@@ -15,8 +15,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ruff
-      - run: ruff check kvcompress tests examples scripts
-      - run: ruff format --check kvcompress tests examples scripts
+      - run: ruff check kvfold tests examples scripts
+      - run: ruff format --check kvfold tests examples scripts
 
   mypy:
     name: mypy
@@ -28,4 +28,4 @@ jobs:
           python-version: "3.12"
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e ".[dev]"
-      - run: mypy kvcompress
+      - run: mypy kvfold

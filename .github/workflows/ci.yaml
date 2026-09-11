@@ -32,17 +32,17 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Lint
-        run: ruff check kvcompress tests examples scripts
+        run: ruff check kvfold tests examples scripts
 
       - name: Format check
-        run: ruff format --check kvcompress tests examples scripts
+        run: ruff format --check kvfold tests examples scripts
 
       - name: Type check
-        run: mypy kvcompress
+        run: mypy kvfold
 
       - name: Unit tests + coverage
         run: |
-          python -m pytest --cov=kvcompress --cov-report=term-missing \
+          python -m pytest --cov=kvfold --cov-report=term-missing \
                  -m "not slow and not integration and not gpu"
 
       - name: Coverage gate
