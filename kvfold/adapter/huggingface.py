@@ -417,9 +417,6 @@ class HF:
         set_module_attr(cu, "DynamicCache", KvCompressCache)
         if hasattr(gu, "DynamicCache"):
             set_module_attr(gu, "DynamicCache", KvCompressCache)
-
-        for mod_name, mod in list(sys.modules.items()):
-            set_module_attr(gu, "DynamicCache", KvCompressCache)
             self.patched_modules["transformers.generation.utils"] = KvCompressCache
 
         # Patch any other transformers module that imported DynamicCache.
