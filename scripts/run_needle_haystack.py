@@ -65,8 +65,8 @@ def main() -> None:
 
     from kvfold import enable_compression
 
-    for method in ("identity", "flashjolt"):
-        handle = enable_compression(model, method=method, compression_ratio=3.0)
+    for method in ("pass", "flash"):
+        handle = enable_compression(model, method=method, ratio=3.0)
         try:
             with torch.no_grad():
                 out = model.generate(
