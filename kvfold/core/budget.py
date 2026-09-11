@@ -135,9 +135,6 @@ class AllocatorRegistry:
             raise KeyError(f"unknown allocator {name!r}; available: {list(self.entries)}") from None
 
 
-REGISTRY: AllocatorRegistry = AllocatorRegistry()
-
-
 @dataclass
 class Plan:
     """Output of :meth:`Bisect.optimize`."""
