@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from typing import Any  # noqa: F401
 
+import kvfold.core.builtins  # noqa: F401 — populates the compressor dispatcher registry
+
 __version__ = "0.2.0"
 
 LAZY_EXPORTS = {
@@ -62,10 +64,6 @@ def __getattr__(name: str) -> Any:
         globals()[name] = value
         return value
     raise AttributeError(f"module 'kvfold' has no attribute {name!r}")
-
-
-_ = __getattr__("build_compressor")  # initialise the import-side-effect module
-del _
 
 
 __all__ = ["__version__", *LAZY_EXPORTS]
