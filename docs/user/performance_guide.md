@@ -1,6 +1,6 @@
 # Performance guide
 
-This page is about squeezing the most out of `kvcompress` for your
+This page is about squeezing the most out of `kvfold` for your
 specific workload.
 
 ## TL;DR
@@ -155,7 +155,7 @@ the decompression step. This is most helpful for short contexts.
     "decompress_calls": int,    # number of layer-read events
     "bytes_original": int,      # uncompressed bytes across all events
     "bytes_compressed": int,    # bytes in the compressed payloads
-    "compression_ratio": float, # bytes_original / bytes_compressed
+    "ratio": float,             # bytes_original / bytes_compressed
     "memory_saved_bytes": int,  # bytes_original - bytes_compressed
 }
 ```
@@ -189,9 +189,9 @@ loop to record the actual compression ratio achieved.
 ## Profiling
 
 ```python
-from kvcompress.runtime.profiler import CompressionProfiler
+from kvfold.runtime.profile import Profile
 
-prof = CompressionProfiler()
+prof = Profile()
 with prof.record("compress", bytes_in=K.numel() * K.element_size()):
     kp, vp = comp.compress(K, V)
 

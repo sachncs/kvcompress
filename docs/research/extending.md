@@ -19,48 +19,46 @@ t-SVD and TT are dominated.
 If you want to plug in another format:
 
 ```python
-# kvcompress/compressor/tsvd.py
-from kvcompress.compressor.base import KVCompressor, CompressedPayload
+# kvfold/core/tsvd.py
+from kvfold.core.base import Compressor, Payload
 import torch
 
-class TSVDCompressor(KVCompressor):
-    name = "t-svd"
+class TSVDCompressor(Compressor):
+    method = "t-svd"
 
     def compress(self, key, value):
         # ... t-SVD implementation ...
         return kp, vp
 
-    def decompress(self, kp, vp):
+    def restore(self, kp, vp):
         # ... inverse t-SVD ...
         return k, v
 ```
 
-Then register in `api._build_compressor`:
+Then register in `kvfold/core/builtins.py`:
 
 ```python
-def _build_compressor(method, **kwargs):
-    method = method.lower()
-    if method == "t-svd":
-        from kvcompress.compressor.tsvd import TSVDCompressor
-        return TSVDCompressor(**kwargs)
-    ...
+from kvfold.core.dispatch import REGISTRY
+from kvfold.core.tsvd import TSVDCompressor
+
+REGISTRY.register("t-svd", TSVDCompressor)
 ```
 
 ## Custom quantizers
 
-Subclass `IntQuantizer` or implement the `Quantizer` protocol:
+Subclass `IntQuantImpl` or implement the `Quantizer` protocol:
 
 ```python
-from kvcompress.compressor.quantization import IntQuantizer
+from kvfold.core.quant import IntQuant
 
-class Int4PerGroup(IntQuantizer):
+class Int4PerGroup(IntQuant):
     """INT4 with per-group scales of 32."""
 
-    def __init__(self, group_size=32):
+    def __init__(self, group_size: int = 32):
         super().__init__(bits=4, symmetric=True, per_channel=False, group_size=group_size)
 ```
 
-Register in `quantization.get_quantizer`:
+Register in `kvfold.core.quant.get_quantizer`:
 
 ```python
 def get_quantizer(name, **kwargs):
@@ -74,15 +72,18 @@ def get_quantizer(name, **kwargs):
 Combine JoLT with another compressor by composing in `compress`:
 
 ```python
-class JoLTThenInt4(KVCompressor):
+from kvfold.core.base import Compressor, Payload
+from kvfold import Jolt, IntQuant
+
+class JoLTThenInt4(Compressor):
     """Run JoLT first, then quantize the result's residual to INT4."""
 
-    name = "jolt+int4"
+    method = "jolt+int4"
 
     def __init__(self, **kwargs):
         super().__init__()
-        self.jolt = JoLTCompressor(**kwargs)
-        self.int4 = IntQuantOnlyCompressor(bits=4)
+        self.jolt = Jolt(**kwargs)
+        self.int4 = IntQuant(bits=4)
 
     def compress(self, key, value):
         # Apply JoLT first; the residual becomes the data to quantize.
@@ -90,8 +91,17 @@ class JoLTThenInt4(KVCompressor):
         # ... extract residual factors, quantize, wrap ...
         ...
 
-    def decompress(self, kp, vp):
+    def restore(self, kp, vp):
         ...
+```
+
+Register via `kvfold/core/builtins.py`:
+
+```python
+from kvfold.core.dispatch import REGISTRY
+from somewhere import JoLTThenInt4
+
+REGISTRY.register("jolt+int4", JoLTThenInt4)
 ```
 
 ## Adding a new family
@@ -100,18 +110,21 @@ See [Adding an adapter](../dev/adding_an_adapter.md).
 
 ## Adding a new cache backend
 
-Subclass `CompressedKVCache` and override `store`, `retrieve`, and
+Subclass `Cache` and override `store`, `retrieve`, and
 `memory_used`. The HF adapter only needs these three methods plus
 `__contains__` and `__len__`.
 
 ```python
-class DiskCompressedKVCache(CompressedKVCache):
+from kvfold.store.compress import Cache
+import torch
+
+class DiskBackedCache(Cache):
     def store(self, layer, key, value, **kwargs):
-        payload = self._compressor.compress(key, value)
+        payload = self.compressor.compress(key, value)
         path = self._dir / f"layer_{layer}.pt"
         torch.save(payload, path)
         ...
 ```
 
 The HF adapter will pick up your cache automatically if you pass it via
-`HuggingFaceAdapter(..., cache=my_cache)`.
+`HF(..., cache=my_cache)`.

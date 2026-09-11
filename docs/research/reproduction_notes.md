@@ -27,8 +27,8 @@ discrepancies.
 
 - **End-to-end HF integration.** `tests/integration/test_gpt2.py` runs
   GPT-2 end-to-end with compression enabled. We verify:
-  - `identity` matches the baseline output exactly.
-  - `flashjolt` produces output that does not crash and uses memory
+  - `pass` matches the baseline output exactly.
+  - `flash` produces output that does not crash and uses memory
     less than the baseline.
   - `disable()` restores baseline output exactly.
 
@@ -48,7 +48,7 @@ To run any of these locally, you need:
 - ≥40 GB GPU (A100-40GB or H100).
 - The corresponding model weights (`mistralai/Mistral-7B-v0.3`,
   `meta-llama/Llama-2-13b-hf`).
-- `pip install "kvcompress[bench]"` for datasets and pandas.
+- `pip install "kvfold[bench]"` for datasets and pandas.
 
 ## Synthetic benchmark caveats
 
@@ -56,7 +56,7 @@ Our synthetic KV generator uses singular-value-like decay (`1/i`) on the
 core's components to match the paper's measured decay. The exact decay
 slopes differ from real Mistral-7B layer 15, so the *quantitative*
 reconstruction errors we report differ from the paper. The qualitative
-ordering (JoLT ≪ int4 ≪ lowrank on reconstruction fidelity) is
+ordering (JoLT ≪ int4 ≪ low on reconstruction fidelity) is
 preserved.
 
 ## Calibration table
@@ -64,12 +64,12 @@ preserved.
 The allocator uses `ε²(b) = {0: 1.0, 2: 0.30, 4: 0.10, 8: 0.04}`. These
 are illustrative numbers calibrated on a Gaussian round-trip; the paper
 doesn't publish the exact values. To improve, pass `tau_table` and
-`epsilon_squared` overrides to `JointAllocator`:
+`epsilon_squared` overrides to `Bisect`:
 
 ```python
-from kvcompress.compressor.allocator import JointAllocator
+from kvfold.core.budget import Bisect
 
-alloc = JointAllocator(
+alloc = Bisect(
     target_ratio=3.0,
     epsilon_squared={0: 1.0, 2: 0.30, 4: 0.10, 8: 0.04},
     # tau_table=...  # optional: empirical tail masses from your model
