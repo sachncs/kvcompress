@@ -26,7 +26,7 @@ pytest -m "not slow and not integration and not gpu"
 pytest
 
 # Coverage.
-pytest --cov=kvcompress --cov-report=term-missing
+pytest --cov=kvfold --cov-report=term-missing
 ```
 
 The first run downloads a 500 MB GPT-2 model for the integration test
@@ -35,9 +35,9 @@ fixtures. Subsequent runs use the cached copy.
 ## Lint, format, type-check
 
 ```bash
-ruff check src tests examples scripts
-ruff format src tests examples scripts
-mypy src
+ruff check kvfold tests examples scripts
+ruff format --check kvfold tests examples scripts
+mypy kvfold
 ```
 
 These three are also run by GitHub Actions on every push.
@@ -45,68 +45,60 @@ These three are also run by GitHub Actions on every push.
 ## Project layout
 
 ```
-kvcompress/
+kvfold/
+├── __init__.py               # Lazy-export public surface (LAZY_EXPORTS)
 ├── api.py                    # enable_compression + CompressionHandle
 ├── cli.py                    # Typer app
-├── compressor/
-│   ├── base.py               # KVCompressor ABC
-│   ├── jolt.py               # JoLTCompressor
-│   ├── flashjolt.py          # FlashJoLTCompressor
-│   ├── lowrank.py            # LowRankCompressor (baseline)
-│   ├── quantization_only.py  # IntQuantOnlyCompressor (baseline)
-│   ├── identity.py           # IdentityCompressor
-│   ├── tucker.py             # partial ST-HOSVD
-│   ├── svd.py                # SVD class (exact + randomized)
-│   ├── jl.py                 # Johnson-Lindenstrauss projections
-│   ├── quantization.py       # FP16/BF16/FP8/INT2/4/8 quantizers
+├── config.py                 # Typed config objects + MethodConfigRegistry
+├── errors.py                 # Error hierarchy
+├── adapter/
+│   ├── base.py
+│   ├── huggingface.py        # HF adapter + DynamicCache interception
+│   ├── registry.py           # model_type -> Family
+│   ├── vllm.py               # vLLM Shape A: export_kv / import_kv
+│   └── vllm_offload.py       # VLLM Shape B: Offload
+├── core/
+│   ├── base.py               # Compressor ABC + Payload + Stats
+│   ├── identity.py           # Pass (passthrough baseline)
+│   ├── low.py                # Low (matrix SVD baseline)
+│   ├── int_quant.py          # IntQuant (per-channel int quantisation)
+│   ├── float_cast.py         # FloatCast (dtype-halving)
+│   ├── float8.py             # Float8 (IEEE E4M3/E5M2)
+│   ├── quant.py              # int/fp quantiser primitives + bit-packing
 │   ├── residual.py           # encode/decode residual
-│   └── allocator.py          # JointAllocator + GreedyAllocator
-├── cache/
-│   ├── compress.py           # CompressedKVCache
-│   ├── manager.py            # CacheManager
-│   └── metadata.py           # CompressionMetadata
-├── adapters/
-│   ├── huggingface.py        # HuggingFaceAdapter
-│   ├── registry.py           # model_type -> shim
-│   ├── vllm.py               # vLLM adapter
-│   ├── llama.py              # family shims
-│   ├── mistral.py
-│   ├── qwen.py
-│   ├── gemma.py
-│   ├── phi.py
-│   ├── mixtral.py
-│   ├── falcon.py
-│   ├── deepseek.py
-│   └── internlm.py
+│   ├── tucker.py             # partial ST-HOSVD + reconstruction
+│   ├── svd.py                # Decomposer (Exact + Randomized)
+│   ├── jl.py                 # Johnson-Lindenstrauss projections + cache
+│   ├── budget.py             # Bisect + Greedy allocators
+│   ├── dispatch.py           # Compressor dispatcher + registry
+│   ├── jolt.py               # Jolt
+│   ├── flash.py              # Flash (randomised mode-1)
+│   └── builtins.py           # wires concrete compressors into the dispatcher
+├── store/
+│   ├── compress.py           # Cache
+│   ├── manager.py            # Pool facade
+│   └── metadata.py           # Meta + LayerMeta
 ├── runtime/
-│   ├── memory.py             # MemoryPool
-│   └── profiler.py           # CompressionProfiler
-├── kernels/
-│   ├── triton/compression.py # Fused kernels (PyTorch fallback)
-│   └── triton/tucker_reconstruct.py  # Real Triton kernel
-└── benchmarks/
-    ├── memory.py
-    ├── throughput.py
-    ├── reconstruction.py
-    └── plot.py
+│   ├── pool.py               # MemoryPool
+│   └── profile.py            # CompressionProfiler
+├── kernel/
+│   └── triton/
+│       └── tucker.py         # Fused Triton kernel (PyTorch fallback)
+└── bench/
+    ├── memory.py             # Bytes-per-method sweep
+    ├── table2.py             # Paper Table 2 reproduction
+    ├── speed.py              # Compress / decompress wall-time
+    └── plot.py               # Matplotlib bar charts
 
 tests/
 ├── unit/
 ├── integration/
 ├── property/
+├── regression/
 └── fixtures/
 
-scripts/
-├── run_table2_reconstruction.py
-├── run_memory_benchmark.py
-├── run_speed_benchmark.py
-├── validate_install.py
-├── run_needle_haystack.py
-├── sweep_compression_ratio.py
-├── profile_model.py
-└── reproduce_paper_numbers.sh
-
-examples/                        # Jupyter-friendly demos
+scripts/                      # run_table2_reconstruction, run_memory_benchmark, etc.
+examples/                     # Jupyter-friendly demos
 docs/
 ├── user/
 ├── dev/

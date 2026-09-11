@@ -5,16 +5,16 @@ The shortest path from `pip install` to a compressed model.
 ## Install
 
 ```bash
-pip install kvcompress
+pip install kvfold
 ```
 
 Optional extras (recommended for the full experience):
 
 ```bash
-pip install "kvcompress[bench]"      # matplotlib, datasets, pandas
-pip install "kvcompress[dev]"        # pytest, ruff, mypy, hypothesis
-pip install "kvcompress[triton]"     # Triton kernels (NVIDIA only)
-pip install "kvcompress[vllm]"       # vLLM integration
+pip install "kvfold[bench]"      # matplotlib, datasets, pandas
+pip install "kvfold[dev]"        # pytest, ruff, mypy, hypothesis
+pip install "kvfold[triton]"     # Triton kernels (NVIDIA only)
+pip install "kvfold[vllm]"       # vLLM integration
 ```
 
 ## The 30-second example
@@ -22,11 +22,11 @@ pip install "kvcompress[vllm]"       # vLLM integration
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from kvcompress import enable_compression
+from kvfold import enable_compression
 
 # Load any causal LM.
 model = AutoModelForCausalLM.from_pretrained("gpt2")
-handle = enable_compression(model, method="flashjolt", target_memory="33%")
+handle = enable_compression(model, method="flash", target_memory="33%")
 
 # Generate as usual. The KV cache is compressed transparently.
 tok = AutoTokenizer.from_pretrained("gpt2")
@@ -38,7 +38,7 @@ print("compression stats:", handle.stats_dict())
 handle.disable()  # restore original behaviour
 ```
 
-The `target_memory="33%"` argument is equivalent to `compression_ratio=3.0`
+The `target_memory="33%"` argument is equivalent to `ratio=3.0`
 (33% of original = 1/3 = 3× compression). You can use either.
 
 ## What `enable_compression` actually does
@@ -48,7 +48,7 @@ The function returns a `CompressionHandle`. While the handle is active:
 1. Every `DynamicCache.update(K, V, layer_idx)` call is intercepted.
    The model writes its K and V to the cache as usual; the patched
    `DynamicCache.__init__` subclass compresses them and stores the
-   compressed payload in our `CacheManager`.
+   compressed payload in our `Pool`.
 2. Every `cache[layer_idx]` (i.e. the attention read) is intercepted.
    The patched `__getitem__` decompresses the payload and writes the
    reconstructed K/V back to the layer's tensors.
@@ -59,16 +59,16 @@ The model code itself doesn't change.
 
 | `method=` | Speed | Quality | Compression |
 |---|---|---|---|
-| `"flashjolt"` | Fast | Near-lossless | 2-4× |
+| `"flash"` | Fast | Near-lossless | 2-4× |
 | `"jolt"` | Slower (exact SVD) | Near-lossless | 2-4× |
-| `"lowrank"` | Fast | Lossy | 2-8× |
+| `"low"` | Fast | Lossy | 2-8× |
 | `"int4"` / `"int8"` | Fast | Lossy | 4-8× |
 | `"fp8"` | Fast | Lossless (just cast) | 2× |
-| `"identity"` | Fastest | Identity (fp16 cast) | 2× (just dtype) |
+| `"pass"` | Fastest | Identity (fp16 cast) | 2× (just dtype) |
 
-**Default: `flashjolt`.** It's the paper's recommended fast variant.
+**Default: `flash`.** It's the paper's recommended fast variant.
 Use `jolt` only if you need exact reproducibility; in practice
-`flashjolt` matches `jolt` within `|Δ| ≤ 0.003` in the free zone.
+`flash` matches `jolt` within `|Δ| ≤ 0.003` in the free zone.
 
 ## Picking a ratio
 
@@ -82,32 +82,32 @@ Outside:
 
 ```python
 # Default: 3× (free zone)
-enable_compression(model, method="flashjolt", target_memory="33%")
+enable_compression(model, method="flash", target_memory="33%")
 
 # Aggressive for GQA
-enable_compression(model, method="flashjolt", target_memory="20%")  # 5×
+enable_compression(model, method="flash", target_memory="20%")  # 5×
 
 # Maximum savings (lossy)
-enable_compression(model, method="flashjolt", target_memory="12%")  # 8×
+enable_compression(model, method="flash", target_memory="12%")  # 8×
 ```
 
 You can also use absolute bytes:
 
 ```python
-enable_compression(model, method="flashjolt", compression_ratio=3.0)
+enable_compression(model, method="flash", ratio=3.0)
 ```
 
 ## Inspecting what happened
 
 ```python
-handle = enable_compression(model, method="flashjolt", target_memory="33%")
+handle = enable_compression(model, method="flash", target_memory="33%")
 model.generate(...)  # run as usual
 
 # Cumulative stats
 print(handle.stats_dict())
 # {'compress_calls': 12, 'decompress_calls': 12,
 #  'bytes_original': 3145728, 'bytes_compressed': 524288,
-#  'compression_ratio': 6.0, 'memory_saved_bytes': 2621440}
+#  'ratio': 6.0, 'memory_saved_bytes': 2621440}
 ```
 
 `compress_calls` is the number of layer-write events. `decompress_calls`
@@ -121,15 +121,15 @@ is usable directly:
 
 ```python
 import torch
-from kvcompress import JoLTCompressor
+from kvfold import Jolt
 
 # A KV cache slice: (merged_heads, tokens, head_dim)
 K = torch.randn(8, 256, 64)
 V = torch.randn(8, 256, 64)
 
-comp = JoLTCompressor(compression_ratio=3.0, bits=(0, 2, 4, 8))
+comp = Jolt(ratio=3.0, bits=(0, 2, 4, 8))
 k_payload, v_payload = comp.compress(K, V)
-K_hat, V_hat = comp.decompress(k_payload, v_payload)
+K_hat, V_hat = comp.restore(k_payload, v_payload)
 
 # Reconstruction error (small at 3× on smooth spectra)
 rel_err = (K - K_hat).norm() / K.norm()
@@ -157,7 +157,7 @@ The compressed payloads are JSON-serialisable; see
    uses the cache's dtype at enable time.
 3. **Don't disable mid-generation.** The patched `DynamicCache` will
    route the in-flight reads to nowhere.
-4. **For long contexts (≥ 8K), use `flashjolt` not `jolt`.** FlashJoLT's
+4. **For long contexts (≥ 8K), use `flash` not `jolt`.** Flash's
    randomised SVD with the cap policy scales O(T) → O(T log T).
 
 See [user/troubleshooting.md](user/troubleshooting.md) for error-message

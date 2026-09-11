@@ -3,18 +3,18 @@
 The user-facing API is intentionally small: one entry point
 ([`enable_compression`](#enable_compression)) and one handle
 ([`CompressionHandle`](#compressionhandle)). Everything else lives in
-`kvcompress.compressor` for users who want to build their own pipelines.
+`kvfold.core` for users who want to build their own pipelines.
 
 ## `enable_compression`
 
 ```python
-from kvcompress import enable_compression
+from kvfold import enable_compression
 
 handle = enable_compression(
     model,
-    method="flashjolt",            # 'jolt', 'flashjolt', 'lowrank', 'int2', 'int4',
-                                   # 'int8', 'fp8', 'fp16', 'bf16', 'identity'
-    target_memory="25%",           # OR compression_ratio=4.0
+    method="flash",                # 'jolt', 'flash', 'low', 'int2', 'int4',
+                                   # 'int8', 'fp8', 'fp16', 'bf16', 'pass'
+    target_memory="25%",           # OR ratio=4.0
     layer_groups=1,
     bits=(0, 2, 4, 8),
     seed=0,
@@ -27,8 +27,8 @@ handle = enable_compression(
 |---|---|---|
 | `model` | `PreTrainedModel` | Hugging Face model to patch. |
 | `method` | `str` | Compressor name (see table above). |
-| `target_memory` | `str` or `float` | Target memory as a fraction (`0.25` or `"25%"`). Mutually exclusive with `compression_ratio`. |
-| `compression_ratio` | `float` | Target ratio (e.g. `3.0` for 3×). Mutually exclusive with `target_memory`. |
+| `target_memory` | `str` or `float` | Target memory as a fraction (`0.25` or `"25%"`). Mutually exclusive with `ratio`. |
+| `ratio` | `float` | Target ratio (e.g. `3.0` for 3×). Mutually exclusive with `target_memory`. |
 | `layer_groups` | `int` | Number of contiguous layer groups for the allocator. Paper uses `1`; larger values give finer-grained control. |
 | `bits` | `tuple[int]` | Allowed residual bit-widths. Default `(0, 2, 4, 8)`. |
 | `cache_implementation` | `str` | HF cache implementation; we always use `dynamic` under the hood. |
@@ -40,8 +40,8 @@ handle = enable_compression(
 
 ### Raises
 
-- `ValueError` if neither or both of `target_memory`/`compression_ratio` is provided.
-- `NotImplementedError` if `method` is unknown.
+- `ValueError` if neither or both of `target_memory`/`ratio` is provided.
+- `UnsupportedMethodError` if `method` is unknown.
 
 ## `CompressionHandle`
 
@@ -59,7 +59,7 @@ handle.disable()     # restore original behaviour
 
 ### Attributes
 
-- `adapter` — the underlying `HuggingFaceAdapter` instance (for power users).
+- `adapter` — the underlying `HF` instance (for power users).
 - `model` — the patched model.
 - `stats` — a mutable `CompressionStats` object updated by the patched DynamicCache.
 
@@ -69,39 +69,38 @@ For users who want direct access to the compressor without the HF
 adapter, every compressor implements the same ABC:
 
 ```python
-from kvcompress import JoLTCompressor, FlashJoLTCompressor
+from kvfold import Jolt, Flash
 
-comp = FlashJoLTCompressor(compression_ratio=3.0, bits=(0, 2, 4, 8))
+comp = Flash(ratio=3.0, bits=(0, 2, 4, 8))
 key_payload, value_payload = comp.compress(key, value)
-key_hat, value_hat = comp.decompress(key_payload, value_payload)
+key_hat, value_hat = comp.restore(key_payload, value_payload)
 ```
 
-### `KVCompressor`
+### `Compressor`
 
 ```python
-class KVCompressor(ABC):
-    name: str
+class Compressor(ABC):
+    method: str
 
-    def compress(self, key, value) -> tuple[CompressedPayload, CompressedPayload]: ...
-    def decompress(self, kp, vp) -> tuple[Tensor, Tensor]: ...
-    def estimate_size(self, payload) -> int: ...
+    def compress(self, key, value) -> tuple[Payload, Payload]: ...
+    def restore(self, kp, vp) -> tuple[Tensor, Tensor]: ...
     def stats(self) -> dict[str, Any]: ...
 ```
 
 ### Concrete compressors
 
-- `kvcompress.JoLTCompressor(compression_ratio=3.0, bits=(0, 2, 4, 8))`
-- `kvcompress.FlashJoLTCompressor(compression_ratio=3.0, bits=(0, 2, 4, 8))`
-- `kvcompress.IdentityCompressor()` — for ablation.
-- `kvcompress.LowRankCompressor(rank=64)` — matrix SVD baseline.
-- `kvcompress.IntQuantOnlyCompressor(bits=4)` — pure int quant.
+- `kvfold.Jolt(ratio=3.0, bits=(0, 2, 4, 8))`
+- `kvfold.Flash(ratio=3.0, bits=(0, 2, 4, 8))`
+- `kvfold.Pass()` — for ablation.
+- `kvfold.Low(rank=64)` — matrix SVD baseline.
+- `kvfold.IntQuant(bits=4)` — pure int quant.
 
 ## Cache API
 
 ```python
-from kvcompress import CompressedKVCache, CacheManager, CompressionMetadata
+from kvfold import Cache, Pool, Meta
 
-cache = CompressedKVCache(compressor=comp)
+cache = Cache(compressor=comp)
 cache.store(layer=0, key=k, value=v)
 k_hat, v_hat = cache.retrieve(0)
 cache.memory_used()      # bytes currently occupied
@@ -112,10 +111,10 @@ cache.stats()
 ## Allocator API
 
 ```python
-from kvcompress.compressor.allocator import JointAllocator, Cell
+from kvfold.core.budget import Bisect, Cell
 
 cells = [Cell(shape=(8, 256, 64), kind="key"), Cell(shape=(8, 256, 64), kind="value")]
-alloc = JointAllocator(target_ratio=3.0)
+alloc = Bisect(target_ratio=3.0)
 result = alloc.optimize(cells)
 result.allocations[0].r_token, result.allocations[0].r_feature, result.allocations[0].bits
 ```
@@ -123,10 +122,10 @@ result.allocations[0].r_token, result.allocations[0].r_feature, result.allocatio
 ## vLLM integration (Shape A)
 
 ```python
-from kvcompress.adapters.vllm import export_kv, import_kv
+from kvfold.adapter.vllm import export_kv, import_kv
 
 # Save a vLLM / HF model's KV cache to disk in compressed form.
-export_kv(model, "kv.safetensors", method="flashjolt", compression_ratio=3.0)
+export_kv(model, "kv.safetensors", method="flash", ratio=3.0)
 
 # Restore it (in this process or a different one).
 import_kv(model, "kv.safetensors")
@@ -138,14 +137,14 @@ or vLLM-style model that exposes a `DynamicCache` via
 `model.past_key_values` / `model.kv_cache` / `model.cache`.
 
 For the deeper vLLM integration that hooks into the block-eviction
-path, see `kvcompress.adapters.vllm_kv_offload.JoLTOffloadWorker`.
+path, see `kvfold.adapter.vllm_offload.Offload`.
 
 ## CLI
 
 ```bash
-kvcompress version
-kvcompress validate [--skip-hf]
-kvcompress benchmark [--suite all|memory|speed|reconstruction] [--output-dir PATH]
-kvcompress profile --model MODEL_ID [--ratio 3.0]
-kvcompress compress --model MODEL_ID --method flashjolt --target 33% --prompt "..."
+kvfold version
+kvfold validate [--skip-hf]
+kvfold benchmark [--suite all|memory|speed|reconstruction] [--output-dir PATH]
+kvfold profile --model MODEL_ID [--ratio 3.0]
+kvfold compress --model MODEL_ID --method flash --target 33% --prompt "..."
 ```

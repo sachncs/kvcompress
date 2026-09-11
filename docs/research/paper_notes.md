@@ -69,8 +69,8 @@ the default CI run.
 | GSM8K degradation past the free zone | yes | no |
 | RULER single-needle at 8K-16K | yes | partial (GPT-2 smoke test) |
 | RULER multi-needle | yes | no |
-| FlashJoLT speedup 5-13× | yes | no (we don't have GPU) |
-| Free-zone parity exact vs FlashJoLT | yes (`|Δ| ≤ 0.003`) | partial (qualitative) |
+| Flash speedup 5-13× | yes | no (we don't have GPU) |
+| Free-zone parity exact vs Flash | yes (`|Δ| ≤ 0.003`) | partial (qualitative) |
 
 ## Recommended reading order
 
@@ -79,32 +79,32 @@ the default CI run.
 3. [Math](math.md) — the formal algorithm.
 4. [Algorithm walkthrough](algorithm.md) — code ↔ math.
 5. [Spectral motivation](spectral_motivation.md) — why this works.
-6. [Free zone](free_zone.md) — when it works.
+6. [Free zone](free_zone.md) — when this works.
 7. [Comparison with baselines](comparison_with_baselines.md) — vs other methods.
 8. [Reproduction notes](reproduction_notes.md) — what we did and didn't reproduce.
 ## vLLM integration
 
 Two integration shapes ship with the library today:
 
-### Shape A — `kvcompress.adapters.vllm.export_kv` / `import_kv`
+### Shape A — `kvfold.adapter.vllm.export_kv` / `import_kv`
 
 User-driven workflow that works on any HF or vLLM-style model with a
 `DynamicCache`:
 
 ```python
 from vllm import LLM
-from kvcompress.adapters.vllm import export_kv
+from kvfold.adapter.vllm import export_kv
 
 llm = LLM(model="meta-llama/Llama-2-7b-hf")
 llm.generate(["Hello, my name is"])
-export_kv(llm, "kv.safetensors", method="flashjolt", compression_ratio=3.0)
+export_kv(llm, "kv.safetensors", method="flash", ratio=3.0)
 ```
 
 The exported file is a single safetensors with one tensor per
 (layer, kind) cell plus a `.meta.json` sidecar. `import_kv` does the
 reverse.
 
-### Shape B — `kvcompress.adapters.vllm_kv_offload.JoLTOffloadWorker`
+### Shape B — `kvfold.adapter.vllm_offload.Offload`
 
 Subclasses `vllm.v1.kv_offload.base.KVCacheOffloadWorker` so vLLM's
 block-eviction path uses our compressor. Requires a real vLLM + CUDA
