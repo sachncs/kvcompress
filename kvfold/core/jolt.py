@@ -330,15 +330,9 @@ class Jolt(Compressor):
         )
         # Residual
         recon = reconstruct_partial_tucker(tucker, x.shape)
-        residual_tensor = (x - recon).contiguous()
-        if b == 0:
-            residual: Residual | None = encode_residual(
-                residual_tensor,
-                bits=0,
-                seed=self.seed,
-                distribution=self.jl_distribution,
-            )
-        else:
+        residual: Residual | None = None
+        residual_tensor = (x - recon).contiguous() if b > 0 else None
+        if b > 0 and residual_tensor is not None:
             residual = encode_residual(
                 residual_tensor,
                 bits=b,
