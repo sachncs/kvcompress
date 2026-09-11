@@ -15,4 +15,4 @@ jobs:
           python-version: "3.12"
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e ".[dev]"
-      - run: mypy kvcompress
+      - run: mypy kvfold
