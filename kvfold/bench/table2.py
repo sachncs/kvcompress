@@ -35,10 +35,10 @@ from dataclasses import dataclass
 
 import torch
 
-from kvfold.core.flashjolt import FlashJoLTCompressor
-from kvfold.core.jolt import JoLTCompressor
-from kvfold.core.lowrank import LowRankCompressor
-from kvfold.core.quantization_only import IntQuantOnlyCompressor
+from kvfold.core.flash import Flash
+from kvfold.core.int_quant import IntQuant
+from kvfold.core.jolt import Jolt
+from kvfold.core.low import Low
 
 log = logging.getLogger(__name__)
 
@@ -161,7 +161,7 @@ def run_table2(
     results = []
 
     # JoLT.
-    jolt = JoLTCompressor(compression_ratio=compression_ratio, bits=(4, 8))
+    jolt = Jolt(ratio=compression_ratio, bits=(4, 8))
     kp, vp = jolt.compress(K, V)
     k_hat, v_hat = jolt.restore(kp, vp)
     results.append(
@@ -177,13 +177,13 @@ def run_table2(
         )
     )
 
-    # FlashJoLT.
-    fjolt = FlashJoLTCompressor(compression_ratio=compression_ratio, bits=(4, 8))
+    # Flash.
+    fjolt = Flash(ratio=compression_ratio, bits=(4, 8))
     kp, vp = fjolt.compress(K, V)
     k_hat, v_hat = fjolt.restore(kp, vp)
     results.append(
         ReconstructionResult(
-            method="flashjolt",
+            method="flash",
             bits=None,
             rel_err_K=rel_err(K, k_hat),
             rel_err_V=rel_err(V, v_hat),
@@ -195,12 +195,12 @@ def run_table2(
     )
 
     # Low-rank baseline.
-    lr = LowRankCompressor(rank=64)
+    lr = Low(rank=64)
     kp, vp = lr.compress(K, V)
     k_hat, v_hat = lr.restore(kp, vp)
     results.append(
         ReconstructionResult(
-            method="lowrank-64",
+            method="low-64",
             bits=None,
             rel_err_K=rel_err(K, k_hat),
             rel_err_V=rel_err(V, v_hat),
@@ -212,7 +212,7 @@ def run_table2(
     )
 
     # INT4 baseline.
-    int4 = IntQuantOnlyCompressor(bits=4, per_channel=True)
+    int4 = IntQuant(bits=4, per_channel=True)
     kp, vp = int4.compress(K, V)
     k_hat, v_hat = int4.restore(kp, vp)
     results.append(

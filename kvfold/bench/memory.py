@@ -1,9 +1,9 @@
 """Memory benchmark — bytes occupied by compressed vs uncompressed cache.
 
-Compares :class:`~kvfold.IdentityCompressor` against
-:class:`~kvfold.JoLTCompressor`,
-:class:`~kvfold.FlashJoLTCompressor`, and
-:class:`~kvfold.LowRankCompressor` across a sweep of compression
+Compares :class:`~kvfold.Pass` against
+:class:`~kvfold.Jolt`,
+:class:`~kvfold.Flash`, and
+:class:`~kvfold.Low` across a sweep of compression
 ratios. Reports the achieved bytes per method and ratio.
 
 Usage::
@@ -22,10 +22,10 @@ import logging
 
 import torch
 
-from kvfold.core.flashjolt import FlashJoLTCompressor
-from kvfold.core.identity import IdentityCompressor
-from kvfold.core.jolt import JoLTCompressor
-from kvfold.core.lowrank import LowRankCompressor
+from kvfold.core.flash import Flash
+from kvfold.core.identity import Pass
+from kvfold.core.jolt import Jolt
+from kvfold.core.low import Low
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def run_memory_sweep(
 
     For each (method, ratio) pair, compress a synthetic K and V and
     record bytes-original, bytes-compressed, and the achieved ratio.
-    Identity is always included as a no-compression baseline.
+    Pass is always included as a no-compression baseline.
 
     Args:
         m: merged head × layer count.
@@ -55,19 +55,19 @@ def run_memory_sweep(
 
     Returns:
         List of result dicts; one per (method, ratio) plus one for the
-        identity baseline.
+        pass baseline.
     """
     torch.manual_seed(seed)
     K = torch.randn(m, T, dh)
     V = torch.randn(m, T, dh)
     rows: list[dict[str, object]] = []
 
-    # Identity baseline.
-    idc = IdentityCompressor()
+    # Passthrough baseline.
+    idc = Pass()
     kp, vp = idc.compress(K, V)
     rows.append(
         {
-            "method": "identity",
+            "method": "pass",
             "ratio_target": 1.0,
             "bytes_original": K.numel() * K.element_size() * 2,
             "bytes_compressed": kp.bytes_compressed + vp.bytes_compressed,
@@ -80,11 +80,11 @@ def run_memory_sweep(
         for ratio in ratios:
             comp = None
             if method == "jolt":
-                comp = JoLTCompressor(compression_ratio=ratio)
-            elif method == "flashjolt":
-                comp = FlashJoLTCompressor(compression_ratio=ratio)
-            elif method == "lowrank":
-                comp = LowRankCompressor(rank=max(1, int(min(m * T, dh) / ratio)))
+                comp = Jolt(ratio=ratio)
+            elif method == "flash":
+                comp = Flash(ratio=ratio)
+            elif method == "low":
+                comp = Low(rank=max(1, int(min(m * T, dh) / ratio)))
             else:
                 log.warning("unknown method %s; skipping", method)
                 continue
@@ -119,7 +119,7 @@ def main() -> None:  # pragma: no cover
         "--methods",
         type=str,
         nargs="+",
-        default=["jolt", "flashjolt", "lowrank"],
+        default=["jolt", "flash", "low"],
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", type=str, default=None)

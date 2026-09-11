@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 
-from kvfold.benchmarks.throughput import run_speed_sweep
+from kvfold.bench.speed import run_speed_sweep
 
 log = logging.getLogger(__name__)
 

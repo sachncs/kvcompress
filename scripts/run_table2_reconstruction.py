@@ -11,7 +11,7 @@ import json
 import logging
 from pathlib import Path
 
-from kvfold.benchmarks.reconstruction import run_table2
+from kvfold.bench.table2 import run_table2
 
 log = logging.getLogger(__name__)
 

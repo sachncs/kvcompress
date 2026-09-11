@@ -1,14 +1,14 @@
 """Compression / decompression speed benchmark.
 
 Measures mean wall time for :meth:`Compressor.compress` and
-:meth:`Compressor.decompress` across JoLT, FlashJoLT, and the low-rank
+:meth:`Compressor.decompress` across JoLT, Flash, and the low-rank
 baseline. Includes warm-up iterations to amortise first-call cache effects.
 
 Usage::
 
-    python -m kvfold.bench.throughput --T 1024 --dh 128 --ratio 3
+    python -m kvfold.bench.speed --T 1024 --dh 128 --ratio 3
 
-On CPU the three methods are roughly comparable at small T; FlashJoLT
+On CPU the three methods are roughly comparable at small T; Flash
 pulls ahead at T ≥ 1024 once the SVD becomes the bottleneck.
 """
 
@@ -21,9 +21,9 @@ import time
 
 import torch
 
-from kvfold.core.flashjolt import FlashJoLTCompressor
-from kvfold.core.jolt import JoLTCompressor
-from kvfold.core.lowrank import LowRankCompressor
+from kvfold.core.flash import Flash
+from kvfold.core.jolt import Jolt
+from kvfold.core.low import Low
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def run_speed_sweep(
         m: merged head × layer count.
         T: token axis length.
         dh: per-head feature dim.
-        ratio: compression ratio passed to JoLT and FlashJoLT.
+        ratio: compression ratio passed to JoLT and Flash.
         seed: random seed for the synthetic K/V.
 
     Returns:
@@ -71,9 +71,9 @@ def run_speed_sweep(
     rows = []
 
     comps = [
-        ("jolt", JoLTCompressor(compression_ratio=ratio)),
-        ("flashjolt", FlashJoLTCompressor(compression_ratio=ratio)),
-        ("lowrank", LowRankCompressor(rank=max(1, int(min(m * T, dh) / ratio)))),
+        ("jolt", Jolt(ratio=ratio)),
+        ("flash", Flash(ratio=ratio)),
+        ("low", Low(rank=max(1, int(min(m * T, dh) / ratio)))),
     ]
     for name, comp in comps:
         # Warm up the allocator.
