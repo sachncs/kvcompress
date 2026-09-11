@@ -91,7 +91,7 @@ class JoltConfig(MethodConfig):
     ratio: float = 3.0
     bits: tuple[int, ...] = (0, 2, 4, 8)
     dtype: torch.dtype = torch.float16
-    distribution: Literal["gaussian", "rademacher"] = "gaussian"
+    distribution: Literal["gaussian", "rademacher", "sparse"] = "gaussian"
     symmetric: bool = True
     per_channel: bool = True
     group_size: int | None = None
@@ -104,7 +104,7 @@ class JoltConfig(MethodConfig):
         for b in self.bits:
             if b not in (0, 2, 4, 8):
                 raise MethodConfigError("jolt", "bits", f"each entry must be 0, 2, 4, or 8; got {b}")
-        if self.distribution not in ("gaussian", "rademacher"):
+        if self.distribution not in ("gaussian", "rademacher", "sparse"):
             raise MethodConfigError("jolt", "distribution", f"unknown {self.distribution!r}")
         if self.layer_groups < 1:
             raise MethodConfigError("jolt", "layer_groups", "must be >= 1")
