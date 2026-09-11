@@ -7,7 +7,7 @@ import hypothesis.strategies as st
 import torch
 
 from kvfold.core.jolt import Jolt
-from kvfold.core.quantization import (
+from kvfold.core.quant import (
     IntQuant,
     bit_packing_signed,
     bit_unpacking_signed,

@@ -8,7 +8,7 @@ import torch
 
 @pytest.mark.integration
 def test_gpt2_identity_matches_baseline(gpt2_model_with_pad) -> None:
-    """With identity compressor, output should match uncompressed exactly."""
+    """With pass-through compressor, output should match uncompressed exactly."""
     from kvfold import enable_compression
 
     tok, model = gpt2_model_with_pad
@@ -19,13 +19,13 @@ def test_gpt2_identity_matches_baseline(gpt2_model_with_pad) -> None:
             ids, max_new_tokens=10, do_sample=False, pad_token_id=tok.eos_token_id
         )
 
-    handle = enable_compression(model, method="identity", target_memory="100%")
+    handle = enable_compression(model, method="pass", target_memory="100%")
     try:
         with torch.no_grad():
             out = model.generate(
                 ids, max_new_tokens=10, do_sample=False, pad_token_id=tok.eos_token_id
             )
-        assert torch.equal(baseline, out), "identity should produce identical output"
+        assert torch.equal(baseline, out), "pass should produce identical output"
     finally:
         handle.disable()
 
@@ -38,7 +38,7 @@ def test_gpt2_flashjolt_runs(gpt2_model_with_pad) -> None:
     tok, model = gpt2_model_with_pad
     ids = tok.encode("The quick brown fox", return_tensors="pt")
 
-    handle = enable_compression(model, method="flashjolt", ratio=3.0)
+    handle = enable_compression(model, method="flash", ratio=3.0)
     try:
         with torch.no_grad():
             out = model.generate(
@@ -64,7 +64,7 @@ def test_gpt2_disable_restores_behavior(gpt2_model_with_pad) -> None:
     tok, model = gpt2_model_with_pad
     ids = tok.encode("Hello world", return_tensors="pt")
 
-    handle = enable_compression(model, method="flashjolt", ratio=2.0)
+    handle = enable_compression(model, method="flash", ratio=2.0)
     with torch.no_grad():
         out_compressed = model.generate(
             ids, max_new_tokens=5, do_sample=False, pad_token_id=tok.eos_token_id
@@ -89,7 +89,7 @@ def test_gpt2_method_switch(gpt2_model_with_pad) -> None:
     tok, model = gpt2_model_with_pad
     ids = tok.encode("Hello", return_tensors="pt")
 
-    for method in ("identity", "flashjolt"):
+    for method in ("pass", "flash"):
         handle = enable_compression(model, method=method, ratio=3.0)
         try:
             with torch.no_grad():
