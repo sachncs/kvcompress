@@ -2,7 +2,7 @@
 
 ## Python style
 
-- **Version:** Python 3.12+. No compatibility shims for older versions.
+- **Version:** Python 3.11+. No compatibility shims for older versions.
 - **Type hints:** full annotations on every public symbol. Internal
   helpers may use less strict types.
 - **Dataclasses:** preferred over `NamedTuple` or plain dicts for any
@@ -18,8 +18,8 @@
 We use [`ruff`](https://docs.astral.sh/ruff/) for both lint and format:
 
 ```bash
-ruff check src tests examples scripts
-ruff format src tests examples scripts
+ruff check kvfold tests examples scripts
+ruff format --check kvfold tests examples scripts
 ```
 
 Configuration is in `pyproject.toml` and `ruff.toml`. The CI gate fails
@@ -32,7 +32,7 @@ mode is too brittle for our pace). Public symbols should still be fully
 annotated. CI runs:
 
 ```bash
-mypy src
+mypy kvfold
 ```
 
 ## Docstrings
@@ -46,7 +46,7 @@ def compress(
     self,
     key: torch.Tensor,
     value: torch.Tensor,
-) -> tuple[CompressedPayload, CompressedPayload]:
+) -> tuple[Payload, Payload]:
     """Compress a (key, value) pair into two payloads.
 
     Args:
@@ -65,7 +65,7 @@ def compress(
 ## Tensor shapes
 
 Always document the shape with the einsum letters the algorithm uses
-(see `compressor/tucker.py`). The convention is:
+(see `core/tucker.py`). The convention is:
 
 - `m` — merged head × layer count.
 - `T` — token axis length.
@@ -76,7 +76,7 @@ Always document the shape with the einsum letters the algorithm uses
 ## No global state
 
 Pass dependencies explicitly. The only allowed exception is the JL
-projection cache (`compressor.jl._PROJECTION_CACHE`) which is keyed by
+projection cache (`core/jl._PROJECTION_CACHE`) which is keyed by
 shape+seed and shared across the process for performance.
 
 ## Commit messages
@@ -84,11 +84,12 @@ shape+seed and shared across the process for performance.
 Short imperative summary, then an optional body. Examples:
 
 ```
-M5: JoLT compressor + cache round-trip
-
-- compressor/jolt.py: ties ST-HOSVD, JL residual, allocator together
-- cache/compress.py + cache/manager.py + cache/metadata.py
-- 14 tests including round-trip, byte reduction, identity at bits=0
+feat: add q_cap auto-decoder for Flash
+fix: clamp barycentric coordinates to [0,1]
+docs: regenerate API reference from source
+refactor: extract AABB tree to dedicated module
+test: add fixtures for Worsey-Farin splits
+chore: bump ruff to 0.6.x
 ```
 
 Atomic commits — one logical impact per commit. A milestone may span

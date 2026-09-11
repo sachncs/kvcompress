@@ -1,4 +1,4 @@
-# kvcompress documentation
+# kvfold documentation
 
 > **Authorship disclaimer.** sachin is the **implementer** of this
 > library, not an author of the JoLT paper. The algorithm is described
@@ -12,9 +12,9 @@
 > underlying theoretical results. If you publish work that uses this
 > library, please cite the original paper, not this repository.
 
-`kvcompress` implements the JoLT algorithm (paper:
+`kvfold` implements the JoLT algorithm (paper:
 [arXiv:2607.12550](https://arxiv.org/abs/2607.12550)) plus its
-randomized-SVD fast variant FlashJoLT, and provides a generic
+randomized-SVD fast variant Flash, and provides a generic
 KV-cache-compression interface for any decoder-only LLM.
 
 ## Quick links
@@ -56,34 +56,31 @@ RULER). The "I want to measure it" path.
 
 ## Library overview
 
-`kvcompress` is built around three objects:
+`kvfold` is built around three objects:
 
-1. **`KVCompressor`** — the algorithm. Implements `compress(K, V) ->
-   (CompressedPayload, CompressedPayload)` and the inverse. Concrete
-   classes: `JoLTCompressor`, `FlashJoLTCompressor` (default),
-   `IdentityCompressor`, `LowRankCompressor`, `IntQuantOnlyCompressor`.
+1. **`Compressor`** — the algorithm. Implements `compress(K, V) ->
+   (Payload, Payload)` and the inverse. Concrete classes: `Jolt`, `Flash`
+   (default), `Pass`, `Low`, `IntQuant`.
 
-2. **`CompressedKVCache` / `CacheManager`** — the storage. Holds the
-   compressed payloads per layer; LRU eviction; lazy reconstruction
-   on read. The cache is the only stateful piece.
+2. **`Cache` / `Pool`** — the storage. Holds the compressed payloads
+   per layer; LRU eviction; lazy reconstruction on read. The cache is
+   the only stateful piece.
 
-3. **`HuggingFaceAdapter`** — the integration. Patches `DynamicCache` so
-   any HF causal LM gets compression transparently during `generate()`.
-   vLLM has its own integration (`adapters/vllm.py` and
-   `adapters/vllm_kv_offload.py`).
+3. **`HF`** — the integration. Patches `DynamicCache` so any HF causal
+   LM gets compression transparently during `generate()`. vLLM has its
+   own integration (`adapter/vllm.py` and `adapter/vllm_offload.py`).
 
 The contract between them is small:
 
 ```python
-class KVCompressor(ABC):
-    def compress(self, K, V) -> tuple[CompressedPayload, CompressedPayload]: ...
-    def decompress(self, kp, vp) -> tuple[Tensor, Tensor]: ...
-    def estimate_size(self, payload) -> int: ...
+class Compressor(ABC):
+    def compress(self, K, V) -> tuple[Payload, Payload]: ...
+    def restore(self, kp, vp) -> tuple[Tensor, Tensor]: ...
     def stats(self) -> dict: ...
 ```
 
 That's the entire surface. New compressors plug in by implementing these
-four methods. See [dev/adding_a_compressor.md](dev/adding_a_compressor.md).
+three methods. See [dev/adding_a_compressor.md](dev/adding_a_compressor.md).
 
 ## Algorithm summary
 
@@ -113,18 +110,6 @@ residual. Concretely, for each layer's K (and V) tensor of shape
 See [research/math.md](research/math.md) for the equations,
 [research/algorithm.md](research/algorithm.md) for the code walkthrough,
 and [research/free_zone.md](research/free_zone.md) for when it works.
-
-## Quality at HEAD
-
-| Metric | Value |
-|---|---|
-| Tests | 237 pass, 4 skipped |
-| Line coverage | 73% |
-| `black --check` | clean |
-| `ruff check` | clean |
-| `ruff format --check` | clean |
-| `mypy src` | clean |
-| `vulture src/` | 2 hits at 100% (intentional `if False: # TYPE_CHECKING` patterns) |
 
 ## What's not in scope
 

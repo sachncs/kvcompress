@@ -8,21 +8,21 @@ We follow [Semantic Versioning](https://semver.org/):
 - **Minor** (0.X.0): new features, backward-compatible.
 - **Patch** (0.0.X): bug fixes.
 
-The current version is in `kvcompress/__init__.py`:
+The current version is in `kvfold/__init__.py`:
 
 ```python
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 ```
 
 ## Pre-release checklist
 
-1. `ruff check src tests examples scripts` — no warnings.
-2. `ruff format --check src tests examples scripts` — formatted.
-3. `mypy src` — no errors.
+1. `ruff check kvfold tests examples scripts` — no warnings.
+2. `ruff format --check kvfold tests examples scripts` — formatted.
+3. `mypy kvfold` — no errors.
 4. `pytest -m "not slow and not integration and not gpu"` — all pass.
 5. `pytest` (including integration) — all pass on a GPU box.
-6. `pytest --cov=kvcompress --cov-report=term-missing` — coverage ≥ 80%.
-7. `kvcompress validate` — runs cleanly.
+6. `pytest --cov=kvfold --cov-report=term-missing` — coverage ≥ 90%.
+7. `kvfold validate` — runs cleanly.
 8. `scripts/reproduce_paper_numbers.sh` — JSON outputs land in `results/`.
 
 ## Commit & tag
@@ -47,5 +47,5 @@ twine upload dist/*
 ## Post-release
 
 1. GitHub release with the changelog excerpt.
-2. Verify `pip install kvcompress` works for `0.X.0`.
+2. Verify `pip install kvfold` works for `0.X.0`.
 3. Announce on relevant channels.
