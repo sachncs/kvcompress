@@ -51,18 +51,18 @@ e_{g,t}(rT, rd, b) ≈ ε²(b) · τ_{g,t}(rT, rd)                          (err
 
 ## Compression methods
 
-`kvcompress` ships several methods, all of which implement the same
-`KVCompressor` ABC:
+`kvfold` ships several methods, all of which implement the same
+`Compressor` ABC:
 
 | Method | Description |
 |---|---|
 | `jolt` | Paper-faithful JoLT (exact token-mode SVD). |
-| `flashjolt` | Randomized-SVD variant. **Default.** |
-| `lowrank` | Matrix SVD baseline (2-D factorization). |
+| `flash` | Randomized-SVD variant. **Default.** |
+| `low` | Matrix SVD baseline (2-D factorization). |
 | `int2`/`int4`/`int8` | Pure integer quantization. |
 | `fp8` | FP8 storage. |
 | `fp16`/`bf16` | Half-precision storage. |
-| `identity` | No compression (passthrough). |
+| `pass` | No compression (passthrough). |
 
 ## Cap-implementation detail
 

@@ -1,6 +1,6 @@
 # Algorithm walkthrough
 
-End-to-end description of JoLT and FlashJoLT, with code references.
+End-to-end description of JoLT and Flash, with code references.
 
 ## JoLT compress
 
@@ -11,18 +11,20 @@ K, V ∈ R^{m × T × dh}
 1. **Build the cell description.**
 
    ```python
+   from kvfold.core.budget import Bisect, Cell
+
    cells = [
        Cell(shape=(m, T, dh), kind="key", layer_group=0),
        Cell(shape=(m, T, dh), kind="value", layer_group=0),
    ]
    ```
 
-   See `compressor/allocator.py:Cell`.
+    See `core/budget.py:Cell`.
 
 2. **Run the joint allocator.**
 
    ```python
-   allocator = JointAllocator(target_ratio=3.0, bits_grid=(0, 2, 4, 8))
+   allocator = Bisect(target_ratio=3.0, bits_grid=(0, 2, 4, 8))
    result = allocator.optimize(cells)
    ```
 
@@ -100,13 +102,13 @@ if "residual_packed" in payload.data:
 return x.to(payload.dtype)
 ```
 
-## FlashJoLT
+## Flash
 
 Identical to JoLT except:
 
-1. The SVD is `randomised` with `oversampling=10, n_power=2`.
+1. The SVD is `Randomized` with `oversampling=10, n_power=2`.
 2. The token-mode SVD is capped at `q_cap = min(max(q_min(R), ⌈T/32⌉), 512)`.
-3. The allocator sees the *true* tail mass via `SVDResult.tail_mass`; this
+3. The allocator sees the *true* tail mass via `Decomposition.tail_mass`; this
    corrects the under-truncation caused by the cap.
 
 ## Allocation grid

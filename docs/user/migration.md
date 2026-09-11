@@ -106,15 +106,32 @@ are unchanged. `bf16` is newly supported.
 ```bash
 # dry-run
 sed -i.bak \
+  -e 's/from kvcompress/from kvfold/g' \
+  -e 's/import kvcompress/import kvfold/g' \
   -e 's/HuggingFaceAdapter/HF/g' \
   -e 's/JointAllocator/Bisect/g' \
   -e 's/GreedyAllocator/Greedy/g' \
   -e 's/CompressionMetadata/Meta/g' \
   -e 's/CacheManager/Pool/g' \
   -e 's/CompressedKVCache/Cache/g' \
+  -e 's/JoLTCompressor/Jolt/g' \
+  -e 's/FlashJoLTCompressor/Flash/g' \
+  -e 's/LowRankCompressor/Low/g' \
+  -e 's/IdentityCompressor/Pass/g' \
+  -e 's/IntQuantOnlyCompressor/IntQuant/g' \
+  -e 's/KVCompressor/Compressor/g' \
   -e 's/compression_ratio/ratio/g' \
+  -e 's/"flashjolt"/"flash"/g' \
+  -e 's/"lowrank"/"low"/g' \
+  -e 's/"identity"/"pass"/g' \
   -e 's/\.decompress(/\.restore(/g' \
   your_code.py
 
 # review the diff, then delete the backup
 ```
+
+> Note: the path columns in the tables above (`kvfold.compressor.*`,
+> `kvfold.cache.*`, etc.) are illustrative; the actual 0.1.x paths used
+> the `kvcompress` package name (`kvcompress.compressor.KVCompressor`
+> etc.). Use `git grep <symbol> v0.1.x -- kvcompress/` in your own 0.1.x
+> checkout to verify the source path before running the sed recipe.

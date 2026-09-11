@@ -18,7 +18,7 @@ The paper's Section 7 isolates the design choices behind the free zone.
   high compression — exactly where the freedom to move budget between
   K and V matters most.
 
-In our code: `compressor/allocator.py:JointAllocator` vs `GreedyAllocator`.
+In our code: `core/budget.py:Bisect` vs `Greedy`.
 
 ## A5: per-group vs uniform rank
 
@@ -58,7 +58,7 @@ true rank is higher. The paper's calibration gate
 (`Δ_K ≤ 0.025, speedup ≥ 3×`) is satisfied for `R ≤ 5` at every
 context from 512 to 8192.
 
-In our code: `compressor/flashjolt.py:flashjolt_cap`.
+In our code: `core/flash.py:LinearCap.cap`.
 
 ## Reproducing locally
 
@@ -72,11 +72,11 @@ compressor expose everything needed:
 
 ```python
 # Greedy ablation:
-from kvcompress.compressor.allocator import GreedyAllocator
-g = GreedyAllocator(target_ratio=3.0)
+from kvfold.core.budget import Greedy
+g = Greedy(target_ratio=3.0)
 result = g.optimize(cells)
 
 # Rank-only ablation (bits forced to 0):
-from kvcompress import JoLTCompressor
-comp = JoLTCompressor(compression_ratio=3.0, bits=(0,))
+from kvfold import Jolt
+comp = Jolt(ratio=3.0, bits=(0,))
 ```

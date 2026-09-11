@@ -6,22 +6,22 @@
 import logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s: %(message)s')
 
-# kvcompress-specific debug
-logging.getLogger("kvcompress").setLevel(logging.DEBUG)
+# kvfold-specific debug
+logging.getLogger("kvfold").setLevel(logging.DEBUG)
 ```
 
 You should see allocator decisions (`lambda_star`, `achieved_ratio`),
 compression timings, and family shim dispatch.
 
-## Inspect a CompressedKVCache
+## Inspect a Cache
 
 ```python
-from kvcompress import CompressedKVCache
+from kvfold import Cache
 
 cache = ...  # wherever you got it
 cache.stats()                        # bytes_original, bytes_compressed, n_layers
-cache.metadata()                     # CompressionMetadata
-m = cache.metadata()
+print(cache.metadata_)               # Meta
+m = cache.metadata_
 for entry in m.layers:
     print(entry.layer, entry.kind, entry.r_token, entry.r_feature, entry.bits)
 ```
@@ -29,19 +29,20 @@ for entry in m.layers:
 ## Inspect a compressor's stats
 
 ```python
-comp = JoLTCompressor(compression_ratio=3.0)
+from kvfold import Jolt
+
+comp = Jolt(ratio=3.0)
 kp, vp = comp.compress(K, V)
 print(comp.stats())
-# {'method': 'jolt', 'call_count': 1, 'compress_time_ms': 23.4,
-#  'bytes_original': ..., 'bytes_compressed': ..., ...}
+# {'method': 'jolt', 'history_size': 1, ...}
 ```
 
 ## Profile a session
 
 ```python
-from kvcompress.runtime.profiler import CompressionProfiler
+from kvfold.runtime.profile import Profile
 
-prof = CompressionProfiler()
+prof = Profile()
 with prof.record("compress_one", bytes_in=K.numel() * K.element_size()):
     kp, vp = comp.compress(K, V)
 print(prof.summary())
@@ -52,7 +53,7 @@ print(prof.summary())
 ```python
 import transformers.cache_utils as cu
 print("DynamicCache class:", cu.DynamicCache)
-# Should print <class 'kvcompress.adapters.huggingface.HuggingFaceAdapter._install_dynamic_cache.<locals>._KvCompressCache'>
+# Should print <class 'kvfold.adapter.huggingface.HF.enable.<locals>.KvCompressCache'>
 # after enable_compression.
 ```
 
@@ -76,7 +77,8 @@ Re-import transformers and try again.
 
 Please open an issue with:
 
-- `kvcompress --version` output.
-- Python, PyTorch, transformers versions (`python -c "import torch, transformers; print(torch.__version__, transformers.__version__)"`).
+- `kvfold --version` output.
+- Python, PyTorch, transformers versions
+  (`python -c "import torch, transformers; print(torch.__version__, transformers.__version__)"`).
 - Hardware (CPU / GPU / MPS).
 - Minimal reproduction script.

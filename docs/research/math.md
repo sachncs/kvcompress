@@ -31,7 +31,7 @@ s(rT, rd, b) = (m·rT·rd + T·rT + dh·rd) · c + (b/8) · m · T · dh
              = tucker_core + tucker_factors + packed_residual
 ```
 
-Code: `compressor/allocator.py:JointAllocator._build_cell_grid` (the
+Code: `core/budget.py:Bisect.build_cell_grid` (the
 `cost = tucker_bytes + residual_bytes` line).
 
 ## Eq. 2 — Error model
@@ -45,9 +45,9 @@ truncation discards. `ε²(b)` is the fraction of that mass the residual
 fails to recover; calibrated once on a Gaussian round-trip:
 `ε²(0) = 1`, decreasing in `b`.
 
-Code: `_DEFAULT_EPSILON_SQUARED = {0: 1.0, 2: 0.30, 4: 0.10, 8: 0.04}` in
-`compressor/allocator.py`. A precomputed `tau_table` can be passed to
-`JointAllocator.optimize(tau_table=...)` for empirical values.
+Code: `DEFAULT_EPSILON_SQUARED = {0: 1.0, 2: 0.30, 4: 0.10, 8: 0.04}` in
+`core/budget.py`. A precomputed `tau_table` can be passed to
+`Bisect.optimize(tau_table=...)` for empirical values.
 
 ## Eq. 3 — Global optimization
 
@@ -56,7 +56,7 @@ min Σ_{g, t} e_{g,t}(rT, rd, b)
 s.t. Σ_{g, t} s_{g,t}(rT, rd, b) ≤ B
 ```
 
-Code: `compressor/allocator.py:JointAllocator.optimize`.
+Code: `core/budget.py:Bisect.optimize`.
 
 ## Eq. 4 — Lagrangian relaxation
 
@@ -68,7 +68,7 @@ The relaxation decouples across cells. For fixed `λ`, each cell is solved
 independently by enumerating its `(rT, rd, b)` grid. `λ` is found by
 bisection to drive the total cost to `B`.
 
-Code: `compressor/allocator.py:JointAllocator._argmin_per_cell`.
+Code: `core/budget.py:Bisect.argmin_per_cell`.
 
 ## ST-HOSVD
 
@@ -97,11 +97,11 @@ estimated as `1 - sum(s_r²) / ||A||²` and reported as `tail_mass` on
 the `SVDResult`. The allocator sees the *true* truncated-mass signal, so
 the allocation stays accurate even when the randomized SVD under-truncates.
 
-Code: `compressor/svd.py:SVD.randomise`, `compressor/flashjolt.py`.
+Code: `core/svd.py:Randomized.decompose`, `core/flash.py`.
 
 ## Lagrangian numerical stability
 
 The cost grid is discrete; small changes in `λ` can produce large jumps
 in the chosen `(rT, rd, b)`. We select the `λ` whose *achieved ratio* is
 closest to the *target ratio* in log-space (not absolute-byte space),
-because that's the metric users care about. See `JointAllocator.optimize`.
+because that's the metric users care about. See `Bisect.optimize`.
