@@ -138,6 +138,13 @@ class Jolt(Compressor):
         seed: int = 0,
         **unused: Any,
     ) -> None:
+        if unused:
+            from kvfold.errors import MethodConfigError
+            raise MethodConfigError(
+                "jolt",
+                ",".join(sorted(unused.keys())),
+                "unknown field(s); see JoltConfig for valid kwargs",
+            )
         super().__init__()
         if ratio <= 1.0:
             raise ValueError(f"ratio must be > 1.0; got {ratio}")

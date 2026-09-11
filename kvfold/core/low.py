@@ -69,6 +69,13 @@ class Low(Compressor):
         seed: int = 0,
         **unused: Any,
     ) -> None:
+        if unused:
+            from kvfold.errors import MethodConfigError
+            raise MethodConfigError(
+                "low",
+                ",".join(sorted(unused.keys())),
+                "unknown field(s); see LowRankConfig for valid kwargs",
+            )
         self.rank = int(rank)
         self.dtype = dtype
         self.decomposer = Exact()

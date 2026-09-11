@@ -52,7 +52,15 @@ class IntQuant(Compressor):
         symmetric: bool = True,
         per_channel: bool = True,
         group_size: int | None = None,
+        **unused: Any,
     ) -> None:
+        if unused:
+            from kvfold.errors import MethodConfigError
+            raise MethodConfigError(
+                "int_quant",
+                ",".join(sorted(unused.keys())),
+                "unknown field(s); IntQuant accepts only bits, symmetric, per_channel, group_size",
+            )
         self.bits = int(bits)
         if self.bits not in (2, 4, 8):
             raise ValueError(f"IntQuant.bits must be 2/4/8; got {self.bits}")
