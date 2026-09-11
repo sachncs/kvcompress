@@ -31,9 +31,9 @@ class _StubCompressor:
 def test_clear_resets_index() -> None:
     """After clear(), the metadata index must no longer reference removed layers."""
     meta = Meta(method="stub", dtype="float16")
-    meta.add_layer(LayerMeta(layer=3, kind="key", m=1, tokens=4, dh=4, r_token=0, r_feature=0))
+    meta.add_layer(LayerMeta(layer=3, kind="key", m=1, tokens=4, dh=4, r_token=0, r_feature=0, bits=0))
     assert (3, "key") in meta.index
-    cache = Cache(compressor=_StubCompressor())
+    cache = Cache(compressor=_StubCompressor(), metadata=meta)
     cache.entries[3] = object()
     cache.clear()
     assert (3, "key") not in meta.index
@@ -43,7 +43,7 @@ def test_evict_keeps_index_consistent() -> None:
     """After evict_layer, the index must point to valid layer positions."""
     meta = Meta(method="stub", dtype="float16")
     for layer, kind in [(0, "key"), (0, "value"), (1, "key"), (1, "value")]:
-        meta.add_layer(LayerMeta(layer=layer, kind=kind, m=1, tokens=4, dh=4, r_token=0, r_feature=0))
+        meta.add_layer(LayerMeta(layer=layer, kind=kind, m=1, tokens=4, dh=4, r_token=0, r_feature=0, bits=0))
     meta.layers = [entry for entry in meta.layers if entry.layer != 0]
     meta.rebuild_index()
     assert (0, "key") not in meta.index

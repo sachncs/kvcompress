@@ -209,9 +209,10 @@ class Cache:
         return layer in self.entries
 
     def clear(self) -> None:
-        """Drop every entry and reset the metadata layer list."""
+        """Drop every entry and reset the metadata layer list and index."""
         self.entries.clear()
         self.metadata_.layers.clear()
+        self.metadata_.index.clear()
 
     def evict_layer(self, layer: int) -> None:
         """Remove the entry for ``layer`` if present; no-op otherwise."""
