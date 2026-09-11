@@ -19,8 +19,8 @@ def main() -> None:
         "--methods",
         type=str,
         nargs="+",
-        default=["flashjolt"],
-        help="Compression methods to sweep. Defaults to flashjolt.",
+        default=["flash"],
+        help="Compression methods to sweep. Defaults to flash.",
     )
     parser.add_argument("--max-new", type=int, default=20)
     parser.add_argument("--prompt-tokens", type=int, default=64)
@@ -43,7 +43,7 @@ def main() -> None:
     print("-" * 50)
     for ratio in args.ratios:
         for method in args.methods:
-            handle = enable_compression(model, method=method, compression_ratio=ratio)
+            handle = enable_compression(model, method=method, ratio=ratio)
             try:
                 with torch.no_grad():
                     t0 = time.perf_counter()

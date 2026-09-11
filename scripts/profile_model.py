@@ -29,7 +29,7 @@ def main() -> None:
 
     from kvfold import enable_compression
 
-    handle = enable_compression(model, method="flashjolt", compression_ratio=args.ratio)
+    handle = enable_compression(model, method="flash", ratio=args.ratio)
     try:
         ids = tok.encode("The quick brown fox jumps over the lazy dog", return_tensors="pt")
         with torch.no_grad():

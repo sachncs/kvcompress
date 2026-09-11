@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--T", type=int, default=1024)
     parser.add_argument("--dh", type=int, default=128)
     parser.add_argument("--ratios", type=float, nargs="+", default=[2.0, 3.0, 4.0, 5.0, 8.0])
-    parser.add_argument("--methods", type=str, nargs="+", default=["jolt", "flashjolt", "lowrank"])
+    parser.add_argument("--methods", type=str, nargs="+", default=["jolt", "flash", "low"])
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
