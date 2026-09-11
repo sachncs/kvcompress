@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to kvcompress.
+Thanks for your interest in contributing to kvfold.
 
 ## Quick links
 
@@ -15,14 +15,14 @@ Thanks for your interest in contributing to kvcompress.
 
 1. Fork and create a topic branch.
 2. Make atomic commits with imperative-mood messages.
-3. Run `ruff check src tests examples scripts` and `ruff format` before committing.
-4. Run `mypy src` and `pytest -m "not slow and not integration and not gpu"`.
+3. Run `ruff check kvfold tests examples scripts` and `ruff format` before committing.
+4. Run `mypy kvfold` and `pytest -m "not slow and not integration and not gpu"`.
 5. Open a pull request referencing any related issue.
 
 ## Coding principles
 
 - The compressor algorithm and the cache storage are decoupled. New
-  compressors implement the `KVCompressor` ABC and need nothing else.
+  compressors implement the `Compressor` ABC and need nothing else.
 - Adapter code is the *only* code allowed to import from `transformers`.
 - No global mutable state. Anything stochastic takes a seed.
 - All public APIs are documented with Google-style docstrings.
@@ -32,6 +32,6 @@ Thanks for your interest in contributing to kvcompress.
 Please include:
 
 - Minimal reproduction script.
-- `kvcompress --version` output.
+- `kvfold --version` output.
 - Python, PyTorch, transformers versions.
 - Hardware (CPU / GPU / MPS).
