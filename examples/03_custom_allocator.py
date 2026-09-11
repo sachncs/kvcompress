@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import torch
 
-from kvcompress import JoLTCompressor
+from kvfold import Jolt
 
 
 def main() -> None:
@@ -17,8 +17,8 @@ def main() -> None:
     caches = [torch.randn(8, 128, 32) for _ in range(3)]
 
     # Joint compressor with layer_groups=3 means each layer is its own group.
-    comp = JoLTCompressor(
-        compression_ratio=3.0,
+    comp = Jolt(
+        ratio=3.0,
         bits=(0, 4, 8),
         layer_groups=3,
     )

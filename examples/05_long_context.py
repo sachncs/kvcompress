@@ -13,7 +13,7 @@ import random
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
-from kvcompress import enable_compression
+from kvfold import enable_compression
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def main() -> None:
     ids = tok.encode(prompt, return_tensors="pt")
     log.info("prompt tokens: %d", ids.shape[1])
 
-    for method in ("identity", "flashjolt"):
+    for method in ("pass", "flash"):
         handle = enable_compression(model, method=method, target_memory="33%")
         try:
             with torch.no_grad():
