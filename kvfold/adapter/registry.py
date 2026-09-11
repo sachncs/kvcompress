@@ -98,11 +98,19 @@ class FamilyRegistry:
         self.entries: dict[str, Family] = {}
 
     def register(self, family_cls: Type[Family]) -> Type[Family]:
-        """Bind ``family_cls.name`` to a fresh instance of ``family_cls``."""
+        """Bind ``family_cls.name`` to a fresh instance of ``family_cls``.
+
+        Idempotent: re-registering the same class under the same ``name``
+        is a no-op so ``importlib.reload`` and Jupyter re-import paths
+        do not blow up. Registering a different class under the same
+        ``name`` still raises.
+        """
         if not family_cls.name:
             raise ValueError(f"{family_cls.__name__} must set the `name` class attribute")
         if family_cls.name in self.entries:
-            raise ValueError(f"family {family_cls.name!r} is already registered")
+            if type(self.entries[family_cls.name]) is not family_cls:
+                raise ValueError(f"family {family_cls.name!r} is already registered")
+            return family_cls
         self.entries[family_cls.name] = family_cls()
         return family_cls
 

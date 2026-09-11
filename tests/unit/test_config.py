@@ -56,11 +56,26 @@ def test_registry_build_rejects_unknown_kwarg() -> None:
     assert "unknown_field" in ei.value.field
 
 
-def test_registry_register_duplicate_raises() -> None:
+def test_registry_register_same_class_is_idempotent() -> None:
+    """Re-registering the same config class is a no-op (reload-safe)."""
     reg = MethodConfigRegistry()
-    reg.register("jolt",  JoltConfig)
-    with pytest.raises(ValueError):
-        reg.register("jolt",  JoltConfig)
+    reg.register("jolt", JoltConfig)
+    before = reg.entries["jolt"]
+    reg.register("jolt", JoltConfig)
+    assert reg.entries["jolt"] is before
+
+
+def test_registry_register_different_class_under_same_name_raises() -> None:
+    class _ForeignConfig(MethodConfig):
+        method: ClassVar[Method] = "jolt"
+
+        def validate(self) -> None:
+            return None
+
+    reg = MethodConfigRegistry()
+    reg.register("jolt", JoltConfig)
+    with pytest.raises(ValueError, match="already registered"):
+        reg.register("jolt", _ForeignConfig)
 
 
 def test_registry_register_wrong_type_raises() -> None:

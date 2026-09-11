@@ -298,11 +298,16 @@ class MethodConfigRegistry:
     def register(self, name: Method, config_cls: Type[MethodConfig]) -> None:
         """Bind ``name`` to ``config_cls``.
 
-        Raises:
-            ValueError: If ``name`` is already registered.
+        Idempotent: re-registering the same ``(name, config_cls)`` pair
+        is a no-op (so ``importlib.reload`` does not blow up). Registering
+        a different class under the same name still raises.
         """
         if name in self.entries:
-            raise ValueError(f"method {name!r} is already registered to {self.entries[name].__name__}")
+            if self.entries[name] is not config_cls:
+                raise ValueError(
+                    f"method {name!r} is already registered to {self.entries[name].__name__}"
+                )
+            return
         if not issubclass(config_cls, MethodConfig):
             raise TypeError(f"{config_cls.__name__} must inherit from MethodConfig")
         config_cls.registry = self

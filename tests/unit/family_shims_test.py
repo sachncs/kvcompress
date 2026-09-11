@@ -70,10 +70,25 @@ def test_register_adds_new_family() -> None:
     assert len(REGISTRY.entries) == original_count
 
 
-def test_register_duplicate_raises() -> None:
+def test_register_same_class_is_idempotent() -> None:
+    """Re-registering the same family class is a no-op (reload-safe)."""
     from kvfold.adapter.registry import Llama
+    before = REGISTRY.entries.get("llama")
+    REGISTRY.register(Llama)
+    assert REGISTRY.entries.get("llama") is before
+
+
+def test_register_different_class_under_same_name_raises() -> None:
+    from kvfold.adapter.registry import Family
+
+    class LlamaImpostor(Family):
+        name = "llama"
+
+        def install(self, model: object, pool: object) -> None:
+            return None
+
     with pytest.raises(ValueError, match="already registered"):
-        REGISTRY.register(Llama)
+        REGISTRY.register(LlamaImpostor)
 
 
 def test_install_returns_none_for_no_op_family() -> None:

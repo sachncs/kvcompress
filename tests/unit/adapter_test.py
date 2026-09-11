@@ -65,10 +65,27 @@ def test_registry_register_custom() -> None:
         REGISTRY.entries.pop("custom-test", None)
 
 
-def test_registry_register_duplicate_raises() -> None:
+def test_registry_register_duplicate_is_idempotent() -> None:
+    """Re-registering the same family class is a no-op (so reloads are safe)."""
     from kvfold.adapter.registry import Llama
+    before = REGISTRY.entries.get("llama")
+    REGISTRY.register(Llama)
+    assert REGISTRY.entries.get("llama") is before
+
+
+def test_registry_register_duplicate_different_class_raises() -> None:
+    """Registering a different class under the same name still raises."""
+    from kvfold.adapter.registry import Family, Llama
+
+    class SquatLlama(Family):
+        name = "llama"
+
+        def install(self, model: object, pool: object) -> None:
+            return None
+
     with pytest.raises(ValueError, match="already registered"):
-        REGISTRY.register(Llama)
+        REGISTRY.register(SquatLlama)
+    REGISTRY.register(Llama)
 
 
 def test_install_dispatches() -> None:
