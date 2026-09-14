@@ -358,11 +358,18 @@ The suite has skip markers: `slow`, `integration` (model downloads),
 
 ## Build
 
+The marketing site lives in [`site/`](site/) and is built with Vite + React.
+
 ```bash
-pip install -e ".[docs]"                # mkdocs
-mkdocs build                            # static site in site/
-mkdocs serve                            # live-reload at http://127.0.0.1:8000
+cd site
+npm install
+npm run dev      # http://127.0.0.1:5173
+npm run build    # static output → site/dist
+npm run preview  # serve the built site locally
 ```
+
+Pushing to `master` triggers `.github/workflows/pages.yml`, which publishes
+`site/dist/` to GitHub Pages.
 
 ---
 
