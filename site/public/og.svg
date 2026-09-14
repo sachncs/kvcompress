@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="0%" r="80%">
+      <stop offset="0%" stop-color="#3a5cf5" stop-opacity="0.45" />
+      <stop offset="60%" stop-color="#3a5cf5" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="t" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#b6c8ff" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#08090d" />
+  <rect width="1200" height="630" fill="url(#g)" />
+  <g transform="translate(96,140)">
+    <rect width="76" height="76" rx="18" fill="#3a5cf5" />
+    <text x="38" y="55" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="48" font-weight="800" fill="#ffffff">k</text>
+  </g>
+  <text x="96" y="320" font-family="Inter, system-ui, sans-serif" font-size="92" font-weight="800" fill="url(#t)" letter-spacing="-3">kvfold</text>
+  <text x="96" y="400" font-family="Inter, system-ui, sans-serif" font-size="40" font-weight="400" fill="#b6b8c2">Universal plug-and-play KV cache compression</text>
+  <text x="96" y="470" font-family="Inter, system-ui, sans-serif" font-size="32" font-weight="500" fill="#8a8d9b">for decoder-only LLMs.</text>
+  <text x="96" y="560" font-family="JetBrains Mono, monospace" font-size="22" font-weight="500" fill="#5f6271">pip install kvfold</text>
+</svg>

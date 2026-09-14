@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  body {
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+  }
+  ::selection {
+    background-color: rgba(58, 92, 245, 0.25);
+    color: inherit;
+  }
+  /* Subtle, cinematic scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(120, 124, 140, 0.18);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(120, 124, 140, 0.32);
+  }
+}
+
+@layer components {
+  .container-x {
+    @apply mx-auto w-full max-w-6xl px-6 sm:px-8 lg:px-10;
+  }
+
+  .glass {
+    @apply bg-white/[0.03] backdrop-blur-xl ring-1 ring-white/[0.06];
+  }
+  .glass-light {
+    @apply bg-white/70 backdrop-blur-xl ring-1 ring-ink-900/[0.06];
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-medium text-ink-900 shadow-glow ring-1 ring-white/10 transition-all duration-300 ease-out-expo hover:bg-white/90 hover:shadow-[0_0_0_4px_rgba(255,255,255,0.06),0_30px_80px_-20px_rgba(58,92,245,0.5)];
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-ink-100 ring-1 ring-white/10 transition-all duration-300 ease-out-expo hover:bg-white/[0.04] hover:ring-white/20;
+  }
+  .btn-light-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm ring-1 ring-ink-900/10 transition-all duration-300 ease-out-expo hover:bg-ink-800;
+  }
+  .btn-light-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-ink-700 ring-1 ring-ink-900/10 transition-all duration-300 ease-out-expo hover:bg-ink-900/[0.04] hover:ring-ink-900/20;
+  }
+
+  .nav-link {
+    @apply text-sm text-ink-400 transition-colors duration-200 hover:text-ink-50;
+  }
+  .nav-link-light {
+    @apply text-sm text-ink-600 transition-colors duration-200 hover:text-ink-900;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3 py-1 text-xs font-medium text-ink-200 ring-1 ring-white/[0.08];
+  }
+  .chip-light {
+    @apply inline-flex items-center gap-2 rounded-full bg-ink-900/[0.04] px-3 py-1 text-xs font-medium text-ink-700 ring-1 ring-ink-900/[0.06];
+  }
+
+  .surface {
+    @apply relative overflow-hidden rounded-3xl bg-ink-900/60 ring-1 ring-white/[0.06] shadow-card;
+  }
+  .surface-light {
+    @apply relative overflow-hidden rounded-3xl bg-white shadow-[0_1px_0_0_rgba(15,16,21,0.04)_inset,0_30px_60px_-30px_rgba(15,16,21,0.18)] ring-1 ring-ink-900/[0.06];
+  }
+
+  .hairline {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent;
+  }
+  .hairline-light {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-ink-900/10 to-transparent;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .grid-bg {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .grid-bg-light {
+    background-image: linear-gradient(rgba(15, 16, 21, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 16, 21, 0.05) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  /* Marquee fade edges */
+  .mask-x {
+    mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+  }
+
+  /* Code block */
+  .code {
+    @apply font-mono text-[13px] leading-relaxed;
+  }
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
