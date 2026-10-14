@@ -3,6 +3,7 @@ import {
   memoryBenchmark,
   speedBenchmark,
   fidelityBenchmark,
+  benchmarkEvidence,
   type MemoryRow,
   type SpeedRow,
   type FidelityRow,
@@ -168,6 +169,48 @@ export function Benchmarks() {
             These are CPU-only reference numbers, not paper-reproduction data. GPU benchmarks and
             needle-in-haystack sweeps are tracked on the project roadmap.
           </p>
+          <details className="mx-auto mt-6 max-w-3xl rounded-2xl border border-white/[0.08] p-4 text-left light:border-ink-900/[0.08]">
+            <summary className="cursor-pointer text-sm font-medium text-ink-200 light:text-ink-800">
+              View values and reproduction commands
+            </summary>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[34rem] text-left text-xs">
+                <caption className="sr-only">Published benchmark values and commands</caption>
+                <thead className="text-ink-400 light:text-ink-500">
+                  <tr>
+                    <th className="pb-2 pr-4 font-medium">Benchmark</th>
+                    <th className="pb-2 pr-4 font-medium">Values</th>
+                    <th className="pb-2 font-medium">Reproduce</th>
+                  </tr>
+                </thead>
+                <tbody className="text-ink-300 light:text-ink-700">
+                  <tr className="border-t border-white/[0.06] light:border-ink-900/[0.06]">
+                    <th className="py-2 pr-4 font-medium">Memory</th>
+                    <td className="py-2 pr-4">{memoryBenchmark.rows.map((r) => `${r.name}: ${r.achieved}`).join(' · ')}</td>
+                    <td className="py-2 font-mono text-[10px]">{benchmarkEvidence.memoryCommand}</td>
+                  </tr>
+                  <tr className="border-t border-white/[0.06] light:border-ink-900/[0.06]">
+                    <th className="py-2 pr-4 font-medium">Speed</th>
+                    <td className="py-2 pr-4">{speedBenchmark.rows.map((r) => `${r.name}: ${r.compress}/${r.decompress}`).join(' · ')}</td>
+                    <td className="py-2 font-mono text-[10px]">{benchmarkEvidence.speedCommand}</td>
+                  </tr>
+                  <tr className="border-t border-white/[0.06] light:border-ink-900/[0.06]">
+                    <th className="py-2 pr-4 font-medium">Fidelity</th>
+                    <td className="py-2 pr-4">{fidelityBenchmark.rows.map((r) => `${r.name}: K ${r.kerr}, V ${r.verr}`).join(' · ')}</td>
+                    <td className="py-2 font-mono text-[10px]">{benchmarkEvidence.fidelityCommand}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <a
+              href={benchmarkEvidence.docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-block text-xs text-accent-300 underline underline-offset-4 light:text-accent-600"
+            >
+              Read the full benchmark protocol →
+            </a>
+          </details>
         </Reveal>
       </div>
     </section>

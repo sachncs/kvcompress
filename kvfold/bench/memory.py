@@ -71,6 +71,7 @@ def run_memory_sweep(
             "ratio_target": 1.0,
             "bytes_original": K.numel() * K.element_size() * 2,
             "bytes_compressed": kp.bytes_compressed + vp.bytes_compressed,
+            "bytes_resident": kp.bytes_resident + vp.bytes_resident,
             "ratio_achieved": (K.numel() * K.element_size() * 2)
             / (kp.bytes_compressed + vp.bytes_compressed),
         }
@@ -97,6 +98,7 @@ def run_memory_sweep(
                     "ratio_target": ratio,
                     "bytes_original": original_bytes,
                     "bytes_compressed": compressed,
+                    "bytes_resident": kp.bytes_resident + vp.bytes_resident,
                     "ratio_achieved": original_bytes / compressed,
                 }
             )
@@ -138,7 +140,9 @@ def main() -> None:  # pragma: no cover
     print("-" * 70)
     for r in rows:
         print(
-            f"{r['method']:<14} {r['ratio_target']:>10.2f} {r['bytes_original']:>12} {r['bytes_compressed']:>14} {r['ratio_achieved']:>9.2f}x"
+            f"{r['method']:<14} {r['ratio_target']:>10.2f} "
+            f"{r['bytes_original']:>12} {r['bytes_compressed']:>14} "
+            f"{r['ratio_achieved']:>9.2f}x"
         )
 
     if args.output:

@@ -11,7 +11,7 @@
 ```bash
 # Memory benchmark (bytes-occupied sweep)
 python -m scripts.run_memory_benchmark --T 1024 --dh 128 \
-    --ratios 2 3 4 5 8 --methods jolt flashjolt lowrank \
+    --ratios 2 3 4 5 8 --methods jolt flash low \
     --output results/memory.json
 
 # Speed benchmark
@@ -28,6 +28,11 @@ bash scripts/reproduce_paper_numbers.sh
 
 JSON output goes under `results/`. PNG charts are written next to
 the JSON if matplotlib is installed.
+
+Every new JSON result must retain its generated `metadata` and `parameters`
+objects. The metadata is the provenance record for the machine, software,
+device, seed, warmups, and repetitions; hand-edited headline numbers are not
+release evidence.
 
 ## Synthetic reconstruction (paper Table 2 style)
 
@@ -49,7 +54,7 @@ Table 2, but the synthetic spectra don't exactly match real Mistral-7B
 spectra. JoLT / FlashJoLT are at the same ratio as the paper
 (3.99× vs 4×) but the error is much higher because the synthetic
 generator's decay slope differs from real Mistral. The qualitative
-ordering (JoLT ≪ int4 ≪ lowrank on reconstruction fidelity) is
+ordering (JoLT ≪ int4 ≪ low on reconstruction fidelity) is
 preserved.
 
 The paper's *real* numbers on Mistral-7B layer 15:
@@ -72,10 +77,10 @@ for the gap analysis.
 | jolt | 2.0 | 8,388,608 B | 2,103,880 B | 3.99× |
 | jolt | 3.0 | 8,388,608 B | 2,103,880 B | 3.99× |
 | jolt | 4.0 | 8,388,608 B | 2,103,880 B | 3.99× |
-| flashjolt | 2.0 | 8,388,608 B | 2,103,880 B | 3.99× |
-| lowrank | 2.0 | 8,388,608 B | 2,130,176 B | 3.94× |
-| lowrank | 3.0 | 8,388,608 B | 1,397,928 B | 6.00× |
-| lowrank | 4.0 | 8,388,608 B | 1,065,088 B | 7.88× |
+| flash | 2.0 | 8,388,608 B | 2,103,880 B | 3.99× |
+| low | 2.0 | 8,388,608 B | 2,130,176 B | 3.94× |
+| low | 3.0 | 8,388,608 B | 1,397,928 B | 6.00× |
+| low | 4.0 | 8,388,608 B | 1,065,088 B | 7.88× |
 
 The discrete cost grid means the actual ratio "snaps" to a few
 discrete values. This is expected — see
@@ -102,8 +107,8 @@ information (see reconstruction table above).
 ## End-to-end (GPT-2, real model)
 
 ```python
-from kvcompress import enable_compression
-handle = enable_compression(model, method="flashjolt", compression_ratio=2.0)
+from kvfold import enable_compression
+handle = enable_compression(model, method="flash", ratio=2.0)
 out = model.generate(ids, max_new_tokens=15, ...)
 print(handle.stats_dict())
 ```

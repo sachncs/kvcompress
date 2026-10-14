@@ -38,23 +38,23 @@ from typing import Any
 import torch
 
 from kvfold.config import JoltConfig
-from kvfold.core.jl import Distribution
-from kvfold.core.budget import (
-    Cell,
-    Bisect,
-    Plan,
-)
 from kvfold.core.base import (
+    Compressor,
     Payload,
     Stats,
-    Compressor,
 )
+from kvfold.core.budget import (
+    Bisect,
+    Cell,
+    Plan,
+)
+from kvfold.core.jl import Distribution
 from kvfold.core.residual import (
     Residual,
     decode_residual,
     encode_residual,
 )
-from kvfold.core.svd import Exact, Randomized
+from kvfold.core.svd import Decomposer, Exact
 from kvfold.core.tucker import (
     Tucker,
     partial_tucker_st_hosvd,
@@ -100,7 +100,8 @@ class Jolt(Compressor):
     """Paper-faithful JoLT compressor."""
 
     @classmethod
-    def default_config(cls) -> JoltConfig:
+    def default_config(cls) -> Any:
+        """Return the default JoLT configuration."""
         return JoltConfig()
 
     """Paper-faithful JoLT compressor.
@@ -140,6 +141,7 @@ class Jolt(Compressor):
     ) -> None:
         if unused:
             from kvfold.errors import MethodConfigError
+
             raise MethodConfigError(
                 "jolt",
                 ",".join(sorted(unused.keys())),
@@ -152,7 +154,7 @@ class Jolt(Compressor):
         self.bits = tuple(bits)
         self.dtype = dtype
         self.jl_distribution = jl_distribution
-        # Ponytail: allocator defaults to fp16 element size; pass
+        # The allocator defaults to fp16 element size; pass
         # ``element_size_bytes=...`` to match a fp32 cache (allocator
         # bytes budget then doubles and the achieved ratio lands at the
         # user-requested target instead of half).
@@ -206,6 +208,13 @@ class Jolt(Compressor):
             raise ValueError(f"K/V shape mismatch: {key.shape} vs {value.shape}")
         if key.dim() != 3:
             raise ValueError(f"JoLT expects 3-D (m, T, dh); got {tuple(key.shape)}")
+        if any(int(size) == 0 for size in key.shape):
+            from kvfold.errors import ShapeError
+
+            raise ShapeError(
+                f"KV tensors cannot contain a zero-length dimension: {tuple(key.shape)}",
+                hint="provide at least one head, token, and feature element",
+            )
 
         t0 = time.perf_counter()
         m, t, d = key.shape
@@ -457,7 +466,7 @@ class Jolt(Compressor):
                 token_tail_mass=float(payload.metadata.get("tail_token_mass", 0.0)),
                 feature_tail_mass=float(payload.metadata.get("tail_feature_mass", 0.0)),
             ),
-            target_shape=tuple(int(d) for d in payload.shape),
+            target_shape=tuple(int(d) for d in payload.shape),  # type: ignore[arg-type]
         )
 
         # Add residual if present.
@@ -468,7 +477,9 @@ class Jolt(Compressor):
             original_last = int(payload.data["residual_original_last"].item())
             residual = Residual(
                 projection_seed=int(payload.metadata["residual_seed"]),
-                projection_distribution=_coerce_distribution(payload.metadata["residual_distribution"]),
+                projection_distribution=_coerce_distribution(
+                    payload.metadata["residual_distribution"]
+                ),
                 projection_sparsity=float(payload.metadata["residual_sparsity"]),
                 quant_dtype=quant_dtype,
                 symmetric=bool(payload.metadata["residual_symmetric"]),

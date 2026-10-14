@@ -104,8 +104,9 @@ residual. Concretely, for each layer's K (and V) tensor of shape
 4. **Allocate** `(r_T, r_d, b)` per-(K, V) cell by Lagrangian
    bisection. Each cell's grid `(r_T, r_d, b)` is enumerated
    independently; `λ` is found by bisection to hit the global byte
-   budget. The result: near-lossless 2-3× compression in the
-   paper's "free zone" without per-cell hyperparameter tuning.
+   budget. In the paper's reported synthetic regimes, this can reach a
+   near-lossless 2–3× "free zone" without per-cell hyperparameter tuning;
+   validate quality for your model and workload before deployment.
 
 See [research/math.md](research/math.md) for the equations,
 [research/algorithm.md](research/algorithm.md) for the code walkthrough,

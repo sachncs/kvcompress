@@ -55,29 +55,30 @@ def validate(
     3. End-to-end generation with GPT-2 (unless ``--skip-hf`` is given
        or ``transformers`` isn't installed).
     """
-    import kvfold
     import torch
+
+    import kvfold
 
     typer.echo(f"kvfold {kvfold.__version__}")
 
     # 1. JoLT round-trip.
-    from kvfold import Jolt, Flash
+    from kvfold import Flash, Jolt
 
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 32, 16)
     comp = Jolt(ratio=2.0)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.restore(kp, vp)
+    k_hat, _v_hat = comp.restore(kp, vp)
     rel_err = float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K))
     typer.echo(f"  JoLT round-trip rel error: {rel_err:.4f}")
     if rel_err > 1.0:
         typer.echo("  FAIL")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     # 2. Flash round-trip.
     fj = Flash(ratio=2.0)
     kp, vp = fj.compress(K, V)
-    k_hat, v_hat = fj.restore(kp, vp)
+    k_hat, _v_hat = fj.restore(kp, vp)
     rel_err = float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K))
     typer.echo(f"  Flash round-trip rel error: {rel_err:.4f}")
 
@@ -85,12 +86,13 @@ def validate(
     if not skip_hf:
         try:
             from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
             from kvfold import enable_compression
 
             tok = GPT2Tokenizer.from_pretrained("gpt2")
             model = GPT2LMHeadModel.from_pretrained("gpt2")
             model.eval()
-            handle = enable_compression(model, method="flashjolt", ratio=2.0)
+            handle = enable_compression(model, method="flash", ratio=2.0)
             try:
                 ids = tok.encode("Hello", return_tensors="pt")
                 with torch.no_grad():
@@ -112,7 +114,7 @@ def validate(
 def run_subprocess(args: list[str], label: str, timeout: float = 600.0) -> bool:
     """Run a benchmark subprocess; return True on success, False on failure.
 
-    Ponytail: docstring says "a failure in one doesn't take down the
+    The orchestration contract says "a failure in one doesn't take down the
     others" but the original implementation used
     ``subprocess.check_call`` which aborts the whole orchestration.
     We catch ``CalledProcessError`` and return False; the orchestration
@@ -172,8 +174,8 @@ def benchmark(
                         "8",
                         "--methods",
                         "jolt",
-                        "flashjolt",
-                        "lowrank",
+                        "flash",
+                        "low",
                         "--output",
                         str(output_dir / "memory.json"),
                     ],
@@ -232,7 +234,7 @@ def benchmark(
     failed = [label for label, ok in results if not ok]
     if failed:
         typer.echo(f"benchmark failures: {', '.join(failed)}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     typer.echo(f"benchmark outputs in {output_dir}")
 
 
@@ -241,7 +243,10 @@ def profile(
     model: str = typer.Option("gpt2", help="HF model id"),
     ratio: float = typer.Option(3.0, help="compression ratio"),
     max_new: int = typer.Option(20, help="tokens to generate"),
-    method: str = typer.Option("flashjolt", help="compression method"),
+    method: str = typer.Option(
+        "flash",
+        help="compression method: jolt, flash, low, int2, int4, int8, fp8, fp16, bf16, pass",
+    ),
     seed: int = typer.Option(0, help="RNG seed"),
     bits: str = typer.Option("0,2,4,8", help="comma-separated bit-widths"),
     layer_groups: int = typer.Option(1, help="number of layer groups"),
@@ -274,7 +279,10 @@ def profile(
 @app.command()
 def compress(
     model: str = typer.Option(..., help="HF model id"),
-    method: str = typer.Option("flashjolt", help="compression method"),
+    method: str = typer.Option(
+        "flash",
+        help="compression method: jolt, flash, low, int2, int4, int8, fp8, fp16, bf16, pass",
+    ),
     target: str = typer.Option("33%", help="target memory fraction (e.g. 33%)"),
     prompt: str = typer.Option("Hello, my name is", help="prompt text"),
     max_new: int = typer.Option(20, help="tokens to generate"),
@@ -293,6 +301,7 @@ def compress(
     try:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
+
         from kvfold import enable_compression
 
         tok = AutoTokenizer.from_pretrained(model)
@@ -322,7 +331,7 @@ def compress(
             handle.disable()
     except Exception as e:
         typer.echo(f"error: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 if __name__ == "__main__":

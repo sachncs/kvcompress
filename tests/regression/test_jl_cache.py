@@ -11,8 +11,22 @@ def test_dtype_in_cache_key() -> None:
     """Two projections of the same (shape, seed) but different dtypes must NOT collide."""
     CACHE.clear()
     try:
-        p_f32 = CACHE.get_or_build(out_dim=32, in_dim=32, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
-        p_f16 = CACHE.get_or_build(out_dim=32, in_dim=32, distribution="gaussian", seed=0, device="cpu", dtype=torch.float16)
+        p_f32 = CACHE.get_or_build(
+            out_dim=32,
+            in_dim=32,
+            distribution="gaussian",
+            seed=0,
+            device="cpu",
+            dtype=torch.float32,
+        )
+        p_f16 = CACHE.get_or_build(
+            out_dim=32,
+            in_dim=32,
+            distribution="gaussian",
+            seed=0,
+            device="cpu",
+            dtype=torch.float16,
+        )
         assert p_f32.dtype == torch.float32
         assert p_f16.dtype == torch.float16
         info = CACHE.info()

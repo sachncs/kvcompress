@@ -16,7 +16,6 @@ import kvfold.core.builtins  # noqa: F401 — ensures REGISTRY is populated
 from kvfold import build_compressor, supported_methods
 from kvfold.core.dispatch import REGISTRY
 
-
 # ---------------------------------------------------------------------------
 # Happy-path: every advertised method returns the right concrete class.
 # ---------------------------------------------------------------------------
@@ -50,6 +49,23 @@ def test_supported_methods_is_complete() -> None:
     # We added bf16 on top; ensure at least the documented set is present.
     required = {"jolt", "flash", "low", "int2", "int4", "int8", "fp8", "fp16", "pass"}
     assert required.issubset(set(methods))
+
+
+def test_method_descriptor_is_immutable_and_capability_aware() -> None:
+    descriptor = REGISTRY.descriptor("int4")
+    assert descriptor.method == "int4"
+    assert {"compress", "restore"}.issubset(descriptor.capabilities)
+    with pytest.raises(AttributeError):
+        descriptor.method = "changed"  # type: ignore[misc]
+
+
+def test_public_method_descriptors_use_the_canonical_registry() -> None:
+    from kvfold.api import method_descriptors
+
+    descriptors = method_descriptors()
+    assert descriptors
+    assert {entry.method for entry in descriptors} == set(REGISTRY.names())
+    assert all("compress" in entry.capabilities for entry in descriptors)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +112,7 @@ def test_jolt_forwards_ratio() -> None:
 
 def test_unknown_method_raises_with_actionable_message() -> None:
     from kvfold.errors import UnsupportedMethodError
+
     with pytest.raises(UnsupportedMethodError, match="not-a-method"):
         build_compressor("not-a-method")
 
@@ -103,6 +120,7 @@ def test_unknown_method_raises_with_actionable_message() -> None:
 def test_unknown_kwarg_raises_with_actionable_message() -> None:
     """A typo (``per_chanel`` instead of ``per_channel``) must fail loud."""
     from kvfold.errors import MethodConfigError
+
     with pytest.raises(MethodConfigError, match="per_chanel"):
         build_compressor("int4", per_chanel=True)
 
@@ -110,6 +128,7 @@ def test_unknown_kwarg_raises_with_actionable_message() -> None:
 def test_int_kwargs_rejected_on_pass() -> None:
     """``per_channel`` is meaningless for Pass — reject."""
     from kvfold.errors import MethodConfigError
+
     with pytest.raises(MethodConfigError, match="per_channel"):
         build_compressor("pass", per_channel=True)
 
@@ -119,6 +138,7 @@ def test_method_is_case_insensitive() -> None:
     a = build_compressor("INT4")
     b = build_compressor("Int4")
     from kvfold.core.int_quant import IntQuant
+
     assert isinstance(a, IntQuant)
     assert isinstance(b, IntQuant)
     assert type(a) is type(b)

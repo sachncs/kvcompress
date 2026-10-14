@@ -26,7 +26,7 @@ def test_core_submodule_exports_flash() -> None:
 
 
 def test_core_submodule_exports_budget_classes() -> None:
-    from kvfold.core import Cell, Bisect
+    from kvfold.core import Bisect, Cell
 
     assert Bisect.__name__ == "Bisect"
     assert Cell.__name__ == "Cell"

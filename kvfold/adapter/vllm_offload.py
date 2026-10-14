@@ -44,7 +44,7 @@ example):
     from kvfold.adapter.vllm_offload import Offload
     from kvfold import build_compressor
 
-    compressor = build_compressor("flashjolt", compression_ratio=3.0)
+    compressor = build_compressor("flash", ratio=3.0)
     handler = Offload(compressor=compressor)
     llm = LLM(model="meta-llama/Llama-2-7b-hf")
     # vLLM's OffloadingWorker accepts handlers via register_handler.
@@ -54,19 +54,53 @@ example):
 from __future__ import annotations
 
 import logging
+import re
 import threading
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from kvfold.core.base import Compressor
+from kvfold.errors import VLLMAPIDriftError
 
 __all__ = [
-    "Offload",
     "EvictPool",
-    "is_vllm_offload_available",
+    "Offload",
     "import_vllm_base",
+    "is_vllm_offload_available",
+    "vllm_offload_version",
 ]
 
 log = logging.getLogger(__name__)
+_MIN_VLLM = (0, 19)
+_MAX_VLLM = (1, 0)
+
+
+def vllm_offload_version() -> str | None:
+    """Return the installed vLLM version, or ``None`` when unavailable."""
+    try:
+        return version("vllm")
+    except PackageNotFoundError:
+        return None
+
+
+def _version_pair(raw: str) -> tuple[int, int] | None:
+    match = re.match(r"^(\d+)\.(\d+)", raw)
+    if match is None:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def _validate_offload_api(base_cls: type, installed_version: str | None) -> None:
+    """Reject an imported but unsupported vLLM offload surface early."""
+    required = ("transfer_async", "get_finished", "wait")
+    missing = [name for name in required if not hasattr(base_cls, name)]
+    if missing:
+        raise VLLMAPIDriftError(", ".join(missing))
+    if installed_version is None:
+        return
+    pair = _version_pair(installed_version)
+    if pair is not None and not (_MIN_VLLM <= pair < _MAX_VLLM):
+        raise VLLMAPIDriftError(f"vLLM {installed_version} is outside supported range >=0.19,<1.0")
 
 
 def is_vllm_offload_available() -> bool:
@@ -96,7 +130,7 @@ def import_vllm_base() -> type | None:
         return None
 
 
-# ponytail: thread-safe pool wrapper. Default ``dict`` races on
+# Thread-safe pool wrapper. Default ``dict`` races on
 # concurrent vLLM worker threads; this wraps it in an RLock and uses
 # a layered lookup so the K and V payloads of one layer can be stored
 # or retrieved atomically.
@@ -105,40 +139,42 @@ class EvictPool:
 
     Keyed by ``(layer, kind)`` where ``kind in {"key", "value"}``.
     Internally backed by a regular dict guarded by an ``RLock``.
-    Public attributes:
-        lock: the RLock guarding ``store``.
-        store: the underlying dict.
+        Storage is intentionally semi-private; callers use the methods below.
     """
 
     def __init__(self) -> None:
-        self.lock = threading.RLock()
-        self.store: dict[tuple[int, str], Any] = {}
+        self._lock = threading.RLock()
+        self._store: dict[tuple[int, str], Any] = {}
 
     def put(self, layer: int, kind: str, payload: Any) -> None:
-        with self.lock:
-            self.store[(layer, kind)] = payload
+        """Store one payload for a layer and payload kind."""
+        with self._lock:
+            self._store[(layer, kind)] = payload
 
     def get(self, layer: int, kind: str) -> Any | None:
-        with self.lock:
-            return self.store.get((layer, kind))
+        """Return one stored payload, or ``None`` when absent."""
+        with self._lock:
+            return self._store.get((layer, kind))
 
     def get_layer(self, layer: int) -> dict[str, Any]:
         """Return a snapshot of all payloads for one layer."""
-        with self.lock:
+        with self._lock:
             return {
-                kind: self.store[(layer, kind)]
+                kind: self._store[(layer, kind)]
                 for kind in ("key", "value")
-                if (layer, kind) in self.store
+                if (layer, kind) in self._store
             }
 
     def drop_layer(self, layer: int) -> None:
-        with self.lock:
-            self.store.pop((layer, "key"), None)
-            self.store.pop((layer, "value"), None)
+        """Remove both payload kinds for ``layer``."""
+        with self._lock:
+            self._store.pop((layer, "key"), None)
+            self._store.pop((layer, "value"), None)
 
     def clear(self) -> None:
-        with self.lock:
-            self.store.clear()
+        """Remove every stored payload."""
+        with self._lock:
+            self._store.clear()
 
 
 class Offload:
@@ -181,26 +217,21 @@ class Offload:
         **kwargs: Any,
     ) -> None:
         base_cls = import_vllm_base()
-        # ponytail: data-path methods are vllm-version-agnostic and must
+        # Data-path methods are vLLM-version-agnostic and must
         # work without vllm installed. Only fail loudly when the runtime
         # import succeeded but the class is the wrong shape (API drift).
-        if base_cls is not None and (
-            not isinstance(base_cls, type) or not hasattr(base_cls, "transfer_async")
-        ):
-            raise ImportError(
-                f"Offload: vLLM OffloadingHandler at {base_cls!r} "
-                "does not expose transfer_async; vLLM API drift."
-            )
+        if base_cls is not None:
+            if not isinstance(base_cls, type):
+                raise VLLMAPIDriftError("OffloadingHandler is not a class")
+            _validate_offload_api(base_cls, vllm_offload_version())
 
-        # ponytail: bind the vLLM ABC into our MRO at runtime so we
+        # Bind the vLLM ABC into our MRO at runtime so we
         # get isinstance checks against the real base class without
         # duplicating its __init__ (which varies per vLLM version).
         # __getattr__ below forwards any methods we don't override.
         self.compressor = compressor
-        self.eviction_pool: EvictPool = (
-            eviction_pool if eviction_pool is not None else EvictPool()
-        )
-        self.lock = threading.Lock()
+        self.eviction_pool: EvictPool = eviction_pool if eviction_pool is not None else EvictPool()
+        self._lock = threading.Lock()
         self.next_job_id = 0
         self.finished_jobs: list[Any] = []
         self.base_class: type = base_cls
@@ -225,17 +256,17 @@ class Offload:
                 job_id,
                 e,
             )
-            with self.lock:
+            with self._lock:
                 self.finished_jobs.append(self.make_result(job_id, success=False))
             return False
 
-        with self.lock:
+        with self._lock:
             self.finished_jobs.append(self.make_result(job_id, success=True))
         return True
 
     def get_finished(self) -> list[Any]:
         """Return and clear the list of jobs finished since last call."""
-        with self.lock:
+        with self._lock:
             out = self.finished_jobs
             self.finished_jobs = []
             return out
@@ -252,7 +283,7 @@ class Offload:
 
         deadline = time.monotonic() + 60.0
         while True:
-            with self.lock:
+            with self._lock:
                 # ``finished_jobs`` holds (job_id, success) tuples.
                 done = {entry[0] for entry in self.finished_jobs}
             if job_ids.issubset(done):
@@ -346,10 +377,11 @@ class Offload:
         return (job_id, success)
 
     def run_transfer(self, src_spec: Any, dst_spec: Any) -> None:
-        """Compress src bytes into dst bytes; concrete semantics depend
-        on the spec classes vLLM hands us.
+        """Compress source bytes into destination bytes.
 
-        Ponytail: until vLLM ships a spec class we can hook into
+        Concrete semantics depend on the spec classes vLLM hands us.
+
+        Until vLLM ships a spec class we can hook into
         without subclassing the int8 page-buffer interface, we leave
         the wire format opaque. End-to-end correctness is gated on a
         GPU box (see ``docs/user/vllm.md``).

@@ -10,14 +10,14 @@ Public API:
     MethodName                      — Literal of supported method names
     CompressionHandle               — handle returned by enable_compression
 
-Imports are lazy so the package can be imported even when individual modules
-are still stubbed out during incremental development. The first attribute
-access triggers the actual import via :func:`__getattr__` below.
+Imports are lazy so optional integrations do not become hard dependencies of
+the core package. The first attribute access triggers the actual import via
+:func:`__getattr__` below.
 """
 
 from __future__ import annotations
 
-from typing import Any  # noqa: F401
+from typing import Any
 
 import kvfold.core.builtins  # noqa: F401 — populates the compressor dispatcher registry
 
@@ -31,6 +31,7 @@ LAZY_EXPORTS = {
     "parse_target_memory": ("kvfold.api", "parse_target_memory"),
     "build_compressor": ("kvfold.api", "build_compressor"),
     "supported_methods": ("kvfold.api", "supported_methods"),
+    "method_descriptors": ("kvfold.api", "method_descriptors"),
     "MethodName": ("kvfold.api", "MethodName"),
     "Jolt": ("kvfold.core.jolt", "Jolt"),
     "Flash": ("kvfold.core.flash", "Flash"),
@@ -98,4 +99,4 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module 'kvfold' has no attribute {name!r}")
 
 
-__all__ = ["__version__", *LAZY_EXPORTS]
+__all__ = ["__version__", *list(LAZY_EXPORTS.keys())]  # noqa: PLE0604

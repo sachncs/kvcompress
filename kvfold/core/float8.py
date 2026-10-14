@@ -22,7 +22,7 @@ Attributes:
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import torch
 
@@ -44,7 +44,7 @@ def e4m3_dtype() -> torch.dtype:
             "torch.float8_e4m3fn is not available in this torch build",
             hint="upgrade to torch >= 2.5 or use method='bf16'",
         )
-    return dtype
+    return cast(torch.dtype, dtype)
 
 
 def e5m2_dtype() -> torch.dtype:
@@ -55,7 +55,7 @@ def e5m2_dtype() -> torch.dtype:
             "torch.float8_e5m2 is not available in this torch build",
             hint="upgrade to torch >= 2.5 or use method='bf16'",
         )
-    return dtype
+    return cast(torch.dtype, dtype)
 
 
 class Float8(Compressor):
@@ -102,6 +102,7 @@ class Float8(Compressor):
 
     @classmethod
     def default_config(cls) -> Float8Config:
+        """Return the default FP8 configuration."""
         return Float8Config()
 
     def compress(self, key: torch.Tensor, value: torch.Tensor) -> tuple[Payload, Payload]:
@@ -111,7 +112,9 @@ class Float8(Compressor):
         vp = self.quantize_side(value)
         return kp, vp
 
-    def restore(self, key_payload: Payload, value_payload: Payload) -> tuple[torch.Tensor, torch.Tensor]:
+    def restore(
+        self, key_payload: Payload, value_payload: Payload
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Dequantise K and V from FP8."""
         k = self.dequantize_payload(key_payload)
         v = self.dequantize_payload(value_payload)
@@ -193,7 +196,7 @@ class Float8(Compressor):
             recovered = recovered.reshape(original_shape)
         elif self.group_size is not None:
             last = original_shape[-1]
-            r = recovered_shape = last // self.group_size
+            r = last // self.group_size
             packed_fp32 = packed_fp32.reshape(*original_shape[:-1], r, self.group_size)
             recovered = packed_fp32 * scale.unsqueeze(-1)
             recovered = recovered.reshape(original_shape)
@@ -201,4 +204,4 @@ class Float8(Compressor):
             recovered = packed_fp32 * scale
             recovered = recovered.reshape(original_shape)
 
-        return (recovered + zero_point.to(recovered.dtype)).to(payload.dtype)
+        return cast(torch.Tensor, (recovered + zero_point.to(recovered.dtype)).to(payload.dtype))

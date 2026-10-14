@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from kvfold.adapter.base import Adapter, AdapterState
+
 
 def __getattr__(name: str) -> Any:
     if name == "HF":
@@ -28,7 +30,7 @@ def __getattr__(name: str) -> Any:
         from kvfold.adapter import vllm
 
         return getattr(vllm, name)
-    if name in ("Offload", "EvictPool", "is_vllm_offload_available"):
+    if name in ("Offload", "EvictPool", "is_vllm_offload_available", "vllm_offload_version"):
         from kvfold.adapter import vllm_offload
 
         return getattr(vllm_offload, name)
@@ -40,10 +42,12 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "HF",
+    "Adapter",
+    "AdapterState",
     "EvictPool",
     "Family",
     "FamilyRegistry",
-    "HF",
     "Offload",
     "export_kv",
     "import_kv",
@@ -51,4 +55,5 @@ __all__ = [
     "is_vllm_offload_available",
     "known_model_types",
     "resolve_cache",
+    "vllm_offload_version",
 ]

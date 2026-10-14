@@ -13,7 +13,7 @@
   <rect width="1200" height="630" fill="url(#g)" />
   <g transform="translate(96,140)">
     <rect width="76" height="76" rx="18" fill="#3a5cf5" />
-    <text x="38" y="55" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="48" font-weight="800" fill="#ffffff">k</text>
+    <path d="M24 20v56M24 48l28-28M24 48l28 28M36 48h20" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity=".96" />
   </g>
   <text x="96" y="320" font-family="Inter, system-ui, sans-serif" font-size="92" font-weight="800" fill="url(#t)" letter-spacing="-3">kvfold</text>
   <text x="96" y="400" font-family="Inter, system-ui, sans-serif" font-size="40" font-weight="400" fill="#b6b8c2">Universal plug-and-play KV cache compression</text>

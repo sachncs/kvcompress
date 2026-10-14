@@ -13,12 +13,14 @@ import threading
 import pytest
 import torch
 
-from kvfold import Pass, Jolt
+from kvfold import Jolt, Pass
 from kvfold.adapter.vllm_offload import (
-    Offload,
     EvictPool,
+    Offload,
     is_vllm_offload_available,
+    vllm_offload_version,
 )
+from kvfold.errors import VLLMAPIDriftError
 
 
 def test_is_vllm_offload_available_returns_bool() -> None:
@@ -28,6 +30,45 @@ def test_is_vllm_offload_available_returns_bool() -> None:
 def test_module_imports_without_vllm() -> None:
     """The module must import on systems without vLLM."""
     import kvfold.adapter.vllm_offload  # noqa: F401
+
+
+def test_vllm_version_probe_is_optional() -> None:
+    """The optional adapter must remain importable without vLLM."""
+    assert vllm_offload_version() is None or isinstance(vllm_offload_version(), str)
+
+
+def test_unsupported_vllm_surface_fails_before_handler_use(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An imported but incompatible API must produce a typed error."""
+    from kvfold.adapter import vllm_offload as mod
+
+    class _DriftedBase:
+        def transfer_async(self) -> None:
+            pass
+
+    monkeypatch.setattr(mod, "import_vllm_base", lambda: _DriftedBase)
+    monkeypatch.setattr(mod, "vllm_offload_version", lambda: "0.19.1")
+    with pytest.raises(VLLMAPIDriftError, match="get_finished"):
+        Offload(compressor=Pass())
+
+
+def test_unsupported_vllm_version_fails_early(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A known unsupported major version must not be used accidentally."""
+    from kvfold.adapter import vllm_offload as mod
+
+    class _ExpectedBase:
+        def transfer_async(self) -> None:
+            pass
+
+        def get_finished(self) -> None:
+            pass
+
+        def wait(self) -> None:
+            pass
+
+    monkeypatch.setattr(mod, "import_vllm_base", lambda: _ExpectedBase)
+    monkeypatch.setattr(mod, "vllm_offload_version", lambda: "1.2.0")
+    with pytest.raises(VLLMAPIDriftError, match="outside supported range"):
+        Offload(compressor=Pass())
 
 
 def test_handler_attributes() -> None:
@@ -210,7 +251,7 @@ def test_transfer_async_records_failure_on_exception() -> None:
     handler = Offload(compressor=comp)
 
     # Force run_transfer to raise.
-    def boom(self, src, dst):  # noqa: ARG001
+    def boom(self, src, dst):
         raise RuntimeError("simulated failure")
 
     original = mod.Offload.run_transfer
@@ -231,9 +272,6 @@ def test_wait_returns_when_jobs_finish() -> None:
     comp = Pass(dtype=torch.float32)
     handler = Offload(compressor=comp)
 
-    class _FakeSpec:
-        blocks: list[int] = []
-
     handler.finished_jobs.append((1, True))
     handler.finished_jobs.append((2, True))
     handler.wait({1, 2})  # returns immediately
@@ -247,7 +285,7 @@ def test_wait_times_out_on_missing_jobs() -> None:
     import time as _time
 
     real_sleep = _time.sleep
-    _time.sleep = lambda s: None  # noqa: ARG005
+    _time.sleep = lambda s: None
     real_mono = _time.monotonic
 
     counter = {"n": 0}

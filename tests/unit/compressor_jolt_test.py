@@ -39,7 +39,7 @@ def test_jolt_ratio_metadata(
 ) -> None:
     k, v = small_kv
     comp = Jolt(ratio=3.0)
-    k_p, v_p = comp.compress(k, v)
+    k_p, _v_p = comp.compress(k, v)
     assert "r_token" in k_p.metadata
     assert "r_feature" in k_p.metadata
     assert "bits" in k_p.metadata
@@ -59,7 +59,7 @@ def test_jolt_works_with_bits_zero(small_kv: tuple[torch.Tensor, torch.Tensor]) 
     k, v = small_kv
     comp = Jolt(ratio=8.0, bits=(0, 2, 4))
     k_p, v_p = comp.compress(k, v)
-    k_hat, v_hat = comp.restore(k_p, v_p)
+    k_hat, _v_hat = comp.restore(k_p, v_p)
     assert k_hat.shape == k.shape
 
 
@@ -94,6 +94,14 @@ def test_jolt_non_3d_raises() -> None:
     v = torch.randn(4, 16)
     with pytest.raises(ValueError, match="3-D"):
         comp.compress(k, v)
+
+
+def test_jolt_zero_length_raises_structured_shape_error() -> None:
+    from kvfold.errors import ShapeError
+
+    comp = Jolt(ratio=2.0)
+    with pytest.raises(ShapeError, match="zero-length"):
+        comp.compress(torch.empty(1, 0, 4), torch.empty(1, 0, 4))
 
 
 def test_jolt_method_name() -> None:
@@ -138,8 +146,8 @@ def test_flash_speedup_no_quality_loss() -> None:
 
     kp_e, vp_e = comp_exact.compress(k, v)
     kp_f, vp_f = comp_fast.compress(k, v)
-    k_e, v_e = comp_exact.restore(kp_e, vp_e)
-    k_f, v_f = comp_fast.restore(kp_f, vp_f)
+    k_e, _v_e = comp_exact.restore(kp_e, vp_e)
+    k_f, _v_f = comp_fast.restore(kp_f, vp_f)
     err_e_k = (torch.linalg.norm(k - k_e) / torch.linalg.norm(k)).item()
     err_f_k = (torch.linalg.norm(k - k_f) / torch.linalg.norm(k)).item()
     # Flash should be within slack of exact.

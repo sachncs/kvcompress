@@ -41,7 +41,7 @@ class Pool:
                 cap is hit.
         """
         self.max_per_key = int(max_per_key)
-        self.pool: dict[tuple[tuple[int, ...], torch.dtype, torch.device], list[torch.Tensor]] = (
+        self._pool: dict[tuple[tuple[int, ...], torch.dtype, torch.device], list[torch.Tensor]] = (
             defaultdict(list)
         )
 
@@ -57,7 +57,7 @@ class Pool:
         read stale data from a previously-released buffer.
         """
         key = (tuple(shape), dtype, torch.device(device))
-        bucket = self.pool.get(key)
+        bucket = self._pool.get(key)
         if bucket:
             t = bucket.pop()
             t.zero_()
@@ -67,20 +67,20 @@ class Pool:
     def release(self, tensor: torch.Tensor) -> None:
         """Return a tensor to the pool. No-op if the per-key cap is full."""
         key = (tuple(tensor.shape), tensor.dtype, tensor.device)
-        bucket = self.pool[key]
+        bucket = self._pool[key]
         if len(bucket) >= self.max_per_key:
             return  # drop
         bucket.append(tensor)
 
     def clear(self) -> None:
         """Drop every pooled buffer. Useful in test fixtures."""
-        self.pool.clear()
+        self._pool.clear()
 
     def stats(self) -> dict[str, Any]:
         """Return ``{"num_keys": int, "total_buffers": int}``."""
         return {
-            "num_keys": len(self.pool),
-            "total_buffers": sum(len(b) for b in self.pool.values()),
+            "num_keys": len(self._pool),
+            "total_buffers": sum(len(b) for b in self._pool.values()),
         }
 
 

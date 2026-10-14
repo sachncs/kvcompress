@@ -12,6 +12,7 @@ This module exposes:
 * :func:`disable_compression` — revert the patch.
 * :func:`build_compressor` — direct access to the compressor factory.
 * :func:`supported_methods` — tuple of every supported method name.
+* :func:`method_descriptors` — immutable registry bindings for tooling.
 * :func:`parse_target_memory` — helper that converts ``"25%"`` / ``0.25``
   to a ratio of ``4.0``.
 
@@ -34,6 +35,7 @@ Design notes:
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -69,6 +71,40 @@ class CompressionStats:
     decompress_calls: int = 0
     bytes_original: int = 0
     bytes_compressed: int = 0
+    bytes_resident: int = 0
+    _lock: Any = field(default_factory=threading.RLock, init=False, repr=False, compare=False)
+
+    def record_compress(
+        self,
+        *,
+        bytes_original: int,
+        bytes_compressed: int,
+        bytes_resident: int,
+    ) -> None:
+        """Atomically record one compression and its current cache totals."""
+        with self._lock:
+            self.compress_calls += 1
+            self.bytes_original = bytes_original
+            self.bytes_compressed = bytes_compressed
+            self.bytes_resident = bytes_resident
+
+    def record_decompress(self) -> None:
+        """Atomically record one reconstruction."""
+        with self._lock:
+            self.decompress_calls += 1
+
+    def snapshot(self) -> dict[str, int | float]:
+        """Return an atomic immutable-value snapshot for metrics consumers."""
+        with self._lock:
+            return {
+                "compress_calls": self.compress_calls,
+                "decompress_calls": self.decompress_calls,
+                "bytes_original": self.bytes_original,
+                "bytes_compressed": self.bytes_compressed,
+                "bytes_resident": self.bytes_resident,
+                "ratio": self.compression_ratio,
+                "memory_saved_bytes": self.memory_saved_bytes,
+            }
 
     @property
     def compression_ratio(self) -> float:
@@ -77,22 +113,25 @@ class CompressionStats:
         Returns ``1.0`` when no compression has happened yet, so the
         metric is always defined.
         """
-        if self.bytes_compressed == 0:
-            return 1.0
-        return self.bytes_original / self.bytes_compressed
+        with self._lock:
+            if self.bytes_compressed == 0:
+                return 1.0
+            return self.bytes_original / self.bytes_compressed
 
     @property
     def memory_saved_bytes(self) -> int:
         """Bytes saved versus the raw K/V cache. Floored at 0 (never negative)."""
-        return max(0, self.bytes_original - self.bytes_compressed)
+        with self._lock:
+            return max(0, self.bytes_original - self.bytes_compressed)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CompressionHandle:
-    """Handle returned by :func:`enable_compression`.
+    """Immutable handle returned by :func:`enable_compression`.
 
-    Use it to disable the patch, query cumulative stats, or rebuild the
-    compressor at runtime.
+    Use it to disable the patch or query cumulative stats. The adapter owns
+    mutable runtime state; callers receive snapshots rather than replacing
+    the handle's references.
     """
 
     adapter: HF
@@ -115,18 +154,11 @@ class CompressionHandle:
         Includes both raw counters (call counts, byte totals) and the
         derived ``compression_ratio`` and ``memory_saved_bytes``.
         """
-        return {
-            "compress_calls": self.stats.compress_calls,
-            "decompress_calls": self.stats.decompress_calls,
-            "bytes_original": self.stats.bytes_original,
-            "bytes_compressed": self.stats.bytes_compressed,
-            "ratio": self.stats.compression_ratio,
-            "memory_saved_bytes": self.stats.memory_saved_bytes,
-        }
+        return self.stats.snapshot()
 
 
 def enable_compression(
-    model: "PreTrainedModel",
+    model: PreTrainedModel,
     *,
     method: MethodName = "flash",
     target_memory: str | float | None = None,
@@ -229,13 +261,28 @@ def build_compressor(method: str, **kwargs: Any) -> Any:
         MethodConfigError: if any kwarg is unknown or out of range.
     """
     from kvfold.core.dispatch import REGISTRY
+
     return REGISTRY.build(method.lower() if isinstance(method, str) else method, **kwargs)
 
 
 def supported_methods() -> tuple[str, ...]:
     """Tuple of every compression method the dispatcher accepts."""
     from kvfold.core.dispatch import REGISTRY
+
     return REGISTRY.names()
+
+
+def method_descriptors() -> tuple[Any, ...]:
+    """Return immutable dispatcher descriptors for every public method.
+
+    Each descriptor exposes the canonical method name, configuration class,
+    implementation class, and capability set. Consumers that need a stable
+    serialization format should project these objects to their own schema
+    instead of inspecting registry internals.
+    """
+    from kvfold.core.dispatch import REGISTRY
+
+    return tuple(REGISTRY.descriptor(name) for name in REGISTRY.names())
 
 
 def parse_target_memory(value: str | float) -> float:

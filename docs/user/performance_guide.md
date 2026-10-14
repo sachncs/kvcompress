@@ -5,9 +5,10 @@ specific workload.
 
 ## TL;DR
 
-- **Default to 3× (target_memory="33%").** You're in the paper's
-  near-lossless "free zone" for both GQA and MHA models.
-- **Use `flashjolt`, not `jolt`.** 5-13× faster at matched quality.
+- **Default to 3× (target_memory="33%").** This is within the paper's
+  reported high-fidelity "free zone" for both GQA and MHA models; validate
+  perplexity and task quality on your own model.
+- **Use `flash`, not `jolt`.** 5-13× faster at matched quality.
 - **Layer groups are usually unnecessary.** The paper's default is
   `layer_groups=1`; use > 1 only if you have a measured reason.
 - **Residual bits default to `(0, 2, 4, 8)`.** The allocator picks
@@ -15,15 +16,16 @@ specific workload.
 
 ## Picking a compression ratio
 
-The paper's "free zone" is **2-3×** for both GQA and MHA models.
-Within this band the model's perplexity drifts by < 1% (statistical
-noise). Outside the band the architectures diverge:
+The paper reports a **2-3×** high-fidelity band for both GQA and MHA models
+under its stated evaluation setup. Within this band, the reported perplexity
+drift was small; outside it, the architectures diverge. These are not a
+guarantee for arbitrary models or workloads:
 
 | Ratio | Mistral-7B (GQA) | LLaMA-2-13B (MHA) | Recommendation |
 |---|---|---|---|
 | 1× (baseline) | 6.28 PPL | 5.39 PPL | No compression. |
 | 2× | 6.28 PPL | 5.39 PPL | **Free zone — default.** |
-| 3× | 6.29 PPL | 5.39 PPL | **Free zone — safe for production.** |
+| 3× | 6.29 PPL | 5.39 PPL | **Paper-reported band — validate before production.** |
 | 4× | 6.64 PPL | 6.86 PPL | GQA: OK. MHA: starts to hurt. |
 | 5× | 7.01 PPL | 9.07 PPL | GQA: still OK. MHA: unusable. |
 | 8× | — | — | Lossy on both. |
@@ -34,7 +36,7 @@ T=1024).
 ### Default for production
 
 ```python
-enable_compression(model, method="flashjolt", target_memory="33%")
+enable_compression(model, method="flash", target_memory="33%")
 ```
 
 That's 3×. Both GQA and MHA models stay in the free zone.
@@ -45,8 +47,8 @@ If you've confirmed your model is GQA (Mistral, Qwen2, Gemma2), you
 can push harder:
 
 ```python
-enable_compression(model, method="flashjolt", target_memory="20%")  # 5×
-enable_compression(model, method="flashjolt", target_memory="14%")  # 7×
+enable_compression(model, method="flash", target_memory="20%")  # 5×
+enable_compression(model, method="flash", target_memory="14%")  # 7×
 ```
 
 ### Stay in the free zone for MHA
@@ -54,7 +56,7 @@ enable_compression(model, method="flashjolt", target_memory="14%")  # 7×
 If your model is MHA (LLaMA-1/2, Phi-2), stay at 3× and below:
 
 ```python
-enable_compression(model, method="flashjolt", target_memory="33%")  # 3× max
+enable_compression(model, method="flash", target_memory="33%")  # 3× max
 ```
 
 ## FlashJoLT vs JoLT
@@ -84,7 +86,7 @@ The allocator can split the model into `layer_groups` independent
 groups, each with its own `(r_T, r_d, b)` decision:
 
 ```python
-enable_compression(model, method="flashjolt", target_memory="33%", layer_groups=4)
+enable_compression(model, method="flash", target_memory="33%", layer_groups=4)
 ```
 
 The paper's default is `layer_groups=1` and ablation A5 shows per-group
@@ -100,7 +102,7 @@ The allocator picks per-cell from the `bits` tuple. Default is
 
 ```python
 # Restrict to {0, 4} if your hardware doesn't support 2-bit ops efficiently.
-enable_compression(model, method="flashjolt", target_memory="33%", bits=(0, 4))
+enable_compression(model, method="flash", target_memory="33%", bits=(0, 4))
 ```
 
 The paper's bit-grid ablation (Table 3) shows quality saturates at
@@ -132,7 +134,7 @@ follows it via `DynamicCache.update`'s standard device-tracking.
 
 The HF adapter does not currently support tensor-parallel cache
 sharding — that's an open problem for vLLM-mode deployment. Use the
-vLLM adapter instead (see [research/paper_notes.md](research/paper_notes.md#vllm-integration)).
+vLLM adapter instead (see [research/paper_notes.md](../research/paper_notes.md#vllm-integration)).
 
 ## Decode-time cost
 
@@ -155,6 +157,7 @@ the decompression step. This is most helpful for short contexts.
     "decompress_calls": int,    # number of layer-read events
     "bytes_original": int,      # uncompressed bytes across all events
     "bytes_compressed": int,    # bytes in the compressed payloads
+    "bytes_resident": int,      # backing tensor-storage bytes
     "ratio": float,             # bytes_original / bytes_compressed
     "memory_saved_bytes": int,  # bytes_original - bytes_compressed
 }
@@ -172,9 +175,9 @@ loop to record the actual compression ratio achieved.
    route the in-flight reads to nowhere.
 
 3. **Don't use `jolt` for `T ≥ 8K` contexts.** The exact SVD becomes
-   the bottleneck. Use `flashjolt`.
+   the bottleneck. Use `flash`.
 
-4. **Don't expect `jolt` and `flashjolt` to be bit-identical at long
+4. **Don't expect `jolt` and `flash` to be bit-identical at long
    contexts.** FlashJoLT's sketch is non-deterministic across seed
    choices. The cap policy is deterministic, but the sketch matrix
    within the cap is not.
@@ -204,11 +207,11 @@ disabled via `prof._enabled = False` to remove the overhead entirely.
 
 ## What's next
 
-- [user/long_context.md](user/long_context.md) — needle-in-haystack
+- [user/long_context.md](long_context.md) — needle-in-haystack
   workflows
-- [research/free_zone.md](research/free_zone.md) — when the free
+- [research/free_zone.md](../research/free_zone.md) — when the free
   zone holds and when it doesn't
-- [research/reproduction_notes.md](research/reproduction_notes.md) —
+- [research/reproduction_notes.md](../research/reproduction_notes.md) —
   what we did and didn't reproduce
-- [benchmarks/overview.md](benchmarks/overview.md) — running
+- [benchmarks/overview.md](../benchmarks/overview.md) — running
   benchmarks on your model

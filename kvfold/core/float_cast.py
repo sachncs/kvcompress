@@ -32,17 +32,24 @@ class FloatCast(Compressor):
 
     def __init__(self, *, dtype: torch.dtype = torch.float16, **unused: Any) -> None:
         if dtype not in (torch.float16, torch.bfloat16):
-            raise ValueError(f"FloatCast.dtype must be torch.float16 or torch.bfloat16; got {dtype}")
+            raise ValueError(
+                f"FloatCast.dtype must be torch.float16 or torch.bfloat16; got {dtype}"
+            )
         if unused:
             from kvfold.errors import MethodConfigError
-            raise MethodConfigError("fp_cast", ",".join(sorted(unused.keys())), "unknown field(s); accepts only dtype")
+
+            raise MethodConfigError(
+                "fp_cast", ",".join(sorted(unused.keys())), "unknown field(s); accepts only dtype"
+            )
         self.dtype = dtype
 
     @classmethod
     def default_config(cls) -> Fp16Config:
+        """Return the default float16 casting configuration."""
         return Fp16Config()
 
     def compress(self, key: torch.Tensor, value: torch.Tensor) -> tuple[Payload, Payload]:
+        """Cast K and V to the configured 16-bit dtype."""
         Compressor.validate(key, value)
         kp = Payload(
             method="fp_cast",
@@ -68,7 +75,10 @@ class FloatCast(Compressor):
         )
         return kp, vp
 
-    def restore(self, key_payload: Payload, value_payload: Payload) -> tuple[torch.Tensor, torch.Tensor]:
+    def restore(
+        self, key_payload: Payload, value_payload: Payload
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Cast stored K and V payloads back to their recorded dtypes."""
         k = key_payload.data["value"].to(key_payload.dtype)
         v = value_payload.data["value"].to(value_payload.dtype)
         return k, v

@@ -18,7 +18,6 @@ from typer.testing import CliRunner
 from kvfold import __version__
 from kvfold.cli import app
 
-
 runner = CliRunner()
 
 
@@ -104,7 +103,7 @@ def test_validate_hf_smoke_test_branch(monkeypatch: pytest.MonkeyPatch) -> None:
             self.generation_config = mock.Mock()
             self.generation_config.cache_implementation = None
 
-        def eval(self) -> "_StubModel":
+        def eval(self) -> _StubModel:
             return self
 
         def generate(self, ids, **kwargs):
@@ -233,9 +232,8 @@ def test_benchmark_direct_exits_when_any_suite_fails() -> None:
 
     from kvfold.cli import benchmark as benchmark_fn
 
-    with mock.patch("kvfold.cli.run_subprocess", return_value=False):
-        with pytest.raises(TyperExit):
-            benchmark_fn(suite="all", output_dir=Path("/tmp"))
+    with mock.patch("kvfold.cli.run_subprocess", return_value=False), pytest.raises(TyperExit):
+        benchmark_fn(suite="all", output_dir=Path("/tmp"))
 
 
 def test_profile_direct_invokes_subprocess() -> None:
@@ -262,9 +260,9 @@ def test_profile_direct_invokes_subprocess() -> None:
 
 def test_compress_direct_requires_hf_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     """Direct compress() call surfaces a clean typer.Exit when transformers is missing."""
-    from kvfold.cli import compress as compress_fn
-
     import builtins
+
+    from kvfold.cli import compress as compress_fn
 
     real_import = builtins.__import__
 
@@ -296,7 +294,7 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
             self.generation_config = mock.Mock()
             self.generation_config.cache_implementation = None
 
-        def eval(self) -> "_StubModel":
+        def eval(self) -> _StubModel:
             return self
 
         def generate(self, ids, **kwargs):
@@ -307,8 +305,8 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
 
     def fake_autotokenizer(*args, **kwargs):
         tok = mock.Mock()
-        tok.encode = lambda text, **kw: torch.tensor([[1, 2, 3]])
-        tok.decode = lambda ids, **kw: "ok"
+        tok.encode = lambda text, **_kw: torch.tensor([[1, 2, 3]])
+        tok.decode = lambda ids, **_kw: "ok"
         return tok
 
     monkeypatch.setattr("transformers.AutoModelForCausalLM.from_pretrained", fake_automodel)
@@ -426,10 +424,10 @@ def test_compress_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
             self.generation_config = mock.Mock()
             self.generation_config.cache_implementation = None
 
-        def eval(self) -> "_StubModel":
+        def eval(self) -> _StubModel:
             return self
 
-        def generate(self, ids, **kwargs):  # noqa: ARG002
+        def generate(self, ids, **kwargs):
             return torch.cat([ids, ids.new_zeros((1, kwargs["max_new_tokens"]))], dim=1)
 
     def fake_automodel(*args, **kwargs):
@@ -437,8 +435,8 @@ def test_compress_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_autotokenizer(*args, **kwargs):
         tok = mock.Mock()
-        tok.encode = lambda text, **kw: torch.tensor([[1, 2, 3]])
-        tok.decode = lambda ids, **kw: "ok"
+        tok.encode = lambda text, **_kw: torch.tensor([[1, 2, 3]])
+        tok.decode = lambda ids, **_kw: "ok"
         return tok
 
     monkeypatch.setattr("transformers.AutoModelForCausalLM.from_pretrained", fake_automodel)

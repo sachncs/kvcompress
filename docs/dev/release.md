@@ -20,10 +20,12 @@ __version__ = "0.2.0"
 2. `ruff format --check kvfold tests examples scripts` — formatted.
 3. `mypy kvfold` — no errors.
 4. `pytest -m "not slow and not integration and not gpu"` — all pass.
-5. `pytest` (including integration) — all pass on a GPU box.
-6. `pytest --cov=kvfold --cov-report=term-missing` — coverage ≥ 90%.
-7. `kvfold validate` — runs cleanly.
-8. `scripts/reproduce_paper_numbers.sh` — JSON outputs land in `results/`.
+5. `uv run pytest -m integration` — all network integration tests pass.
+6. `uv run pytest -m gpu` — required before making CUDA/Triton claims, on a
+   documented GPU environment.
+7. `uv run pytest --cov=kvfold --cov-report=term-missing` — coverage ≥ 90%.
+8. `kvfold validate` — runs cleanly.
+9. `scripts/reproduce_paper_numbers.sh` — JSON outputs land in `results/`.
 
 ## Commit & tag
 
@@ -38,10 +40,22 @@ git push origin master --tags
 
 ## Publish to PyPI
 
+The GitHub release workflow uses PyPI trusted publishing. Configure the PyPI
+project's pending publisher for this repository and the protected `pypi`
+environment before enabling publication. Publishing is deliberately manual from
+the workflow dispatch input; building a tag does not publish automatically.
+
+For normal releases, use the protected GitHub Actions workflow: it builds and
+checks the artifacts, then only publishes when the `publish` workflow input is
+explicitly enabled. This keeps PyPI credentials out of developer machines.
+
+For an emergency local publication, use a short-lived PyPI token and verify the
+artifact before uploading:
+
 ```bash
-pip install build twine
-python -m build
-twine upload dist/*
+uv build
+uvx twine check dist/*
+uvx twine upload dist/*
 ```
 
 ## Post-release

@@ -22,6 +22,19 @@ Include:
 You can expect an initial acknowledgement within 72 hours. We'll work
 with you on a fix timeline and coordinate disclosure.
 
+## Data and telemetry boundary
+
+kvfold is a local library. It does not transmit model weights, prompts, KV
+cache tensors, generated text, or usage telemetry. Optional integration tests
+may download public models from Hugging Face, and users' own benchmark scripts
+may write tensors or outputs to paths they select. Treat those artifacts as
+potentially sensitive and do not attach them to public issues.
+
+Dependency vulnerabilities are scanned in CI with `pip-audit` and npm's
+production audit. Reports for upstream projects should be sent to their
+security channels as well as optionally notifying this project when the
+affected dependency is in kvfold's supported runtime range.
+
 ## Out-of-scope
 
 - Issues in upstream dependencies (transformers, torch, vLLM). File

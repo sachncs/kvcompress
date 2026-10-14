@@ -13,7 +13,7 @@ Fixtures:
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import pytest
 import torch
@@ -29,6 +29,7 @@ def deterministic_seed() -> int:
 
 @pytest.fixture
 def tiny_kv(deterministic_seed: int) -> tuple[torch.Tensor, torch.Tensor]:
+    assert deterministic_seed == 0
     k = torch.randn(8, 64, 32)
     v = torch.randn(8, 64, 32)
     return k, v
@@ -36,6 +37,7 @@ def tiny_kv(deterministic_seed: int) -> tuple[torch.Tensor, torch.Tensor]:
 
 @pytest.fixture
 def medium_kv(deterministic_seed: int) -> tuple[torch.Tensor, torch.Tensor]:
+    assert deterministic_seed == 0
     k = torch.randn(8, 256, 64)
     v = torch.randn(8, 256, 64)
     return k, v
@@ -43,6 +45,7 @@ def medium_kv(deterministic_seed: int) -> tuple[torch.Tensor, torch.Tensor]:
 
 @pytest.fixture
 def large_kv(deterministic_seed: int) -> tuple[torch.Tensor, torch.Tensor]:
+    assert deterministic_seed == 0
     k = torch.randn(8, 1024, 128)
     v = torch.randn(8, 1024, 128)
     return k, v
@@ -50,7 +53,11 @@ def large_kv(deterministic_seed: int) -> tuple[torch.Tensor, torch.Tensor]:
 
 @pytest.fixture
 def kv_factory(deterministic_seed: int) -> Callable[..., tuple[torch.Tensor, torch.Tensor]]:
-    def make(heads: int = 8, length: int = 256, head_dim: int = 64) -> tuple[torch.Tensor, torch.Tensor]:
+    assert deterministic_seed == 0
+
+    def make(
+        heads: int = 8, length: int = 256, head_dim: int = 64
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         k = torch.randn(heads, length, head_dim)
         v = torch.randn(heads, length, head_dim)
         return k, v

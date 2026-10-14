@@ -71,8 +71,6 @@ KernelNotAvailableError
 
 from __future__ import annotations
 
-from typing import Final
-
 
 class KVCompressError(Exception):
     """Base class for every error raised by kvfold."""
@@ -97,13 +95,13 @@ class KVCompressError(Exception):
 class CacheError(KVCompressError):
     """Cache storage failures."""
 
-    code: Final[str] = "cache_error"
+    code: str = "cache_error"
 
 
 class CacheValidationError(CacheError):
     """Payload shape or dtype does not match the cache contract on put."""
 
-    code: Final[str] = "cache_validation_error"
+    code: str = "cache_validation_error"
 
     def __init__(self, layer: int, expected: tuple[int, ...], actual: tuple[int, ...]) -> None:
         super().__init__(
@@ -118,17 +116,23 @@ class CacheValidationError(CacheError):
 class CacheMissingLayerError(CacheError):
     """Requested layer is not present in the cache."""
 
-    code: Final[str] = "cache_missing_layer_error"
+    code: str = "cache_missing_layer_error"
 
     def __init__(self, layer: int) -> None:
         super().__init__(f"layer {layer} not present in cache")
         self.layer = layer
 
 
+class SerializationError(KVCompressError):
+    """Serialized cache data is missing, malformed, or incompatible."""
+
+    code: str = "serialization_error"
+
+
 class CacheShapeError(CacheError):
     """Per-layer shape contract violated."""
 
-    code: Final[str] = "cache_shape_error"
+    code: str = "cache_shape_error"
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
         super().__init__(message, hint=hint)
@@ -137,13 +141,13 @@ class CacheShapeError(CacheError):
 class AllocatorError(KVCompressError):
     """Byte-budget allocation failures."""
 
-    code: Final[str] = "allocator_error"
+    code: str = "allocator_error"
 
 
 class AllocatorNoFeasibleError(AllocatorError):
     """Candidate grid is too coarse for the requested compression ratio."""
 
-    code: Final[str] = "allocator_no_feasible_error"
+    code: str = "allocator_no_feasible_error"
 
     def __init__(self, target_ratio: float, achieved_ratio: float) -> None:
         super().__init__(
@@ -157,7 +161,7 @@ class AllocatorNoFeasibleError(AllocatorError):
 class AllocatorInvalidTargetError(AllocatorError):
     """Target ratio is outside the supported range."""
 
-    code: Final[str] = "allocator_invalid_target_error"
+    code: str = "allocator_invalid_target_error"
 
     def __init__(self, target_ratio: float, *, minimum: float = 1.0) -> None:
         super().__init__(
@@ -171,13 +175,19 @@ class AllocatorInvalidTargetError(AllocatorError):
 class VLLMError(KVCompressError):
     """vLLM integration failures."""
 
-    code: Final[str] = "vllm_error"
+    code: str = "vllm_error"
+
+
+class TransformersCompatibilityError(KVCompressError):
+    """Installed Transformers does not expose kvfold's required cache API."""
+
+    code: str = "transformers_compatibility_error"
 
 
 class VLLMNotAvailableError(VLLMError):
     """vLLM is not importable in the current environment."""
 
-    code: Final[str] = "vllm_not_available_error"
+    code: str = "vllm_not_available_error"
 
     def __init__(self) -> None:
         super().__init__(
@@ -189,7 +199,7 @@ class VLLMNotAvailableError(VLLMError):
 class VLLMAPIDriftError(VLLMError):
     """Installed vLLM does not expose the expected API surface."""
 
-    code: Final[str] = "vllm_api_drift_error"
+    code: str = "vllm_api_drift_error"
 
     def __init__(self, missing: str) -> None:
         super().__init__(
@@ -202,13 +212,13 @@ class VLLMAPIDriftError(VLLMError):
 class MethodError(KVCompressError):
     """Compressor-method dispatch failures."""
 
-    code: Final[str] = "method_error"
+    code: str = "method_error"
 
 
 class UnsupportedMethodError(MethodError):
     """Requested compression method is not registered."""
 
-    code: Final[str] = "unsupported_method_error"
+    code: str = "unsupported_method_error"
 
     def __init__(self, method: str, supported: tuple[str, ...]) -> None:
         super().__init__(
@@ -222,7 +232,7 @@ class UnsupportedMethodError(MethodError):
 class MethodConfigError(MethodError):
     """Method configuration is invalid."""
 
-    code: Final[str] = "method_config_error"
+    code: str = "method_config_error"
 
     def __init__(self, method: str, field: str, message: str) -> None:
         super().__init__(
@@ -237,7 +247,7 @@ class MethodConfigError(MethodError):
 class ShapeError(KVCompressError):
     """Tensor shape contract violated."""
 
-    code: Final[str] = "shape_error"
+    code: str = "shape_error"
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
         super().__init__(message, hint=hint)
@@ -246,7 +256,7 @@ class ShapeError(KVCompressError):
 class DTypeError(KVCompressError):
     """Tensor dtype is not supported in this context."""
 
-    code: Final[str] = "dtype_error"
+    code: str = "dtype_error"
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
         super().__init__(message, hint=hint)
@@ -255,7 +265,7 @@ class DTypeError(KVCompressError):
 class DeviceError(KVCompressError):
     """Tensor device is not supported in this context."""
 
-    code: Final[str] = "device_error"
+    code: str = "device_error"
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
         super().__init__(message, hint=hint)
@@ -264,13 +274,13 @@ class DeviceError(KVCompressError):
 class KernelError(KVCompressError):
     """Acceleration kernel failures."""
 
-    code: Final[str] = "kernel_error"
+    code: str = "kernel_error"
 
 
 class KernelNotAvailableError(KernelError):
     """Requested kernel backend is not available in this environment."""
 
-    code: Final[str] = "kernel_not_available_error"
+    code: str = "kernel_not_available_error"
 
     def __init__(self, backend: str, required: str) -> None:
         super().__init__(

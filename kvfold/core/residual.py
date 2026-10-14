@@ -29,10 +29,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 
-from kvfold.core.jl import Distribution, CACHE
+from kvfold.core.jl import CACHE, Distribution
 from kvfold.core.quant import (
     dequantize_tensor,
     quantize_tensor,
@@ -127,7 +128,7 @@ class Residual:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Residual":
+    def from_dict(cls, d: dict[str, Any]) -> Residual:
         """Inverse of :meth:`to_dict`. Recovers a payload from a dict.
 
         Raises:

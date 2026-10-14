@@ -33,9 +33,9 @@ __all__ = [
     "CACHE",
     "Distribution",
     "Gaussian",
-    "Projector",
     "Projection",
     "ProjectionCache",
+    "Projector",
     "Rademacher",
     "Sparse",
 ]
@@ -63,10 +63,12 @@ class Projection:
 
     @property
     def device(self) -> torch.device:
+        """Return the device holding the projection matrix."""
         return self.matrix.device
 
     @property
     def dtype(self) -> torch.dtype:
+        """Return the dtype of the projection matrix."""
         return self.matrix.dtype
 
     def apply(self, x: torch.Tensor) -> torch.Tensor:
@@ -96,7 +98,17 @@ class Projector(ABC):
     distribution: Distribution
 
     @abstractmethod
-    def build(self, out_dim: int, in_dim: int, *, seed: int, device: torch.device | str, dtype: torch.dtype) -> Projection: ...
+    def build(
+        self,
+        out_dim: int,
+        in_dim: int,
+        *,
+        seed: int,
+        device: torch.device | str,
+        dtype: torch.dtype,
+    ) -> Projection:
+        """Build a projection matrix for the requested dimensions."""
+        raise NotImplementedError
 
 
 class Gaussian(Projector):
@@ -104,11 +116,24 @@ class Gaussian(Projector):
 
     distribution: Distribution = "gaussian"
 
-    def build(self, out_dim: int, in_dim: int, *, seed: int, device: torch.device | str, dtype: torch.dtype) -> Projection:
+    def build(
+        self,
+        out_dim: int,
+        in_dim: int,
+        *,
+        seed: int,
+        device: torch.device | str,
+        dtype: torch.dtype,
+    ) -> Projection:
+        """Build one deterministic projection for the requested dimensions."""
         gen = torch.Generator(device="cpu")
         gen.manual_seed(int(seed))
-        matrix = torch.randn(int(out_dim), int(in_dim), generator=gen, dtype=torch.float32) / (in_dim ** 0.5)
-        return Projection(matrix=matrix.to(device=device, dtype=dtype), distribution="gaussian", seed=int(seed))
+        matrix = torch.randn(int(out_dim), int(in_dim), generator=gen, dtype=torch.float32) / (
+            in_dim**0.5
+        )
+        return Projection(
+            matrix=matrix.to(device=device, dtype=dtype), distribution="gaussian", seed=int(seed)
+        )
 
 
 class Rademacher(Projector):
@@ -116,13 +141,26 @@ class Rademacher(Projector):
 
     distribution: Distribution = "rademacher"
 
-    def build(self, out_dim: int, in_dim: int, *, seed: int, device: torch.device | str, dtype: torch.dtype) -> Projection:
+    def build(
+        self,
+        out_dim: int,
+        in_dim: int,
+        *,
+        seed: int,
+        device: torch.device | str,
+        dtype: torch.dtype,
+    ) -> Projection:
+        """Build one deterministic Rademacher projection."""
         gen = torch.Generator(device="cpu")
         gen.manual_seed(int(seed))
-        sign_matrix = (torch.randint(0, 2, (int(out_dim), int(in_dim)), generator=gen) * 2 - 1).to(torch.float32)
-        scale = 1.0 / (in_dim ** 0.5)
+        sign_matrix = (torch.randint(0, 2, (int(out_dim), int(in_dim)), generator=gen) * 2 - 1).to(
+            torch.float32
+        )
+        scale = 1.0 / (in_dim**0.5)
         matrix = sign_matrix * scale
-        return Projection(matrix=matrix.to(device=device, dtype=dtype), distribution="rademacher", seed=int(seed))
+        return Projection(
+            matrix=matrix.to(device=device, dtype=dtype), distribution="rademacher", seed=int(seed)
+        )
 
 
 class Sparse(Projector):
@@ -135,26 +173,37 @@ class Sparse(Projector):
             raise ValueError(f"sparsity must be in (0, 1]; got {sparsity}")
         self.sparsity = float(sparsity)
 
-    def build(self, out_dim: int, in_dim: int, *, seed: int, device: torch.device | str, dtype: torch.dtype) -> Projection:
+    def build(
+        self,
+        out_dim: int,
+        in_dim: int,
+        *,
+        seed: int,
+        device: torch.device | str,
+        dtype: torch.dtype,
+    ) -> Projection:
+        """Build one deterministic sparse projection."""
         gen = torch.Generator(device="cpu")
         gen.manual_seed(int(seed))
         matrix = torch.zeros(int(out_dim), int(in_dim), dtype=torch.float32)
-        n_per_col = max(1, int(round(self.sparsity * in_dim)))
-        scale = (1.0 / (n_per_col ** 0.5)) / (in_dim ** 0.5) ** 0  # JL Achlioptas factor
+        n_per_col = max(1, round(self.sparsity * in_dim))
+        scale = (1.0 / (n_per_col**0.5)) / (in_dim**0.5) ** 0  # JL Achlioptas factor
         for col in range(int(in_dim)):
             rows = torch.randperm(int(out_dim), generator=gen)[:n_per_col]
             signs = (torch.randint(0, 2, (n_per_col,), generator=gen) * 2 - 1).to(torch.float32)
             matrix[rows, col] = signs
         matrix = matrix * scale
-        return Projection(matrix=matrix.to(device=device, dtype=dtype), distribution="sparse", seed=int(seed))
+        return Projection(
+            matrix=matrix.to(device=device, dtype=dtype), distribution="sparse", seed=int(seed)
+        )
 
 
 class ProjectionCache:
     """Memoise :class:`Projection` matrices by (shape, distribution, seed, device, dtype)."""
 
     def __init__(self) -> None:
-        self.cache: dict[tuple[int, int, str, int, str, torch.dtype], Projection] = {}
-        self.lock = threading.Lock()
+        self._cache: dict[tuple[int, int, str, int, str, torch.dtype], Projection] = {}
+        self._lock = threading.Lock()
 
     def get_or_build(
         self,
@@ -167,10 +216,11 @@ class ProjectionCache:
         dtype: torch.dtype,
         projector: Projector | None = None,
     ) -> Projection:
+        """Return a cached projection or construct and cache one."""
         device_key = str(torch.device(device))
         key = (int(out_dim), int(in_dim), distribution, int(seed), device_key, dtype)
-        with self.lock:
-            existing = self.cache.get(key)
+        with self._lock:
+            existing = self._cache.get(key)
             if existing is not None:
                 return existing
             if projector is None:
@@ -183,15 +233,17 @@ class ProjectionCache:
                 else:
                     raise ValueError(f"unknown distribution {distribution!r}")
             projection = projector.build(out_dim, in_dim, seed=seed, device=device, dtype=dtype)
-            self.cache[key] = projection
+            self._cache[key] = projection
             return projection
 
     def info(self) -> dict[str, int]:
-        return {"size": len(self.cache), "max_size": len(self.cache)}
+        """Return the number of cached projections."""
+        return {"size": len(self._cache), "max_size": len(self._cache)}
 
     def clear(self) -> None:
-        with self.lock:
-            self.cache.clear()
+        """Remove all cached projection matrices."""
+        with self._lock:
+            self._cache.clear()
 
 
 CACHE: ProjectionCache = ProjectionCache()
@@ -201,10 +253,9 @@ __all__ = [
     "CACHE",
     "Distribution",
     "Gaussian",
-    "Projector",
     "Projection",
     "ProjectionCache",
+    "Projector",
     "Rademacher",
     "Sparse",
 ]
-

@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import logging
 import math
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 __all__ = [
     "Allocator",
@@ -105,30 +106,31 @@ class Pick:
         """``(r_token, r_feature, bits)`` triple — convenient for dict keys."""
         return (self.r_token, self.r_feature, self.bits)
 
-from abc import ABC, abstractmethod
-from typing import Sequence, Type
-
 
 class Allocator(ABC):
     """Strategy for byte-budget allocation across (layer group, K/V) cells."""
 
     @abstractmethod
-    def optimize(self, cells: Sequence[Cell]) -> "Plan": ...
+    def optimize(self, cells: Sequence[Cell]) -> Plan:
+        """Choose an allocation for each candidate cell."""
+        raise NotImplementedError
 
 
 class AllocatorRegistry:
     """Registry of :class:`Allocator` strategies."""
 
     def __init__(self) -> None:
-        self.entries: dict[str, Type[Allocator]] = {}
+        self.entries: dict[str, type[Allocator]] = {}
 
-    def register(self, name: str, cls: Type[Allocator]) -> Type[Allocator]:
+    def register(self, name: str, cls: type[Allocator]) -> type[Allocator]:
+        """Register an allocator class under ``name``."""
         if not issubclass(cls, Allocator):
             raise TypeError(f"{cls.__name__} must inherit from Allocator")
         self.entries[name] = cls
         return cls
 
-    def resolve(self, name: str) -> Type[Allocator]:
+    def resolve(self, name: str) -> type[Allocator]:
+        """Return the allocator class registered under ``name``."""
         try:
             return self.entries[name]
         except KeyError:
@@ -159,6 +161,7 @@ class Plan:
         and ``total_bytes <= target_bytes * (1 + tolerance)``.
         """
         from kvfold.errors import AllocatorNoFeasibleError
+
         if self.target_ratio > 1.0 and self.achieved_ratio < self.target_ratio * (1.0 - tolerance):
             raise AllocatorNoFeasibleError(
                 target_ratio=self.target_ratio,
@@ -259,7 +262,7 @@ class Bisect(Allocator):
 
         if original_bytes is None:
             original_bytes = sum(bytes_original(c.shape, self.element_size_bytes) for c in cells)
-        target_bytes = max(1, int(round(original_bytes / self.target_ratio)))
+        target_bytes = max(1, round(original_bytes / self.target_ratio))
 
         # Per-cell candidate grid: (rT, rd, b).
         per_cell_grid: list[list[Pick]] = []
@@ -297,7 +300,7 @@ class Bisect(Allocator):
             candidates.append((score, total, cand, lam))
 
         candidates.sort(key=lambda c: c[0])
-        _, best_total, best_cand, best_lam = candidates[0]
+        _, _best_total, best_cand, best_lam = candidates[0]
 
         # Refine with bisection around the closest candidate.
         lo = best_lam / 10 if best_lam > 0 else 1e-12
@@ -391,10 +394,10 @@ class Bisect(Allocator):
             candidate_rt = candidate_token_ranks(rt_max)
 
         grid: list[Pick] = []
-        for rt in candidate_rt:
-            for rd in candidate_rd:
-                rt = min(rt, t)
-                rd = min(rd, d)
+        for candidate_token_rank in candidate_rt:
+            for candidate_feature_rank in candidate_rd:
+                rt = min(candidate_token_rank, t)
+                rd = min(candidate_feature_rank, d)
                 # Cost in scalars: tucker core + tucker bases.
                 tucker_scalars = m * rt * rd + t * rt + d * rd
                 tucker_bytes = tucker_scalars * c_bytes
@@ -449,7 +452,7 @@ class Bisect(Allocator):
                 pass
         rt_frac = 1.0 - rt / max(t, 1)
         rd_frac = 1.0 - rd / max(d, 1)
-        return max(0.0, max(rt_frac, rd_frac))
+        return max(0.0, rt_frac, rd_frac)
 
     def argmin_per_cell(
         self,
@@ -564,7 +567,7 @@ class Greedy(Allocator):
                 target_ratio=self.target_ratio,
             )
         original = sum(bytes_original(c.shape, self.element_size_bytes) for c in cells)
-        target = max(1, int(round(original / self.target_ratio)))
+        target = max(1, round(original / self.target_ratio))
         # Initial: largest rank, no bits.
         current: list[Pick] = []
         for cell in cells:

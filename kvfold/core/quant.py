@@ -42,7 +42,6 @@ from typing import Literal, Protocol
 import torch
 
 __all__ = [
-    "FloatCast",
     "IntQuant",
     "QuantDType",
     "Quantizer",
@@ -73,7 +72,9 @@ class Quantizer(Protocol):
         *,
         scale: torch.Tensor | None = None,
         zero_point: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]: ...
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Quantize ``x`` and return values, scale, and zero point."""
+        ...
 
     def dequantize(
         self,
@@ -83,7 +84,9 @@ class Quantizer(Protocol):
         *,
         original_last: int | None = None,
         output_dtype: torch.dtype | None = None,
-    ) -> torch.Tensor: ...
+    ) -> torch.Tensor:
+        """Reconstruct a tensor from quantized values and calibration state."""
+        ...
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +309,7 @@ class IntQuant:
 
     @property
     def name(self) -> str:
+        """Return the registered integer quantizer name."""
         return f"int{self.bits}"
 
     def quantize(
@@ -346,7 +350,7 @@ class IntQuant:
             last = x.shape[-1]
             n_groups = last // self.group_size
             x_grouped = x.reshape(*x.shape[:-1], n_groups, self.group_size)
-            view_shape = list(scale.shape) + [1]
+            view_shape = [*list(scale.shape), 1]
             scaled = x_grouped / scale.view(view_shape) + zero_point.view(view_shape)
             scaled = scaled.reshape(*x.shape)
         else:
@@ -399,7 +403,7 @@ class IntQuant:
             last = q_int.shape[-1]
             n_groups = last // self.group_size
             q_grouped = q_int.reshape(*q_int.shape[:-1], n_groups, self.group_size)
-            view_shape = list(scale.shape) + [1]
+            view_shape = [*list(scale.shape), 1]
             x_hat = (q_grouped - zero_point.view(view_shape)) * scale.view(view_shape)
             x_hat = x_hat.reshape(*q_int.shape)
         else:
@@ -503,7 +507,7 @@ def get_quantizer(
 
 def get_or_create(key: str, factory) -> Quantizer:
     """Get a cached quantizer or build + cache one."""
-    # Ponytail: registry is global module state; ``threading.Lock`` keeps
+    # The registry is global module state; ``threading.Lock`` keeps
     # concurrent HF serve workers from building two copies of the same
     # quantizer. Cheap and bounded; the inner factory is pure.
     with QUANTIZER_REGISTRY_LOCK:

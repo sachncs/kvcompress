@@ -9,6 +9,9 @@ to keep it healthy.
 - [Architecture](architecture.md) — module map and data flow.
 - [Style](style.md) — ruff, mypy, docstrings.
 - [Testing](testing.md) — unit / integration / property.
+- [Compatibility](compatibility.md) — declared ranges and verified surfaces.
+- [Reproducibility](reproducibility.md) — seeds, devices, and benchmark provenance.
+- [Errors](errors.md) — typed failures and recovery policy.
 - [Adding a compressor](adding_a_compressor.md)
 - [Adding an adapter](adding_an_adapter.md)
 - [Release process](release.md) — versioning, changelog.

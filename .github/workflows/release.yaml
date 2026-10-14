@@ -1,0 +1,65 @@
+name: release-artifacts
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the validated wheel and sdist to PyPI
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  package:
+    name: build and validate package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Build distribution
+        run: uv build
+      - name: Validate distribution metadata
+        run: |
+          uvx twine check dist/*
+          python -m venv /tmp/kvfold-release-smoke
+          /tmp/kvfold-release-smoke/bin/python -m pip install dist/*.whl
+          /tmp/kvfold-release-smoke/bin/python -c "import kvfold; print(kvfold.__version__)"
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kvfold-release-${{ github.ref_name }}
+          path: dist/*
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+
+  publish:
+    name: publish to PyPI
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/kvfold
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kvfold-release-${{ github.ref_name }}
+          path: dist
+      - name: Publish with trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

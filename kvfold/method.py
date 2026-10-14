@@ -7,17 +7,34 @@ method names. The module also exposes helpers for family classification
 
 from __future__ import annotations
 
-from typing import Final, Literal, TypeGuard
-
+from typing import Final, Literal, TypeAlias
 
 Method: TypeAlias = Literal[
-    "jolt", "flash", "low", "int2", "int4", "int8", "fp8", "fp16", "bf16", "pass",
+    "jolt",
+    "flash",
+    "low",
+    "int2",
+    "int4",
+    "int8",
+    "fp8",
+    "fp16",
+    "bf16",
+    "pass",
 ]
 """Canonical compression-method names accepted by the dispatcher."""
 
 
 METHODS: Final[tuple[Method, ...]] = (
-    "jolt", "flash", "low", "int2", "int4", "int8", "fp8", "fp16", "bf16", "pass",
+    "jolt",
+    "flash",
+    "low",
+    "int2",
+    "int4",
+    "int8",
+    "fp8",
+    "fp16",
+    "bf16",
+    "pass",
 )
 """Tuple of every supported method name in insertion order."""
 
@@ -97,17 +114,17 @@ def normalise(name: str) -> Method:
 
 
 __all__ = [
-    "Method",
-    "METHODS",
-    "QUANT_METHODS",
-    "LOW_METHODS",
     "DTYPE_METHODS",
+    "LOW_METHODS",
+    "METHODS",
     "PASSTHROUGH_METHODS",
+    "QUANT_METHODS",
+    "Method",
     "family",
-    "is_quant",
-    "is_low",
     "is_dtype_only",
+    "is_low",
     "is_passthrough",
-    "requires_gpu",
+    "is_quant",
     "normalise",
+    "requires_gpu",
 ]

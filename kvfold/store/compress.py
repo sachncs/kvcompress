@@ -32,25 +32,25 @@ Lifecycle:
 4. Eviction is LRU when ``max_layers`` is set; otherwise the cache grows
    unbounded.
 
-Thread-safety: not thread-safe. Single-inference workloads (one
-generation loop) are fine; concurrent generations on the same cache
-require external synchronisation.
+Thread-safety: public operations are serialized by an internal re-entrant
+lock. Compression and reconstruction remain CPU/GPU work, so independent
+cache instances are preferred for high-throughput concurrent generations.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from collections import OrderedDict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-
-from kvfold.errors import CacheMissingLayerError
 from typing import Any
 
 import torch
 
-from kvfold.store.metadata import Meta, LayerMeta
-from kvfold.core.base import Payload, Compressor
+from kvfold.core.base import Compressor, Payload
+from kvfold.errors import CacheMissingLayerError
+from kvfold.store.metadata import LayerMeta, Meta
 
 __all__ = ["Cache", "LayerEntry", "normalize_kv", "payload_to_meta"]
 
@@ -120,6 +120,7 @@ class Cache:
         self.max_layers = max_layers
         self.device = torch.device(device) if device is not None else None
         self.entries: OrderedDict[int, LayerEntry] = OrderedDict()
+        self._lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # Read / write
@@ -149,18 +150,20 @@ class Cache:
             bits: residual bit-widths to consider.
             seed: per-layer seed.
         """
-        k, v = normalize_kv(key, value)
-        k_payload, v_payload = self.compressor.compress(k, v)
-        entry = LayerEntry(layer=layer, key=k_payload, value=v_payload)
-        self.entries[layer] = entry
-        self.entries.move_to_end(layer)
-        self.metadata_.add_layer(
-            payload_to_meta(layer, "key", k, k_payload, seed, group_id, group_size)
-        )
-        self.metadata_.add_layer(
-            payload_to_meta(layer, "value", v, v_payload, seed, group_id, group_size)
-        )
-        self.enforce_eviction()
+        with self._lock:
+            k, v = normalize_kv(key, value)
+            k_payload, v_payload = self.compressor.compress(k, v)
+            # Prepare all derived state before mutating either the payload map or
+            # metadata. A malformed compressor result must not leave a half-written
+            # layer behind.
+            k_meta = payload_to_meta(layer, "key", k, k_payload, seed, group_id, group_size)
+            v_meta = payload_to_meta(layer, "value", v, v_payload, seed, group_id, group_size)
+            entry = LayerEntry(layer=layer, key=k_payload, value=v_payload)
+            self.entries[layer] = entry
+            self.entries.move_to_end(layer)
+            self.metadata_.add_layer(k_meta)
+            self.metadata_.add_layer(v_meta)
+            self.enforce_eviction()
 
     def retrieve(
         self,
@@ -171,16 +174,19 @@ class Cache:
         Raises:
             KeyError: if ``layer`` isn't in the cache or isn't fully populated.
         """
-        entry = self.entries.get(layer)
-        if entry is None:
-            raise KeyError(f"layer {layer} not in cache")
-        if entry.key is None or entry.value is None:
-            raise KeyError(f"layer {layer} is not fully populated")
-        k, v = self.compressor.restore(entry.key, entry.value)
-        if self.device is not None:
-            k = k.to(self.device)
-            v = v.to(self.device)
-        return k, v
+        with self._lock:
+            entry = self.entries.get(layer)
+            if entry is None:
+                raise KeyError(f"layer {layer} not in cache")
+            if entry.key is None or entry.value is None:
+                raise KeyError(f"layer {layer} is not fully populated")
+            # Retrieval is a cache hit: keep the entry hot for LRU eviction.
+            self.entries.move_to_end(layer)
+            k, v = self.compressor.restore(entry.key, entry.value)
+            if self.device is not None:
+                k = k.to(self.device)
+                v = v.to(self.device)
+            return k, v
 
     def payload(
         self,
@@ -193,31 +199,38 @@ class Cache:
             ValueError: if ``kind`` isn't ``"key"`` or ``"value"``.
             IndexError: if ``layer`` isn't in the cache.
         """
-        entry = self.entries[layer]
-        if kind == "key":
-            payload = entry.key
-        elif kind == "value":
-            payload = entry.value
-        else:
-            raise ValueError(f"kind must be 'key' or 'value', got {kind!r}")
-        if payload is None:
-            raise CacheMissingLayerError(layer=layer)
-        return payload
+        with self._lock:
+            entry = self.entries[layer]
+            if kind == "key":
+                payload = entry.key
+            elif kind == "value":
+                payload = entry.value
+            else:
+                raise ValueError(f"kind must be 'key' or 'value', got {kind!r}")
+            if payload is None:
+                raise CacheMissingLayerError(layer=layer)
+            return payload
 
     def has_layer(self, layer: int) -> bool:
         """Return ``True`` if the cache has an entry for ``layer``."""
-        return layer in self.entries
+        with self._lock:
+            return layer in self.entries
 
     def clear(self) -> None:
         """Drop every entry and reset the metadata layer list and index."""
-        self.entries.clear()
-        self.metadata_.layers.clear()
-        self.metadata_.index.clear()
+        with self._lock:
+            self.entries.clear()
+            self.metadata_.layers.clear()
+            self.metadata_.index.clear()
 
     def evict_layer(self, layer: int) -> None:
         """Remove the entry for ``layer`` if present; no-op otherwise."""
-        self.entries.pop(layer, None)
-        self.metadata_.layers = [entry for entry in self.metadata_.layers if entry.layer != layer]
+        with self._lock:
+            self.entries.pop(layer, None)
+            self.metadata_.layers = [
+                entry for entry in self.metadata_.layers if entry.layer != layer
+            ]
+            self.metadata_.rebuild_index()
 
     # ------------------------------------------------------------------
     # Memory accounting
@@ -225,11 +238,18 @@ class Cache:
 
     def memory_used(self) -> int:
         """Bytes occupied by all stored factors + residuals."""
-        return sum(p.bytes_compressed for p in self.all_payloads())
+        with self._lock:
+            return sum(p.bytes_compressed for p in self.all_payloads())
+
+    def memory_resident(self) -> int:
+        """Backing tensor-storage bytes, counting shared storage once per payload."""
+        with self._lock:
+            return sum(p.bytes_resident for p in self.all_payloads())
 
     def memory_original(self) -> int:
         """Sum of ``bytes_original`` across all stored payloads."""
-        return sum(p.bytes_original for p in self.all_payloads())
+        with self._lock:
+            return sum(p.bytes_original for p in self.all_payloads())
 
     def compression_ratio(self) -> float:
         """Achieved compression ratio across all stored payloads.
@@ -248,17 +268,22 @@ class Cache:
             Dictionary with keys ``n_layers``, ``bytes_original``,
             ``bytes_compressed``, ``compression_ratio``, ``method``.
         """
-        return {
-            "n_layers": len(self.entries),
-            "bytes_original": self.memory_original(),
-            "bytes_compressed": self.memory_used(),
-            "compression_ratio": self.compression_ratio(),
-            "method": self.compressor.name,
-        }
+        with self._lock:
+            original = self.memory_original()
+            compressed = self.memory_used()
+            return {
+                "n_layers": len(self.entries),
+                "bytes_original": original,
+                "bytes_compressed": compressed,
+                "bytes_resident": self.memory_resident(),
+                "compression_ratio": original / compressed if compressed else 1.0,
+                "method": self.compressor.name,
+            }
 
     def metadata(self) -> Meta:
-        """Return the live :class:`Meta` (mutated in place)."""
-        return self.metadata_
+        """Return an independent :class:`Meta` snapshot."""
+        with self._lock:
+            return self.metadata_.snapshot()
 
     # ------------------------------------------------------------------
     # Iteration
@@ -266,15 +291,18 @@ class Cache:
 
     def layers(self) -> Iterator[int]:
         """Iterate over live layer indices in insertion order."""
-        return iter(list(self.entries.keys()))
+        with self._lock:
+            return iter(list(self.entries.keys()))
 
     def __len__(self) -> int:
         """Number of layers currently stored."""
-        return len(self.entries)
+        with self._lock:
+            return len(self.entries)
 
     def __contains__(self, layer: int) -> bool:
         """``layer in cache`` is ``True`` when the layer has an entry."""
-        return layer in self.entries
+        with self._lock:
+            return layer in self.entries
 
     # ------------------------------------------------------------------
     # Internal
@@ -282,13 +310,14 @@ class Cache:
 
     def all_payloads(self) -> list[Payload]:
         """Flatten K and V payloads across all live entries."""
-        out: list[Payload] = []
-        for e in self.entries.values():
-            if e.key is not None:
-                out.append(e.key)
-            if e.value is not None:
-                out.append(e.value)
-        return out
+        with self._lock:
+            out: list[Payload] = []
+            for e in self.entries.values():
+                if e.key is not None:
+                    out.append(e.key)
+                if e.value is not None:
+                    out.append(e.value)
+            return out
 
     def enforce_eviction(self) -> None:
         """Drop the oldest entries until the cache fits under ``max_layers``.
@@ -297,14 +326,16 @@ class Cache:
         least-recently-stored layer is evicted first. The matching
         metadata entries are removed in the same pass.
         """
-        if self.max_layers is None:
-            return
-        while len(self.entries) > self.max_layers:
-            evicted_layer, _ = self.entries.popitem(last=False)
-            log.debug("evicted layer %d (cache cap %d)", evicted_layer, self.max_layers)
-            self.metadata_.layers = [
-                entry for entry in self.metadata_.layers if entry.layer != evicted_layer
-            ]
+        with self._lock:
+            if self.max_layers is None:
+                return
+            while len(self.entries) > self.max_layers:
+                evicted_layer, _ = self.entries.popitem(last=False)
+                log.debug("evicted layer %d (cache cap %d)", evicted_layer, self.max_layers)
+                self.metadata_.layers = [
+                    entry for entry in self.metadata_.layers if entry.layer != evicted_layer
+                ]
+                self.metadata_.rebuild_index()
 
 
 # ---------------------------------------------------------------------------

@@ -65,6 +65,7 @@ def test_reconstruct_shape() -> None:
 def test_non_2d_raises() -> None:
     decomposer = Exact()
     from kvfold.errors import ShapeError
+
     with pytest.raises(ShapeError):
         decomposer.decompose(torch.randn(3, 4, 5), rank=5)
 

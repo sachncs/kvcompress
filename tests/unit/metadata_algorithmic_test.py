@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 
 from kvfold.store.metadata import (
-    Meta,
     LayerMeta,
+    Meta,
 )
 
 
@@ -46,9 +46,7 @@ def test_layer_compression_to_from_dict_roundtrip() -> None:
 
 
 def test_layer_compression_shape_property() -> None:
-    lc = LayerMeta(
-        layer=0, kind="key", m=4, tokens=128, dh=64, r_token=8, r_feature=4, bits=0
-    )
+    lc = LayerMeta(layer=0, kind="key", m=4, tokens=128, dh=64, r_token=8, r_feature=4, bits=0)
     assert lc.shape == (4, 128, 64)
 
 
@@ -87,9 +85,7 @@ def test_compression_metadata_layer_lookup() -> None:
         LayerMeta(layer=0, kind="key", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0)
     )
     meta.add_layer(
-        LayerMeta(
-            layer=0, kind="value", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0
-        )
+        LayerMeta(layer=0, kind="value", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0)
     )
     meta.add_layer(
         LayerMeta(layer=1, kind="key", m=4, tokens=64, dh=32, r_token=8, r_feature=4, bits=0)

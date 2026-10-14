@@ -19,18 +19,21 @@ The legacy :func:`build_compressor` function is a thin façade that calls
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
-import importlib
 import logging
-from typing import Any, Callable, Mapping, Type
+from collections.abc import Callable
+from typing import Any, cast
 
-from kvfold.config import MethodConfig, REGISTRY as CONFIG_REGISTRY
+from kvfold.config import REGISTRY as CONFIG_REGISTRY
+from kvfold.config import MethodConfig
 from kvfold.core.base import Compressor
-from kvfold.errors import MethodConfigError, UnsupportedMethodError
+from kvfold.errors import UnsupportedMethodError
 
 log = logging.getLogger(__name__)
 
 
+@dataclasses.dataclass(frozen=True)
 class CompressorEntry:
     """Binding between a method name, its config class, and its compressor class.
 
@@ -39,17 +42,11 @@ class CompressorEntry:
     It is computed once at registration time and cached.
     """
 
-    def __init__(
-        self,
-        method: str,
-        config_cls: Type[MethodConfig],
-        compressor_cls: Type[Compressor],
-        factory: Callable[[MethodConfig], Compressor],
-    ) -> None:
-        self.method = method
-        self.config_cls = config_cls
-        self.compressor_cls = compressor_cls
-        self.factory = factory
+    method: str
+    config_cls: type[MethodConfig]
+    compressor_cls: type[Compressor]
+    factory: Callable[[MethodConfig], Compressor]
+    capabilities: frozenset[str] = frozenset({"compress", "restore"})
 
 
 class CompressorRegistry:
@@ -65,10 +62,11 @@ class CompressorRegistry:
     def register(
         self,
         method: str,
-        compressor_cls: Type[Compressor],
+        compressor_cls: type[Compressor],
         factory: Callable[[MethodConfig], Compressor] | None = None,
-        config_cls: Type[MethodConfig] | None = None,
-    ) -> Type[Compressor]:
+        config_cls: type[MethodConfig] | None = None,
+        capabilities: frozenset[str] | None = None,
+    ) -> type[Compressor]:
         """Bind ``method`` to ``compressor_cls``.
 
         Idempotent: re-registering the same ``(method, compressor_cls)``
@@ -91,40 +89,47 @@ class CompressorRegistry:
         if method in self.entries:
             if self.entries[method].compressor_cls is not compressor_cls:
                 raise ValueError(
-                    f"method {method!r} is already registered to {self.entries[method].compressor_cls.__name__}"
+                    f"method {method!r} is already registered to "
+                    f"{self.entries[method].compressor_cls.__name__}"
                 )
             return compressor_cls
         if not issubclass(compressor_cls, Compressor):
             raise TypeError(f"{compressor_cls.__name__} must inherit from Compressor")
 
         if config_cls is None:
-            try:
+            with contextlib.suppress(KeyError):
                 config_cls = CONFIG_REGISTRY.resolve(method)
-            except KeyError:
-                pass
 
         if factory is None:
             if config_cls is None:
+
                 def no_config_factory(config: MethodConfig) -> Compressor:
                     return compressor_cls()
 
                 factory = no_config_factory
             else:
-                config_fields = {f.name for f in dataclasses.fields(config_cls)}
+                config_fields = {f.name for f in dataclasses.fields(cast(Any, config_cls))}
                 compressor_params = compressor_cls.__init__.__code__.co_varnames
 
                 def default_factory(config: MethodConfig) -> Compressor:
-                    config_dict = dataclasses.asdict(config)
-                    kwargs = {k: v for k, v in config_dict.items() if k in config_fields and k in compressor_params}
+                    config_dict = dataclasses.asdict(cast(Any, config))
+                    kwargs = {
+                        k: v
+                        for k, v in config_dict.items()
+                        if k in config_fields and k in compressor_params
+                    }
                     return compressor_cls(**kwargs)
 
                 factory = default_factory
 
+        if config_cls is None:
+            raise RuntimeError(f"no configuration registered for method {method!r}")
         entry = CompressorEntry(
             method=method,
             config_cls=config_cls,
             compressor_cls=compressor_cls,
             factory=factory,
+            capabilities=capabilities or frozenset({"compress", "restore"}),
         )
         self.entries[method] = entry
         return compressor_cls
@@ -144,6 +149,10 @@ class CompressorRegistry:
             return self.entries[key]
         except KeyError:
             raise UnsupportedMethodError(method=method, supported=self.names()) from None
+
+    def descriptor(self, method: str) -> CompressorEntry:
+        """Return the immutable descriptor for a public method name."""
+        return self.resolve(method)
 
     def build(self, method: str, **kwargs: Any) -> Compressor:
         """Build a configured :class:`Compressor` from kwargs.
@@ -168,9 +177,9 @@ REGISTRY: CompressorRegistry = CompressorRegistry()
 
 def register(
     method: str,
-    compressor_cls: Type[Compressor],
+    compressor_cls: type[Compressor],
     factory: Callable[[MethodConfig], Compressor] | None = None,
-) -> Type[Compressor]:
+) -> type[Compressor]:
     """Module-level decorator helper for compressor registration.
 
     Usage::
@@ -183,8 +192,8 @@ def register(
 
 
 __all__ = [
+    "REGISTRY",
     "CompressorEntry",
     "CompressorRegistry",
-    "REGISTRY",
     "register",
 ]

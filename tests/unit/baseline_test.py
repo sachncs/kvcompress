@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.low import Low
 from kvfold.core.int_quant import IntQuant
+from kvfold.core.low import Low
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def test_int_quant_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     K, V = kv
     comp = IntQuant(bits=4)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.restore(kp, vp)
+    k_hat, _v_hat = comp.restore(kp, vp)
     assert k_hat.shape == K.shape
 
 
@@ -44,7 +44,7 @@ def test_int_quant_int8_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None
     K, V = kv
     comp = IntQuant(bits=8)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.restore(kp, vp)
+    k_hat, _v_hat = comp.restore(kp, vp)
     assert k_hat.shape == K.shape
 
 
@@ -52,7 +52,7 @@ def test_int_quant_int2_roundtrip(kv: tuple[torch.Tensor, torch.Tensor]) -> None
     K, V = kv
     comp = IntQuant(bits=2)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.restore(kp, vp)
+    k_hat, _v_hat = comp.restore(kp, vp)
     assert k_hat.shape == K.shape
 
 
@@ -71,5 +71,6 @@ def test_low_shape_mismatch() -> None:
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 16, 16)
     from kvfold.errors import CacheValidationError
+
     with pytest.raises(CacheValidationError):
         comp.compress(K, V)

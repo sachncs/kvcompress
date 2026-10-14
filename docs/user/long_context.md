@@ -1,7 +1,7 @@
 # Long context
 
 KV-cache compression matters most when the cache is large, i.e., at long
-context. `kvcompress` exposes two long-context tools:
+context. `kvfold` exposes two long-context tools:
 
 1. **Needle-in-haystack** (`scripts/run_needle_haystack.py`): a single-fact
    retrieval test that buries a known phrase in a long context and asks
@@ -34,7 +34,7 @@ RULER single-needle at 8K context.
 
 For production deployments at 16K-128K tokens:
 
-- Use `flashjolt` (not `jolt`) — the speedup matters at long contexts.
+- Use `flash` (not `jolt`) — the speedup matters at long contexts.
 - Pick `target_memory="33%"` (3×) for the free zone.
 - For batch / prompt-caching where many prefixes are resident at once,
   consider `target_memory="20%"` (5×) — values dominate the cache at

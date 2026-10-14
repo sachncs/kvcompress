@@ -6,6 +6,8 @@ TypeScript, Tailwind CSS, and Framer Motion. Deployed to GitHub Pages.
 This folder is fully self-contained — no files outside `site/` are required to
 build or run it.
 
+Node.js 22.12 or newer is required by the locked Vite toolchain.
+
 ## Develop
 
 ```bash

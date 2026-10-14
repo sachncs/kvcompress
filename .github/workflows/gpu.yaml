@@ -1,0 +1,43 @@
+name: gpu-validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      torch_index_url:
+        description: PyTorch wheel index for the target CUDA runner
+        required: false
+        default: https://download.pytorch.org/whl/cu124
+
+permissions:
+  contents: read
+
+jobs:
+  cuda-triton:
+    name: CUDA and Triton parity
+    # This is intentionally manual: GitHub-hosted runners do not provide the
+    # CUDA hardware needed to make this a trustworthy release gate.
+    runs-on: [self-hosted, linux, x64, gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install GPU dependencies
+        env:
+          TORCH_INDEX_URL: ${{ inputs.torch_index_url }}
+        run: |
+          uv pip install --system --index-url "$TORCH_INDEX_URL" torch
+          uv pip install --system -e ".[dev,triton]"
+      - name: Report hardware and software
+        run: |
+          python - <<'PY'
+          import torch
+          print(torch.__version__)
+          print(torch.cuda.get_device_name(0))
+          print(torch.version.cuda)
+          PY
+      - name: Run GPU parity and full GPU-marked tests
+        run: |
+          python -m pytest -m gpu -v
+          python -m pytest tests/unit/test_kernel_parity.py -m gpu -v

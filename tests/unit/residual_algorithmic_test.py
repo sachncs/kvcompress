@@ -48,7 +48,7 @@ def test_residual_payload_serialises_to_dict(residual: torch.Tensor) -> None:
     # Spot-check the dict shape.
     assert d["quant_dtype"] == "int4"
     assert d["projection_seed"] == 0
-    assert d["original_shape"] == list((4, 16, 8))
+    assert d["original_shape"] == [4, 16, 8]
     assert d["original_last"] == 8
     assert isinstance(d["packed"], torch.Tensor)
     # Round-trip.

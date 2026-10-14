@@ -28,7 +28,9 @@ class RankStrategy(ABC):
     """Abstract strategy for choosing per-cell ``r_token`` (and optionally ``r_feature``)."""
 
     @abstractmethod
-    def rank(self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None) -> tuple[int, int]:
+    def rank(
+        self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None
+    ) -> tuple[int, int]:
         """Return ``(r_token, r_feature)`` for tensor ``x``."""
 
 
@@ -39,8 +41,15 @@ class Fixed(RankStrategy):
         self.r_token = int(r_token)
         self.r_feature = r_feature
 
-    def rank(self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None) -> tuple[int, int]:
-        rd = self.r_feature if self.r_feature is not None else (feature_rank if feature_rank is not None else min(x.shape[-1], 64))
+    def rank(
+        self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None
+    ) -> tuple[int, int]:
+        """Return the configured fixed token and feature ranks."""
+        rd = (
+            self.r_feature
+            if self.r_feature is not None
+            else (feature_rank if feature_rank is not None else min(x.shape[-1], 64))
+        )
         return self.r_token, int(rd)
 
 
@@ -54,7 +63,10 @@ class TailMass(RankStrategy):
     def __init__(self, decomposer: Exact | None = None) -> None:
         self.decomposer = decomposer or Exact()
 
-    def rank(self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None) -> tuple[int, int]:
+    def rank(
+        self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None
+    ) -> tuple[int, int]:
+        """Select ranks from the discarded singular-value tail mass."""
         if x.dim() != 3:
             raise ValueError(f"TailMass expects 3-D (m, T, dh); got {tuple(x.shape)}")
         m, T, dh = x.shape
@@ -64,7 +76,6 @@ class TailMass(RankStrategy):
         total = float((s * s).sum())
         if total <= 0:
             return 1, min(dh, 8)
-        cumulative = float((s * s).cumsum(dim=0)[-1].item())
         retained_frac = 1.0 - epsilon
         rt = 1
         for k in range(s.shape[0]):
@@ -86,7 +97,10 @@ class Adaptive(RankStrategy):
         self.target_ratio = float(target_ratio)
         self.factor_dtype_bytes = int(factor_dtype_bytes)
 
-    def rank(self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None) -> tuple[int, int]:
+    def rank(
+        self, x: torch.Tensor, *, epsilon: float = 0.1, feature_rank: int | None = None
+    ) -> tuple[int, int]:
+        """Select ranks whose estimated storage fits the target budget."""
         if x.dim() != 3:
             raise ValueError(f"Adaptive expects 3-D (m, T, dh); got {tuple(x.shape)}")
         m, T, dh = x.shape

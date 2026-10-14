@@ -35,6 +35,15 @@ annotated. CI runs:
 mypy kvfold
 ```
 
+Google-style docstrings are checked with `pydocstyle`. Module docstrings,
+package marker modules, and constructors are excluded because their public
+contract is documented by the containing class or package surface:
+
+```bash
+pydocstyle --convention=google --match='.*\\.py' \
+  --add-ignore=D100,D104,D105,D107 kvfold
+```
+
 ## Docstrings
 
 Google-style docstrings on every public class, method, and function.
@@ -94,3 +103,18 @@ chore: bump ruff to 0.6.x
 
 Atomic commits — one logical impact per commit. A milestone may span
 many commits.
+
+## Visibility and semi-private naming
+
+- Public classes, functions, properties, and constructor arguments are part of
+  the supported API and require Google-style docstrings and tests.
+- Implementation state, locks, registries, rollback bookkeeping, and helper
+  functions use a leading underscore (`_lock`, `_entries`, `_restore_state`).
+- Public compatibility aliases are allowed only when documented and covered by
+  deprecation tests; they must delegate to the underscored implementation.
+- Prefer immutable snapshots (`AdapterState`, metric snapshots, descriptors)
+  over exposing mutable internal state to callers.
+
+The CI convention check rejects public `self.lock`, `self.pool`,
+`self.saved_cpu`, `self.saved_cuda`, and `self.store` assignments. New internal
+state should use a leading underscore from its first introduction.

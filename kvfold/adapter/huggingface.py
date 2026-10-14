@@ -2,18 +2,19 @@
 
 The adapter works in two ways:
 
-1. Patch :class:`~transformers.cache_utils.DynamicCache` so writes go
-   through the compressor. We patch the symbol in
-   ``transformers.cache_utils`` AND in any module that has already
-   imported it (``transformers.generation.utils``, the model class, etc.)
-   so the patched class is the one that gets instantiated.
+1. On current Transformers releases, wrap the model's
+   ``_prepare_cache_for_generation`` hook so only that model's cache creation
+   is scoped to the compressor.
+2. On older/custom model objects without that hook, patch
+   :class:`~transformers.cache_utils.DynamicCache` in already-imported
+   ``transformers.*`` modules as a guarded compatibility fallback.
 
 2. The user-facing API is :func:`kvfold.api.enable_compression` which
    returns a :class:`~kvfold.api.CompressionHandle` to disable the
    patch later.
 
-Why we patch *multiple* module symbol tables
-============================================
+Why the compatibility fallback patches *multiple* module symbol tables
+=======================================================================
 
 Hugging Face's :class:`~transformers.cache_utils.DynamicCache` is
 imported by name in many places:
@@ -48,14 +49,18 @@ counters wired by :func:`kvfold.api.enable_compression`.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import logging
 import sys
+import threading
 import weakref
 from types import ModuleType
 from typing import Any
 
 import torch
+
+from kvfold.adapter.base import Adapter, AdapterState
 
 
 def set_module_attr(module: ModuleType, name: str, value: Any) -> None:
@@ -69,10 +74,11 @@ def set_module_attr(module: ModuleType, name: str, value: Any) -> None:
     """
     object.__setattr__(module, name, value)
 
+
 from kvfold.adapter.registry import install as registry_install
-from kvfold.store.manager import Pool
-from kvfold.core.base import Compressor
 from kvfold.api import build_compressor as _build_compressor
+from kvfold.core.base import Compressor
+from kvfold.store.manager import Pool
 
 __all__ = ["HF", "build_compressor", "is_compression_active"]
 
@@ -82,18 +88,18 @@ log = logging.getLogger(__name__)
 # Re-export so existing callers (``from kvfold.adapter.huggingface
 # import build_compressor``) keep working. New code should import from
 # ``kvfold.core.dispatch`` directly.
-# ponytail: weak-keyed registry of installed adapters keyed by id(model).
+# Weak-keyed registry of installed adapters. Model-scoped hooks may coexist;
+# the compatibility fallback is process-wide and therefore permits one owner.
 # ``weakref.WeakValueDictionary`` lets GC reclaim adapters when the model
 # goes out of scope (e.g. between test cases) without us having to thread
 # teardown through every call site.
-INSTALLED_ADAPTERS: "weakref.WeakValueDictionary[int, HF]" = (
-    weakref.WeakValueDictionary()
-)
+INSTALLED_ADAPTERS: weakref.WeakKeyDictionary[object, HF] = weakref.WeakKeyDictionary()
+_LIFECYCLE_LOCK = threading.RLock()
 
 
 def is_compression_active(model: object) -> bool:
     """Return ``True`` if a :class:`HF` is active on ``model``."""
-    return id(model) in INSTALLED_ADAPTERS
+    return model in INSTALLED_ADAPTERS
 
 
 def build_compressor(method: str, **kwargs: Any) -> Compressor:
@@ -101,7 +107,37 @@ def build_compressor(method: str, **kwargs: Any) -> Compressor:
     return _build_compressor(method, **kwargs)
 
 
-class HF:
+def _resolve_dynamic_cache() -> type:
+    """Resolve and validate the Transformers cache contract before mutation."""
+    from kvfold.errors import TransformersCompatibilityError
+
+    try:
+        from transformers import cache_utils
+    except ImportError as exc:
+        raise TransformersCompatibilityError(
+            "Transformers cache utilities are unavailable",
+            hint="install a supported transformers>=4.45,<5 release",
+        ) from exc
+    dynamic_cache = getattr(cache_utils, "DynamicCache", None)
+    if not isinstance(dynamic_cache, type):
+        raise TransformersCompatibilityError(
+            "Transformers does not expose a DynamicCache class",
+            hint="install a supported transformers>=4.45,<5 release",
+        )
+    missing = [
+        name
+        for name in ("update", "__getitem__")
+        if not callable(getattr(dynamic_cache, name, None))
+    ]
+    if missing:
+        raise TransformersCompatibilityError(
+            f"Transformers DynamicCache is missing required methods: {', '.join(missing)}",
+            hint="upgrade or pin transformers to a supported release",
+        )
+    return dynamic_cache
+
+
+class HF(Adapter[AdapterState]):
     """Adapter that wires a :class:`Compressor` into an HF model.
 
     The adapter is **stateful** in two ways:
@@ -113,14 +149,14 @@ class HF:
 
     Args:
         model: HF ``PreTrainedModel`` returned by ``AutoModelForCausalLM``.
-        method: compressor name (e.g. ``"flashjolt"``).
+        method: compressor name (e.g. ``"flash"``).
         ratio: target ratio (e.g. ``3.0``).
         layer_groups: layer-group count for the allocator. The paper
             uses ``1``.
         bits: residual bit-widths the allocator may choose from.
-        cache_implementation: HF cache implementation. We always use
-            ``"dynamic"`` under the hood; any other value is silently
-            ignored.
+        cache_implementation: ``"kvfold"`` (compatibility alias),
+            ``"dynamic"``, or ``"dynamic_full"``. All use the dynamic
+            cache subclass under the hood; other values fail early.
         seed: seed for randomized components.
         device: device tensors should live on. ``None`` infers from the
             model's first parameter.
@@ -140,20 +176,21 @@ class HF:
         device: torch.device | str | None = None,
         **kwargs: Any,
     ) -> None:
+        super().__init__()
         self.model = model
         self.method = method
         self.ratio = float(ratio)
         self.layer_groups = int(layer_groups)
         self.bits = tuple(bits)
         # Hugging Face maintains a strict allow-list of cache
-        # implementations. "kvfold" isn't on it; we route through
-        # "dynamic" (the standard paged-DynamicCache backend) and let
-        # the patched class intercept writes instead.
-        if cache_implementation not in ("dynamic", "dynamic_full"):
-            log.debug(
-                "kvfold: ignoring cache_implementation=%r; using 'dynamic'",
-                cache_implementation,
+        # implementations. The historical ``kvfold`` value remains a
+        # compatibility alias; all supported values route through dynamic.
+        if cache_implementation not in ("dynamic", "dynamic_full", "kvfold"):
+            raise ValueError(
+                "cache_implementation must be 'kvfold', 'dynamic', or 'dynamic_full'; "
+                f"got {cache_implementation!r}"
             )
+        if cache_implementation == "kvfold":
             cache_implementation = "dynamic"
         self.cache_implementation = cache_implementation
         self.seed = int(seed)
@@ -171,12 +208,22 @@ class HF:
         # Build compressor kwargs: pass-through methods don't accept bits/seed;
         # only forward kwargs the chosen method's config actually accepts.
         from kvfold.config import REGISTRY as CONFIG_REGISTRY
+
         try:
             config_cls = CONFIG_REGISTRY.resolve(method)
             valid_fields = {f.name for f in dataclasses.fields(config_cls)}
         except KeyError:
             valid_fields = set()
-        compressor_kwargs: dict[str, Any] = {k: v for k, v in kwargs.items() if k in valid_fields}
+        unknown = set(kwargs) - valid_fields
+        if unknown:
+            from kvfold.errors import MethodConfigError
+
+            raise MethodConfigError(
+                method,
+                ",".join(sorted(unknown)),
+                f"unknown field(s); valid: {sorted(valid_fields)}",
+            )
+        compressor_kwargs: dict[str, Any] = dict(kwargs)
         if "ratio" in valid_fields:
             compressor_kwargs["ratio"] = ratio
         if "bits" in valid_fields:
@@ -199,13 +246,30 @@ class HF:
         self.cache_implementation_existed: bool = False
         self.original_dynamic_cache_cls: type | None = None
         self.patched_cache_cls: type | None = None
-        self.patched_modules: dict[str, type] = {}
+        self.patched_modules: dict[str, tuple[ModuleType, Any]] = {}
+        self.original_prepare_cache: Any = None
+        self.prepare_cache_wrapper: Any = None
+        self.family_cleanup: Any = None
         from kvfold.api import CompressionStats
+
         self.stats_ref: CompressionStats | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
+
+    def attach(self) -> AdapterState:
+        """Attach the Hugging Face cache adapter and return its state."""
+        self.enable()
+        return self.state()
+
+    def detach(self) -> None:
+        """Detach the adapter and restore the framework's original symbols."""
+        self.disable()
+
+    def state(self) -> AdapterState:
+        """Return an immutable lifecycle snapshot."""
+        return AdapterState(name="huggingface", attached=self.enabled)
 
     def enable(self) -> None:
         """Install the patches and create the cache manager.
@@ -218,15 +282,28 @@ class HF:
         so :meth:`disable` can put the runtime back to its pre-enable
         state, even if enable() blew up halfway through.
         """
+        with _LIFECYCLE_LOCK:
+            self._enable_locked()
+
+    def _enable_locked(self) -> None:
+        """Perform enable while holding the process-wide lifecycle lock."""
         if self.enabled:
             raise RuntimeError(
-                "kvfold: enable() called twice on the same adapter; "
-                "call handle.disable() first."
+                "kvfold: enable() called twice on the same adapter; call handle.disable() first."
             )
         if is_compression_active(self.model):
             raise RuntimeError(
                 "kvfold: a different adapter is already installed on this model; "
                 "call its handle.disable() first."
+            )
+        if any(
+            adapter is not self and adapter.patched_modules
+            for adapter in INSTALLED_ADAPTERS.values()
+        ):
+            raise RuntimeError(
+                "kvfold: only one Hugging Face model can be enabled while a "
+                "process-wide compatibility patch is active; "
+                "disable it before enabling another model."
             )
         log.info(
             "kvfold: enabling %s on %s",
@@ -235,13 +312,14 @@ class HF:
         )
         try:
             self.enable_inner()
-        except BaseException:
+        except Exception:
             # Roll back any side effects already applied.
             self.rollback_partial_enable()
             raise
 
     def enable_inner(self) -> None:
         """Inner enable; assumes caller handles rollback on failure."""
+        dynamic_cache_cls = _resolve_dynamic_cache()
         self.manager = Pool(
             compressor=self.compressor,
             device=self.device,
@@ -256,14 +334,12 @@ class HF:
             )
             self.model.generation_config.cache_implementation = self.cache_implementation
 
-        from transformers.cache_utils import DynamicCache
-
-        self.original_dynamic_cache_cls = DynamicCache
-        self.install_dynamic_cache(DynamicCache)
+        self.original_dynamic_cache_cls = dynamic_cache_cls
+        self.install_dynamic_cache(dynamic_cache_cls)
 
         model_type = getattr(getattr(self.model, "config", None), "model_type", None)
         if model_type is not None:
-            self.family_install = registry_install(
+            self.family_cleanup = registry_install(
                 self.model,
                 self.manager,
                 model_type=model_type,
@@ -271,7 +347,8 @@ class HF:
             log.info("kvfold: installed family shim for %s", model_type)
 
         self.enabled = True
-        INSTALLED_ADAPTERS[id(self.model)] = self
+        self.attached = True
+        INSTALLED_ADAPTERS[self.model] = self
 
     def rollback_partial_enable(self) -> None:
         """Undo whatever side effects :meth:`enable` completed before failing."""
@@ -292,17 +369,25 @@ class HF:
                         self.original_cache_implementation
                     )
                 else:
-                    try:
+                    with contextlib.suppress(AttributeError):
                         delattr(self.model.generation_config, "cache_implementation")
-                    except AttributeError:
-                        pass
             except (AttributeError, TypeError, RuntimeError):
                 log.exception("kvfold: rollback failed for cache_implementation")
         self.manager = None
+        self.family_cleanup = None
+        self.attached = False
 
     def disable(self) -> None:
-        """Restore the original ``DynamicCache`` symbol and revert the
-        generation_config."""
+        """Restore the original cache symbols and generation configuration.
+
+        The operation is idempotent and serialized with other lifecycle
+        transitions.
+        """
+        with _LIFECYCLE_LOCK:
+            self._disable_locked()
+
+    def _disable_locked(self) -> None:
+        """Perform disable while holding the process-wide lifecycle lock."""
         if not self.enabled:
             return
         if hasattr(self.model, "generation_config") and self.cache_implementation_existed:
@@ -312,13 +397,15 @@ class HF:
         ):
             # Generation config had no cache_implementation before enable;
             # remove the attribute we added so we don't leak a side effect.
-            try:
+            with contextlib.suppress(AttributeError):
                 delattr(self.model.generation_config, "cache_implementation")
-            except AttributeError:
-                pass
         self.uninstall_dynamic_cache()
+        if callable(self.family_cleanup):
+            self.family_cleanup()
+        self.family_cleanup = None
         self.enabled = False
-        INSTALLED_ADAPTERS.pop(id(self.model), None)
+        self.attached = False
+        INSTALLED_ADAPTERS.pop(self.model, None)
         log.info("kvfold: disabled compression on %s", type(self.model).__name__)
 
     # ------------------------------------------------------------------
@@ -348,7 +435,7 @@ class HF:
         class KvCompressCache(dynamic_cache_cls):
             """DynamicCache subclass that compresses on every update."""
 
-            def update(  # noqa: D401 — dynamic subclass override
+            def update(
                 self,
                 key_states: torch.Tensor,
                 value_states: torch.Tensor,
@@ -380,16 +467,18 @@ class HF:
                     v = layer_obj.values
                     cache.manager.store(layer_idx, k, v)
                     if cache.stats_ref is not None:
-                        cache.stats_ref.compress_calls += 1
                         # Read both counts from the manager so they
                         # reflect the current cache state, not an
                         # accumulating per-call counter. Re-store
                         # replaces the metadata entry, not adds to it.
-                        cache.stats_ref.bytes_original = cache.manager.memory_original()
-                        cache.stats_ref.bytes_compressed = cache.manager.memory_used()
+                        cache.stats_ref.record_compress(
+                            bytes_original=cache.manager.memory_original(),
+                            bytes_compressed=cache.manager.memory_used(),
+                            bytes_resident=cache.manager.memory_resident(),
+                        )
                 return out
 
-            def __getitem__(self, layer_idx: int):  # noqa: D401 — dynamic subclass override
+            def __getitem__(self, layer_idx: int):
                 # The parent's __getitem__ signature varies across HF
                 # versions; we accept any positional layer index.
                 if (
@@ -402,10 +491,25 @@ class HF:
                     self.layers[layer_idx].keys = k
                     self.layers[layer_idx].values = v
                     if cache.stats_ref is not None:
-                        cache.stats_ref.decompress_calls += 1
+                        cache.stats_ref.record_decompress()
                 return super().__getitem__(layer_idx)
 
         self.patched_cache_cls = KvCompressCache
+
+        # Current Transformers resolves DynamicCache from the generation
+        # preparation hook. Keep the replacement scoped to this model and to
+        # cache construction whenever that hook is available; the broad symbol
+        # patch below remains only for older/custom model objects without it.
+        if self.install_model_cache_hook(KvCompressCache):
+            return
+
+        def patch_module(module: ModuleType) -> None:
+            """Patch one symbol and remember its exact prior value."""
+            original = getattr(module, "DynamicCache", None)
+            if original is not dynamic_cache_cls:
+                return
+            self.patched_modules[module.__name__] = (module, original)
+            set_module_attr(module, "DynamicCache", KvCompressCache)
 
         # Patch the symbol in transformers.cache_utils.
         # ``type: ignore[misc]`` — HF types DynamicCache as a frozen
@@ -414,43 +518,76 @@ class HF:
         import transformers.cache_utils as cu
         import transformers.generation.utils as gu
 
-        set_module_attr(cu, "DynamicCache", KvCompressCache)
-        if hasattr(gu, "DynamicCache"):
-            set_module_attr(gu, "DynamicCache", KvCompressCache)
-            self.patched_modules["transformers.generation.utils"] = KvCompressCache
+        patch_module(cu)
+        patch_module(gu)
 
         # Patch any other transformers module that imported DynamicCache.
         for mod_name, mod in list(sys.modules.items()):
             if mod is None or not mod_name.startswith("transformers"):
                 continue
-            if getattr(mod, "DynamicCache", None) is dynamic_cache_cls:
-                set_module_attr(mod, "DynamicCache", KvCompressCache)
-                self.patched_modules[mod_name] = KvCompressCache
+            patch_module(mod)
+
+    def install_model_cache_hook(self, cache_cls: type) -> bool:
+        """Install a model-scoped DynamicCache factory when supported.
+
+        Returns ``True`` when the model exposes the current Transformers
+        generation hook. The temporary generation-utils replacement lasts only
+        while that model constructs its cache, so another enabled model cannot
+        observe kvfold's class through the normal path.
+        """
+        original = getattr(self.model, "_prepare_cache_for_generation", None)
+        if not callable(original):
+            return False
+        import transformers.generation.utils as gu
+
+        def prepare_cache(*args: Any, **kwargs: Any) -> Any:
+            with _LIFECYCLE_LOCK:
+                previous = getattr(gu, "DynamicCache", None)
+                set_module_attr(gu, "DynamicCache", cache_cls)
+                try:
+                    return original(*args, **kwargs)
+                finally:
+                    if getattr(gu, "DynamicCache", None) is cache_cls:
+                        set_module_attr(gu, "DynamicCache", previous)
+
+        self.original_prepare_cache = original
+        self.prepare_cache_wrapper = prepare_cache
+        set_module_attr(self.model, "_prepare_cache_for_generation", prepare_cache)
+        log.debug("kvfold: using model-scoped Transformers cache hook")
+        return True
 
     def uninstall_dynamic_cache(self) -> None:
         """Restore ``DynamicCache`` in every module we patched.
 
-        We restore the *original* class captured in :attr:`original_dynamic_cache_cls`
-        across all modules we touched. If a module was imported after
-        :meth:`enable` and has the patched class, it stays patched —
-        there's no safe way to find it retroactively, but that's rare.
+        We restore each module's exact prior symbol only while it still points
+        at kvfold's subclass. This avoids clobbering a third-party replacement
+        made while the adapter was active.
         """
-        import transformers.cache_utils as cu
+        if self.prepare_cache_wrapper is not None:
+            current = getattr(self.model, "_prepare_cache_for_generation", None)
+            if current is self.prepare_cache_wrapper:
+                set_module_attr(
+                    self.model,
+                    "_prepare_cache_for_generation",
+                    self.original_prepare_cache,
+                )
+            self.prepare_cache_wrapper = None
+            self.original_prepare_cache = None
 
-        if self.original_dynamic_cache_cls is not None:
-            set_module_attr(cu, "DynamicCache", self.original_dynamic_cache_cls)
-        for mod_name in list(self.patched_modules.keys()):
-            mod = sys.modules.get(mod_name)
-            if mod is not None:
-                set_module_attr(mod, "DynamicCache", self.original_dynamic_cache_cls)
+        # Restore only modules that still point at our subclass. If another
+        # integration deliberately replaced the symbol while kvfold was
+        # active, teardown must not clobber that newer owner.
+        for module, original in tuple(self.patched_modules.values()):
+            if getattr(module, "DynamicCache", None) is self.patched_cache_cls:
+                set_module_attr(module, "DynamicCache", original)
         self.patched_modules.clear()
 
 
-def generic_install(model: object, cache_manager: Pool) -> None:
+def generic_install(_model: object, _cache_manager: Pool) -> None:
     """Default install for unrecognized model types.
 
     Returns ``None`` so the registry's ``install`` dispatch knows the
     generic path was taken. The DynamicCache subclass installed by
     :meth:`HF.enable` is what does the actual work.
     """
-    return None
+    return

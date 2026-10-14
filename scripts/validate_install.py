@@ -11,7 +11,7 @@ import torch
 log = logging.getLogger(__name__)
 
 
-def main() -> None:
+def main() -> int:
     _ = argparse.ArgumentParser(description="Validate install").parse_args()
 
     log.info("kvfold validate: starting smoke test")
@@ -20,21 +20,23 @@ def main() -> None:
     log.info("kvfold version: %s", kvfold.__version__)
 
     # 1. Compress / decompress round-trip on synthetic K/V.
-    from kvfold import Jolt, Flash
+    from kvfold import Flash, Jolt
 
     K = torch.randn(4, 32, 16)
     V = torch.randn(4, 32, 16)
     comp = Jolt(ratio=2.0)
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.restore(kp, vp)
+    k_hat, _v_hat = comp.restore(kp, vp)
     rel_err = float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K))
     log.info("JoLT round-trip rel error: %.4f", rel_err)
-    assert rel_err < 1.0, f"unexpectedly large error: {rel_err}"
+    if rel_err >= 1.0:
+        log.error("JoLT round-trip error is unexpectedly large: %.4f", rel_err)
+        return 1
 
     # 2. Flash.
     fj = Flash(ratio=2.0)
     kp, vp = fj.compress(K, V)
-    k_hat, v_hat = fj.restore(kp, vp)
+    k_hat, _v_hat = fj.restore(kp, vp)
     log.info(
         "Flash round-trip rel error: %.4f",
         float(torch.linalg.norm(K - k_hat) / torch.linalg.norm(K)),

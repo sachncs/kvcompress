@@ -23,8 +23,8 @@ import math
 import pytest
 
 from kvfold.core.budget import (
-    Cell,
     Bisect,
+    Cell,
 )
 
 
@@ -52,16 +52,10 @@ def test_allocator_at_higher_ratio_uses_more_residual_bits() -> None:
     bits per cell (because lower ranks alone can't hit the budget)."""
     cells = [Cell(shape=(4, 128, 64), kind="key", layer_group=0)]
     bits_low = sum(
-        a.bits
-        for a in Bisect(target_ratio=2.0, bits_grid=(0, 2, 4, 8))
-        .optimize(cells)
-        .allocations
+        a.bits for a in Bisect(target_ratio=2.0, bits_grid=(0, 2, 4, 8)).optimize(cells).allocations
     )
     bits_high = sum(
-        a.bits
-        for a in Bisect(target_ratio=4.0, bits_grid=(0, 2, 4, 8))
-        .optimize(cells)
-        .allocations
+        a.bits for a in Bisect(target_ratio=4.0, bits_grid=(0, 2, 4, 8)).optimize(cells).allocations
     )
     # Higher ratio → at least as many residual bits, generally more.
     assert bits_high >= bits_low, (
@@ -81,7 +75,7 @@ def test_allocator_error_model_is_monotone_in_tau() -> None:
     a = result.allocations[0]
     # Re-derive τ for the chosen (rT, rd) and a slightly higher rank.
     rt, rd, _ = a.r_token, a.r_feature, a.bits
-    m, t, d = cells[0].shape
+    _m, t, d = cells[0].shape
     # Default τ model: max(1 - rT/T, 1 - rd/d).
     tau_at = max(1 - rt / t, 1 - rd / d)
     # Higher rank → lower τ → lower error.

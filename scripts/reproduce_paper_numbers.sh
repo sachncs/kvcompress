@@ -16,7 +16,7 @@ echo "== memory benchmark =="
 python -m scripts.run_memory_benchmark \
     --T 1024 --dh 128 \
     --ratios 2 3 4 5 8 \
-    --methods jolt flashjolt lowrank \
+    --methods jolt flash low \
     --output results/memory.json
 
 echo "== speed benchmark =="

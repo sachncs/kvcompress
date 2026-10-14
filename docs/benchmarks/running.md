@@ -3,7 +3,7 @@
 ## Prerequisites
 
 ```bash
-pip install "kvcompress[bench]"
+pip install "kvfold[bench]"
 ```
 
 This installs `matplotlib`, `pandas`, and `datasets` for plotting and
@@ -15,7 +15,7 @@ loading real text data.
 python -m scripts.run_memory_benchmark \
     --T 1024 --dh 128 \
     --ratios 2 3 4 5 8 \
-    --methods jolt flashjolt lowrank \
+    --methods jolt flash low \
     --output results/memory.json
 ```
 
@@ -35,6 +35,7 @@ jolt              3.00     8388608        2103880      3.99x
 ```bash
 python -m scripts.run_speed_benchmark \
     --T 1024 --dh 128 --ratio 3 \
+    --warmup 1 --iterations 5 \
     --output results/speed.json
 ```
 
@@ -44,8 +45,8 @@ Output:
 method              compress_ms   decompress_ms     ratio
 ------------------------------------------------------------
 jolt                    23.45          8.12      3.99x
-flashjolt               18.32          7.95      3.99x
-lowrank                  2.15          1.42      3.94x
+flash                    18.32          7.95      3.99x
+low                      2.15          1.42      3.94x
 ```
 
 ## Reconstruction benchmark
@@ -62,13 +63,18 @@ Output:
 method                      K error    V error      ratio
 ------------------------------------------------------------
 jolt                         0.7617     0.6840      3.99x
-flashjolt                    0.7617     0.6840      3.99x
-lowrank-64                   1.9809     0.0157      3.94x
+flash                        0.7617     0.6840      3.99x
+low-64                       1.9809     0.0157      3.94x
 int4-per-channel             0.2468     0.2032      7.98x
 ```
 
 Note: numbers are qualitative because the synthetic K/V doesn't match
 real Mistral's exact spectrum.
+
+JSON artifacts contain `metadata`, `parameters`, and `results`. Metadata records
+Python, PyTorch, platform, device, seed, warmup count, and timed iteration count;
+speed rows also include standard deviation and min/max timings. Do not compare
+numbers across machines without retaining that metadata.
 
 ## Long-context (needle)
 

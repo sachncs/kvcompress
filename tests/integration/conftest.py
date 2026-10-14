@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import pytest
 
+GPT2_REVISION = "607a30d783dfa663caf39e06633721c8d4cfcd7e"
+
 
 @pytest.fixture(scope="session")
 def gpt2_model():
     """Load GPT-2 (small, 124M params) for end-to-end tests."""
     from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
-    tok = GPT2Tokenizer.from_pretrained("gpt2")
-    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    tok = GPT2Tokenizer.from_pretrained("gpt2", revision=GPT2_REVISION)
+    model = GPT2LMHeadModel.from_pretrained("gpt2", revision=GPT2_REVISION)
     model.eval()
     return tok, model
 
@@ -26,8 +28,8 @@ def gpt2_model_with_pad():
     """Load GPT-2 with a pad token set."""
     from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
-    tok = GPT2Tokenizer.from_pretrained("gpt2")
+    tok = GPT2Tokenizer.from_pretrained("gpt2", revision=GPT2_REVISION)
     tok.pad_token = tok.eos_token
-    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    model = GPT2LMHeadModel.from_pretrained("gpt2", revision=GPT2_REVISION)
     model.eval()
     return tok, model

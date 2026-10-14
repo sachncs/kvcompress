@@ -141,21 +141,21 @@ def test_dispatch_int4() -> None:
 
 def test_dispatch_int2() -> None:
     q = get_quantizer("int2")
-    packed, scale, zp = q.quantize(torch.randn(2, 4))
+    packed, _scale, _zp = q.quantize(torch.randn(2, 4))
     assert packed.dtype == torch.uint8
 
 
 def test_dispatch_fp16() -> None:
     q = get_quantizer("fp16")
     x = torch.randn(4, 8)
-    packed, scale, zp = q.quantize(x)
+    packed, _scale, _zp = q.quantize(x)
     assert packed.dtype == torch.float16
 
 
 def test_dispatch_bf16() -> None:
     q = get_quantizer("bf16")
     x = torch.randn(4, 8)
-    packed, scale, zp = q.quantize(x)
+    packed, _scale, _zp = q.quantize(x)
     assert packed.dtype == torch.bfloat16
 
 
@@ -190,7 +190,7 @@ def test_int2_shape_after_packing() -> None:
     torch.manual_seed(0)
     x = torch.randn(2, 8) * 0.5
     q = IntQuant(bits=2, symmetric=True, per_channel=True)
-    packed, scale, zp = q.quantize(x)
+    packed, _scale, _zp = q.quantize(x)
     # 8 entries per row, packed at 2 bits → 2 bytes per row, 4 rows = 8 bytes.
     assert packed.dtype == torch.uint8
 
@@ -199,6 +199,6 @@ def test_int4_shape_after_packing() -> None:
     torch.manual_seed(0)
     x = torch.randn(2, 8)
     q = IntQuant(bits=4, symmetric=True, per_channel=True)
-    packed, scale, zp = q.quantize(x)
+    packed, _scale, _zp = q.quantize(x)
     # 8 entries per row, 4 bits → 4 bytes per row.
     assert packed.dtype == torch.uint8

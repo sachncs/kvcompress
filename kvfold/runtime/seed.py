@@ -13,7 +13,7 @@ thread-safety hazard in the previous SVD implementation.
 from __future__ import annotations
 
 import contextlib
-from typing import Iterator
+from collections.abc import Iterator
 
 import torch
 
@@ -34,22 +34,22 @@ class Seed:
 
     def __init__(self, value: int = 0) -> None:
         self.value = int(value)
-        self.saved_cpu: torch.Tensor | None = None
-        self.saved_cuda: dict[torch.device, torch.Tensor] = {}
+        self._saved_cpu: torch.Tensor | None = None
+        self._saved_cuda: dict[torch.device, torch.Tensor] = {}
 
-    def __enter__(self) -> "Seed":
-        self.saved_cpu = torch.get_rng_state()
+    def __enter__(self) -> Seed:
+        self._saved_cpu = torch.get_rng_state()
         if torch.cuda.is_available():
             for i in range(torch.cuda.device_count()):
                 device = torch.device(f"cuda:{i}")
-                self.saved_cuda[device] = torch.cuda.get_rng_state(device)
+                self._saved_cuda[device] = torch.cuda.get_rng_state(device)
         torch.manual_seed(self.value)
         return self
 
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-        if self.saved_cpu is not None:
-            torch.set_rng_state(self.saved_cpu)
-        for device, state in self.saved_cuda.items():
+    def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> None:
+        if self._saved_cpu is not None:
+            torch.set_rng_state(self._saved_cpu)
+        for device, state in self._saved_cuda.items():
             torch.cuda.set_rng_state(state, device)
 
     def __repr__(self) -> str:

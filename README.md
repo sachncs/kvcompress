@@ -10,6 +10,9 @@
   </p>
 </p>
 
+The product is **KVCompress** (repository: `kvcompress`); the supported Python
+distribution and import namespace are `kvfold`.
+
 Based on the paper: [*Krishnan & Schulz (2026) arXiv:2607.12550*](https://arxiv.org/abs/2607.12550).
 
 > **Disclaimer:** I am not an author of the paper above. This repository is an independent Python re-implementation of the algorithm described in that work.
@@ -294,7 +297,7 @@ kvfold/                            (top-level package)
       tucker.py              — Fused Tucker reconstruction kernel
 
 tests/
-  unit/                      — 416 tests covering algorithms, API, contract
+  unit/                      — core tests covering algorithms, API, contract
   property/                  — Hypothesis property tests
   integration/               — End-to-end HF tests
   regression/                — Bug-regression guards
@@ -320,9 +323,21 @@ pip install -e ".[dev]"
 ruff check kvfold tests examples scripts
 ruff format --check kvfold tests examples scripts
 mypy kvfold
-pytest tests/unit tests/property         # 416 tests, ~5s on CPU
+pytest tests/unit tests/property         # fast core suite; count varies by release
 pytest --cov=kvfold --cov-report=term-missing
 coverage report --fail-under=90
+```
+
+For a reproducible local environment, install [uv](https://docs.astral.sh/uv/)
+and run:
+
+```bash
+uv sync --locked --extra dev
+uv run pytest -m "not slow and not integration and not gpu"
+uv run ruff check kvfold tests examples scripts
+uv run mypy kvfold
+uv run pydocstyle --convention=google --match='.*\\.py' --add-ignore=D100,D104,D105,D107 kvfold
+uv run python scripts/check_conventions.py
 ```
 
 ### Commit conventions
@@ -409,11 +424,10 @@ Pushing to `master` triggers `.github/workflows/pages.yml`, which publishes
 
 ### Medium priority
 
-- **vLLM Shape C — custom attention backend:** the third integration
-  shape, currently stubbed in `adapter/vllm.py`.
-- **`vllm 0.x` → `vllm 1.0` API migration:** the
-  `vllm.v1.kv_offload.base.KVCacheOffloadWorker` superclass is stable
-  across `1.0` releases but the import path may move.
+- **vLLM Shape C — custom attention backend:** the third integration shape,
+  currently not implemented in `adapter/vllm.py`.
+- **Broader vLLM compatibility:** the current offload adapter validates the
+  `>=0.19,<1.0` handler surface; GPU end-to-end verification is still required.
 
 ### Low priority / research
 

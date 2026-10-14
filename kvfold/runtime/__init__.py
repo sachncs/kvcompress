@@ -1,7 +1,7 @@
 """Runtime helpers — scheduling, memory pools, profiling.
 
-Imports are lazy so the package can be imported even when individual modules
-are still stubbed out.
+Imports are lazy so optional runtime helpers do not become hard dependencies
+of the core package.
 
 * :mod:`.memory` defines :class:`~kvfold.runtime.memory.Pool`,
   a small object pool that reuses contiguous tensors across compress /
@@ -13,9 +13,9 @@ are still stubbed out.
 
 from __future__ import annotations
 
-from typing import Any  # noqa: F401
+from typing import TYPE_CHECKING, Any
 
-if False:  # TYPE_CHECKING
+if TYPE_CHECKING:
     from kvfold.runtime.pool import Pool  # noqa: F401
     from kvfold.runtime.profile import Profile  # noqa: F401
 

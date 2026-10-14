@@ -5,8 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.svd import Exact, Randomized
-from kvfold.core.svd import Exact as SVD
+from kvfold.core.svd import Randomized
 from kvfold.core.tucker import (
     mode_n_fold,
     mode_n_unfold,
@@ -52,7 +51,7 @@ def test_partial_tucker_reconstruction_improves_with_rank(
 
 
 def test_full_rank_is_pass(tensor: torch.Tensor) -> None:
-    m, t, d = tensor.shape
+    _m, t, d = tensor.shape
     factors = partial_tucker_st_hosvd(tensor, r_token=t, r_feature=d)
     x_hat = reconstruct_partial_tucker(factors, tensor.shape)
     err = torch.linalg.norm(tensor - x_hat) / torch.linalg.norm(tensor)
@@ -61,7 +60,7 @@ def test_full_rank_is_pass(tensor: torch.Tensor) -> None:
 
 
 def testtail_mass_zero_at_full_rank(tensor: torch.Tensor) -> None:
-    m, t, d = tensor.shape
+    _m, t, d = tensor.shape
     factors = partial_tucker_st_hosvd(tensor, r_token=t, r_feature=d)
     assert factors.token_tail_mass == 0.0
     assert factors.feature_tail_mass == 0.0

@@ -22,8 +22,8 @@ def main() -> None:
         bits=(0, 4, 8),
         layer_groups=3,
     )
-    for i, (K, V) in enumerate(zip(caches, caches)):  # K=V here for demo
-        k_payload, v_payload = comp.compress(K, V)
+    for i, (K, V) in enumerate(zip(caches, caches, strict=False)):  # K=V here for demo
+        k_payload, _v_payload = comp.compress(K, V)
         print(
             f"layer {i}: ranks=({k_payload.metadata['r_token']}, "
             f"{k_payload.metadata['r_feature']}), bits={k_payload.metadata['bits']}"

@@ -19,34 +19,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from kvfold.config import (
-    Bf16Config,
-    FlashConfig,
-    Float8Config,
-    FloatConfig,
-    Fp16Config,
-    Int2Config,
-    Int4Config,
-    Int8Config,
-    IntConfig,
-    JoltConfig,
-    LowRankConfig,
-    PassConfig,
-)
-from kvfold.core.base import Compressor, Payload, Stats
+from kvfold.core.base import Compressor
 from kvfold.core.dispatch import REGISTRY as DISPATCH_REGISTRY
 
 __all__ = ["DISPATCH_REGISTRY"]
 
 
 def _register_builtins() -> None:
-    from kvfold.core.jolt import Jolt
     from kvfold.core.flash import Flash
-    from kvfold.core.low import Low
-    from kvfold.core.identity import Pass
     from kvfold.core.float8 import Float8
-    from kvfold.core.int_quant import IntQuant as IntQuantCompressor
     from kvfold.core.float_cast import FloatCast
+    from kvfold.core.identity import Pass
+    from kvfold.core.int_quant import IntQuant as IntQuantCompressor
+    from kvfold.core.jolt import Jolt
+    from kvfold.core.low import Low
 
     DISPATCH_REGISTRY.register("jolt", Jolt)
     DISPATCH_REGISTRY.register("flash", Flash)

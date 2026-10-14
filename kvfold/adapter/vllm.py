@@ -1,4 +1,4 @@
-"""vLLM integration — Shape A: ``export_kv`` / ``import_kv`` helpers.
+r"""vLLM integration — Shape A: ``export_kv`` / ``import_kv`` helpers.
 
 These functions compress and dump a model's KV cache to disk (and load
 it back) so a user can:
@@ -38,12 +38,12 @@ from typing import Any
 
 import torch
 
-from kvfold.api import parse_target_memory
+from kvfold.api import build_compressor, parse_target_memory
+from kvfold.core.base import Compressor
+from kvfold.errors import SerializationError
+from kvfold.runtime.profile import Profile
 from kvfold.store.compress import Cache
 from kvfold.store.metadata import Meta
-from kvfold.core.base import Compressor
-from kvfold.api import build_compressor
-from kvfold.runtime.profile import Profile
 
 __all__ = [
     "build_compressor",
@@ -185,7 +185,7 @@ def export_kv(
     meta_path = path + ".meta.json"
     meta = tmp_cache.metadata()
     meta_dict = meta.to_dict()
-    # Ponytail: stash the per-cell metadata (which Meta
+    # Stash the per-cell metadata (which Meta
     # flattens) under a ``cell_metadata`` key so import_kv can rebuild
     # the residual projection faithfully. Without this, the residual
     # is reconstructed against an invented seed and the round-tripped
@@ -211,6 +211,7 @@ def import_kv(
     method: str = "flash",
     bits: tuple[int, ...] = (0, 2, 4, 8),
     seed: int = 0,
+    strict: bool = True,
 ) -> Meta:
     """Load a compressed cache from ``path`` and populate the model's cache.
 
@@ -230,6 +231,8 @@ def import_kv(
         method: compressor name to enable if needed.
         bits: residual bit-widths.
         seed: RNG seed.
+        strict: if True (the default), reject malformed cells instead of
+            skipping them. Set to False only for best-effort recovery.
 
     Returns:
         The :class:`Meta` describing the loaded cache.
@@ -251,6 +254,17 @@ def import_kv(
     with open(meta_path) as f:
         meta_dict = json.load(f)
     cell_meta_raw = meta_dict.get("cell_metadata", {})
+    schema_version = int(meta_dict.get("schema_version", 1))
+    if schema_version != 1:
+        raise SerializationError(
+            f"unsupported serialized cache schema version {schema_version}",
+            hint="upgrade kvfold or re-export the cache with schema version 1",
+        )
+    if not isinstance(cell_meta_raw, dict):
+        raise SerializationError(
+            f"invalid cache metadata in {meta_path!r}: cell_metadata must be an object",
+            hint="re-export the cache with the same kvfold version",
+        )
 
     # If target_memory="100%" was requested, build an identity compressor
     # for the temp cache; otherwise honour the user-specified ratio.
@@ -274,15 +288,30 @@ def import_kv(
     for key, t in tensors.items():
         parts = key.split("/", 2)
         if len(parts) != 3:
+            if strict:
+                raise SerializationError(
+                    f"malformed serialized tensor key {key!r}",
+                    hint="use a cache produced by kvfold.export_kv",
+                )
             log.warning("import_kv: skipping malformed tensor key %r", key)
             continue
         layer_str, kind, name = parts
         if kind not in ("key", "value"):
+            if strict:
+                raise SerializationError(
+                    f"unknown serialized tensor kind {kind!r} in {key!r}",
+                    hint="use a cache produced by kvfold.export_kv",
+                )
             log.warning("import_kv: skipping tensor with unknown kind %r", kind)
             continue
         try:
             layer_idx = int(layer_str)
         except ValueError:
+            if strict:
+                raise SerializationError(
+                    f"non-integer serialized layer {layer_str!r}",
+                    hint="use a cache produced by kvfold.export_kv",
+                ) from None
             log.warning("import_kv: skipping tensor with non-int layer %r", layer_str)
             continue
         by_cell.setdefault((layer_idx, kind), {})[name] = t
@@ -290,11 +319,11 @@ def import_kv(
     # Reconstruct K and V separately per cell.
     reconstructed: dict[int, tuple[torch.Tensor | None, torch.Tensor | None]] = {}
 
+    from kvfold.core.residual import Residual, decode_residual
     from kvfold.core.tucker import (
         Tucker,
         reconstruct_partial_tucker,
     )
-    from kvfold.core.residual import Residual, decode_residual
 
     for (layer_idx, kind), data in by_cell.items():
         cell_key = f"{layer_idx}/{kind}"
@@ -304,7 +333,7 @@ def import_kv(
         # JoLT path: reconstruct Tucker core + decode residual.
         if "core" in data and "u_token" in data and "u_feature" in data:
             core = data["core"]
-            m, rt, rd = core.shape
+            m, _rt, _rd = core.shape
             # u_token shape is (T, rt); u_feature shape is (dh, rd).
             # Recover the original (m, T, dh) so reconstruct_partial_tucker
             # can validate against it.
@@ -321,7 +350,7 @@ def import_kv(
             )
             recon = reconstruct_partial_tucker(factors, (m, T, dh))
             if "residual_packed" in data:
-                # Ponytail: the seed MUST come from the sidecar, not the
+                # The seed must come from the sidecar, not the
                 # tensor's numel. The prior version invented a seed and
                 # the residual projection was rebuilt against a random
                 # matrix; round-tripped caches were garbage.
@@ -357,6 +386,11 @@ def import_kv(
             tensor = (u * s) @ vh
             tensor = tensor.reshape(m, T, -1)
         else:
+            if strict:
+                raise SerializationError(
+                    f"unknown serialized payload schema for {cell_key}: {sorted(data)}",
+                    hint="use a cache produced by kvfold.export_kv",
+                )
             log.warning(
                 "import_kv: skipping cell %s with unknown data schema %s",
                 cell_key,
@@ -377,6 +411,11 @@ def import_kv(
     layers_attr = getattr(cache, "layers", None)
     for layer_idx, (k, v) in reconstructed.items():
         if k is None or v is None:
+            if strict:
+                raise SerializationError(
+                    f"layer {layer_idx} is missing a key or value payload",
+                    hint="the cache file is incomplete; re-export it",
+                )
             log.warning(
                 "import_kv: layer %d missing K or V (k=%s, v=%s)",
                 layer_idx,

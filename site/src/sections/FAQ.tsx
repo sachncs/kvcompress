@@ -43,6 +43,8 @@ export function FAQ() {
                   <li key={f.q}>
                     <button
                       type="button"
+                      id={`faq-question-${i}`}
+                      aria-controls={`faq-answer-${i}`}
                       onClick={() => setOpen(isOpen ? null : i)}
                       className="flex w-full items-center justify-between gap-6 py-5 text-left transition-colors duration-200 hover:text-ink-50 light:hover:text-ink-900"
                       aria-expanded={isOpen}
@@ -53,6 +55,9 @@ export function FAQ() {
                       </span>
                     </button>
                     <div
+                      id={`faq-answer-${i}`}
+                      role="region"
+                      aria-labelledby={`faq-question-${i}`}
                       className={`grid overflow-hidden transition-all duration-500 ease-out-expo ${
                         isOpen ? 'grid-rows-[1fr] pb-5 opacity-100' : 'grid-rows-[0fr] opacity-0'
                       }`}

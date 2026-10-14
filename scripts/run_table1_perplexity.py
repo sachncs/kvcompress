@@ -37,7 +37,10 @@ def main() -> None:
         seed=args.seed,
     )
     for row in rows:
-        print(f"ratio={row['ratio']:>5}  method={row['method']:<10}  ppl={row['perplexity']:.3f}  wall={row['wall_ms']:.1f}ms")
+        print(
+            f"ratio={row['ratio']:>5}  method={row['method']:<10} "
+            f"ppl={row['perplexity']:.3f}  wall={row['wall_ms']:.1f}ms"
+        )
     if args.output:
         with open(args.output, "w") as f:
             json.dump(rows, f, indent=2)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import torch
 
-from kvfold import Jolt, Cache
+from kvfold import Cache, Jolt
 
 
 def main() -> None:
@@ -25,7 +25,7 @@ def main() -> None:
     # or switch to a longer context where the residual budget pays off.
     comp = Jolt(ratio=2.0, bits=(0,))
     k_payload, v_payload = comp.compress(K, V)
-    K_hat, V_hat = comp.restore(k_payload, v_payload)
+    K_hat, _V_hat = comp.restore(k_payload, v_payload)
     rel_err_K = torch.linalg.norm(K - K_hat) / torch.linalg.norm(K)
     print(f"JoLT round-trip rel err K: {rel_err_K.item():.4f}")
     print(f"  original bytes:  {K.numel() * K.element_size():>10}")
@@ -37,7 +37,7 @@ def main() -> None:
     print(f"  cache bytes:     {cache.memory_used()}")
     print(f"  compression:     {cache.compression_ratio():.2f}x")
 
-    K2, V2 = cache.retrieve(0)
+    K2, _V2 = cache.retrieve(0)
     # JoLT round-trip is lossy by design (Tucker truncation). At
     # ratio=2.0 the algorithm lands around rel-err=0.7 on this shape;
     # raise the ratio or pre-train a calibration set if you need tighter

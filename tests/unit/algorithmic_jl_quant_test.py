@@ -6,11 +6,10 @@ quantization-error bounds (half a bin).
 
 from __future__ import annotations
 
-
 import pytest
 import torch
 
-from kvfold.core.jl import CACHE, Gaussian, Rademacher, Sparse
+from kvfold.core.jl import CACHE
 from kvfold.core.quant import (
     IntQuant,
     bit_packing_signed,
@@ -32,7 +31,9 @@ def test_jl_gaussian_norm_preservation() -> None:
     """
     torch.manual_seed(0)
     dim = 64
-    proj = CACHE.get_or_build(dim, dim, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
+    proj = CACHE.get_or_build(
+        dim, dim, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32
+    )
     # Average squared-norm ratio over many vectors.
     x = torch.randn(2048, dim)
     y = proj.apply(x)
@@ -47,7 +48,9 @@ def test_jl_rademacher_norm_preservation() -> None:
     """Same as above for the Rademacher (sign) distribution."""
     torch.manual_seed(0)
     dim = 64
-    proj = CACHE.get_or_build(dim, dim, distribution="rademacher", seed=0, device="cpu", dtype=torch.float32)
+    proj = CACHE.get_or_build(
+        dim, dim, distribution="rademacher", seed=0, device="cpu", dtype=torch.float32
+    )
     x = torch.randn(2048, dim)
     y = proj.apply(x)
     ratios = (y * y).sum(dim=-1) / (x * x).sum(dim=-1)
@@ -57,7 +60,9 @@ def test_jl_rademacher_norm_preservation() -> None:
 
 def test_jl_apply_shape_preservation() -> None:
     """``apply`` preserves shape on arbitrary input ranks."""
-    proj = CACHE.get_or_build(8, 8, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
+    proj = CACHE.get_or_build(
+        8, 8, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32
+    )
     for shape in [(8,), (4, 8), (2, 3, 8), (1, 1, 4, 8)]:
         x = torch.randn(*shape)
         y = proj.apply(x)
@@ -69,7 +74,9 @@ def test_jl_projection_is_orthonormal_at_limit() -> None:
     approximately orthonormal (this is the JL lemma at the matrix level).
     """
     dim = 128
-    proj = CACHE.get_or_build(dim, dim, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
+    proj = CACHE.get_or_build(
+        dim, dim, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32
+    )
     gram = proj.matrix.t() @ proj.matrix / dim
     # Off-diagonal elements should be small relative to the diagonal.
     off_diag = (gram - torch.diag(torch.diagonal(gram))).abs().mean()
@@ -80,20 +87,32 @@ def test_jl_projection_is_orthonormal_at_limit() -> None:
 
 
 def test_jl_cache_returns_same_object() -> None:
-    proj1 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
-    proj2 = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
+    proj1 = CACHE.get_or_build(
+        8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32
+    )
+    proj2 = CACHE.get_or_build(
+        8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32
+    )
     assert proj1 is proj2
 
 
 def test_jl_cache_different_seeds_give_different_matrices() -> None:
-    a = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
-    b = CACHE.get_or_build(8, 16, distribution="gaussian", seed=1, device="cpu", dtype=torch.float32)
+    a = CACHE.get_or_build(
+        8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32
+    )
+    b = CACHE.get_or_build(
+        8, 16, distribution="gaussian", seed=1, device="cpu", dtype=torch.float32
+    )
     assert not torch.allclose(a.matrix, b.matrix)
 
 
 def test_jl_distribution_switch_yields_different_matrices() -> None:
-    g = CACHE.get_or_build(8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32)
-    r = CACHE.get_or_build(8, 16, distribution="rademacher", seed=0, device="cpu", dtype=torch.float32)
+    g = CACHE.get_or_build(
+        8, 16, distribution="gaussian", seed=0, device="cpu", dtype=torch.float32
+    )
+    r = CACHE.get_or_build(
+        8, 16, distribution="rademacher", seed=0, device="cpu", dtype=torch.float32
+    )
     assert not torch.allclose(g.matrix, r.matrix)
 
 

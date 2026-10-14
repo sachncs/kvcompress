@@ -20,7 +20,7 @@ import torch
 from kvfold.config import Int8Config
 from kvfold.core.base import Compressor, Payload, Stats
 from kvfold.core.quant import IntQuant as IntQuantImpl
-from kvfold.core.quant import dequantize_tensor, quantize_tensor
+from kvfold.core.quant import dequantize_tensor
 
 __all__ = ["IntQuant"]
 
@@ -56,6 +56,7 @@ class IntQuant(Compressor):
     ) -> None:
         if unused:
             from kvfold.errors import MethodConfigError
+
             raise MethodConfigError(
                 "int_quant",
                 ",".join(sorted(unused.keys())),
@@ -68,11 +69,15 @@ class IntQuant(Compressor):
         self.per_channel = bool(per_channel)
         self.group_size = group_size
         self._quant = IntQuantImpl(
-            bits=self.bits, symmetric=self.symmetric, per_channel=self.per_channel, group_size=self.group_size
+            bits=self.bits,
+            symmetric=self.symmetric,
+            per_channel=self.per_channel,
+            group_size=self.group_size,
         )
 
     @classmethod
     def default_config(cls) -> Int8Config:
+        """Return the default eight-bit integer configuration."""
         return Int8Config()
 
     def compress(self, key: torch.Tensor, value: torch.Tensor) -> tuple[Payload, Payload]:
@@ -82,7 +87,10 @@ class IntQuant(Compressor):
         vp = self._side(value)
         return kp, vp
 
-    def restore(self, key_payload: Payload, value_payload: Payload) -> tuple[torch.Tensor, torch.Tensor]:
+    def restore(
+        self, key_payload: Payload, value_payload: Payload
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Dequantise K and V payloads into their recorded shapes and dtypes."""
         k = dequantize_tensor(
             key_payload.data,
             dtype=f"int{self.bits}",
@@ -124,6 +132,9 @@ class IntQuant(Compressor):
             },
             stats=Stats(
                 bytes_original=x.numel() * x.element_size(),
-                bytes_compressed=q[0].numel() * q[0].element_size() + q[1].numel() * q[1].element_size() + q[2].numel() * q[2].element_size() + 4,
+                bytes_compressed=q[0].numel() * q[0].element_size()
+                + q[1].numel() * q[1].element_size()
+                + q[2].numel() * q[2].element_size()
+                + 4,
             ),
         )

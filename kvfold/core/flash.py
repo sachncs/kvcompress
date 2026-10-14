@@ -23,9 +23,9 @@ from typing import Any, Literal
 import torch
 
 from kvfold.config import FlashConfig
-from kvfold.core.jolt import Jolt, JoLTFactors as JoltFactors
+from kvfold.core.jolt import Jolt, JoLTFactors
 from kvfold.core.residual import encode_residual
-from kvfold.core.svd import Exact, Randomized
+from kvfold.core.svd import Randomized
 from kvfold.core.tucker import partial_tucker_st_hosvd, reconstruct_partial_tucker
 
 __all__ = ["CapPolicy", "Flash", "LinearCap"]
@@ -45,7 +45,9 @@ class CapPolicy(ABC):
     name: Literal["linear"] = "linear"
 
     @abstractmethod
-    def cap(self, context_length: int, ratio: float) -> int: ...
+    def cap(self, context_length: int, ratio: float) -> int:
+        """Return the maximum token-mode sketch size."""
+        raise NotImplementedError
 
 
 class LinearCap(CapPolicy):
@@ -58,6 +60,7 @@ class LinearCap(CapPolicy):
     name: Literal["linear"] = "linear"
 
     def cap(self, context_length: int, ratio: float) -> int:
+        """Return the paper-faithful cap for a context length and ratio."""
         q_min = 64 if ratio >= 5.0 else 32
         cap = max(q_min, math.ceil(context_length / 32))
         return min(cap, 512)
@@ -98,6 +101,7 @@ class Flash(Jolt):
 
     @classmethod
     def default_config(cls) -> FlashConfig:
+        """Return the default Flash configuration."""
         return FlashConfig()
 
     def compress_cell(self, x: torch.Tensor, allocation: Any) -> JoLTFactors:
@@ -109,10 +113,7 @@ class Flash(Jolt):
         """
         if x.dim() != 3:
             raise ValueError(f"Flash expects 3-D (m, T, dh); got {tuple(x.shape)}")
-        if self.cap is None:
-            cap = self.cap_policy.cap(x.shape[1], self.ratio)
-        else:
-            cap = self.cap
+        cap = self.cap_policy.cap(x.shape[1], self.ratio) if self.cap is None else self.cap
         token_decomposer = Randomized(seed=self.seed, cap=cap)
         tucker = partial_tucker_st_hosvd(
             x,
@@ -134,7 +135,7 @@ class Flash(Jolt):
                 per_channel=self.per_channel_quant,
                 group_size=self.group_size,
             )
-        return JoltFactors(
+        return JoLTFactors(
             tucker=tucker,
             residual=residual,
             allocation=allocation,

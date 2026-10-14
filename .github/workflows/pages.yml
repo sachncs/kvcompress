@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: site/package-lock.json
 
@@ -30,11 +30,21 @@ jobs:
         working-directory: site
         run: npm ci --no-audit --no-fund
 
+      - name: Audit all frontend dependencies
+        working-directory: site
+        run: npm audit
+
       - name: Build (assumes base path /<repo>/)
         working-directory: site
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
         run: npm run build
+
+      - name: Browser smoke tests
+        working-directory: site
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

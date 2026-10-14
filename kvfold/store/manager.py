@@ -19,15 +19,17 @@ The manager is *not* model-aware; it does not know which tensor is K vs V
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
 import torch
 
+from kvfold.core.base import Compressor
 from kvfold.store.compress import Cache
 from kvfold.store.metadata import Meta
-from kvfold.core.base import Compressor
+from kvfold.store.ports import CacheBackend
 
 log = logging.getLogger(__name__)
 
@@ -45,16 +47,19 @@ class Pool:
     compressor: Compressor
     max_layers: int | None = None
     device: torch.device | str | None = None
-    cache: Cache = field(init=False)
+    backend: CacheBackend | None = None
+    cache: CacheBackend = field(init=False)
     live_layers: list[int] = field(default_factory=list, init=False)
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Build the underlying :class:`Cache` from ``compressor``."""
-        self.cache = Cache(
-            compressor=self.compressor,
-            max_layers=self.max_layers,
-            device=self.device,
-        )
+        if self.backend is not None:
+            self.cache = self.backend
+        else:
+            self.cache = Cache(
+                compressor=self.compressor, max_layers=self.max_layers, device=self.device
+            )
 
     # ------------------------------------------------------------------
     # Storage
@@ -73,26 +78,31 @@ class Pool:
         store, ``layer`` is added to the ``live_layers`` list (used by
         the HF adapter's ``__getitem__`` path).
         """
-        self.cache.store(layer, key, value, **kwargs)
-        if layer not in self.live_layers:
-            self.live_layers.append(layer)
+        with self._lock:
+            self.cache.store(layer, key, value, **kwargs)
+            # Cache.enforce_eviction() may remove an older layer, so derive this
+            # view from the cache rather than appending indefinitely.
+            self.live_layers = list(self.cache.layers())
 
     def retrieve(
         self,
         layer: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Reconstruct and return the K/V pair for ``layer``."""
-        return self.cache.retrieve(layer)
+        with self._lock:
+            return self.cache.retrieve(layer)
 
     def clear(self) -> None:
         """Drop every entry and reset the ``live_layers`` list."""
-        self.cache.clear()
-        self.live_layers.clear()
+        with self._lock:
+            self.cache.clear()
+            self.live_layers.clear()
 
     def evict(self, layer: int) -> None:
         """Remove ``layer`` from the cache and the ``live_layers`` list."""
-        self.cache.evict_layer(layer)
-        self.live_layers = [entry for entry in self.live_layers if entry != layer]
+        with self._lock:
+            self.cache.evict_layer(layer)
+            self.live_layers = list(self.cache.layers())
 
     # ------------------------------------------------------------------
     # Memory
@@ -100,25 +110,35 @@ class Pool:
 
     def memory_used(self) -> int:
         """Bytes occupied by all stored payloads."""
-        return self.cache.memory_used()
+        with self._lock:
+            return self.cache.memory_used()
 
     def memory_original(self) -> int:
         """Sum of uncompressed bytes across all stored payloads."""
-        return self.cache.memory_original()
+        with self._lock:
+            return self.cache.memory_original()
+
+    def memory_resident(self) -> int:
+        """Backing tensor-storage bytes currently resident in the cache."""
+        with self._lock:
+            return self.cache.memory_resident()
 
     def compression_ratio(self) -> float:
         """Achieved ratio (original / compressed) across all stored payloads."""
-        return self.cache.compression_ratio()
+        with self._lock:
+            return self.cache.compression_ratio()
 
     def stats(self) -> dict[str, Any]:
         """Aggregate stats including the live-layer list."""
-        s = self.cache.stats()
-        s["live_layers"] = list(self.live_layers)
-        return s
+        with self._lock:
+            s = self.cache.stats()
+            s["live_layers"] = list(self.live_layers)
+            return s
 
     def metadata(self) -> Meta:
         """Return the live :class:`Meta`."""
-        return self.cache.metadata()
+        with self._lock:
+            return self.cache.metadata()
 
     # ------------------------------------------------------------------
     # Iteration
@@ -126,12 +146,15 @@ class Pool:
 
     def layers(self) -> Iterator[int]:
         """Iterate over live layer indices in insertion order."""
-        return self.cache.layers()
+        with self._lock:
+            return iter(list(self.cache.layers()))
 
     def __len__(self) -> int:
         """Number of layers currently stored."""
-        return len(self.cache)
+        with self._lock:
+            return len(self.cache)
 
     def __contains__(self, layer: int) -> bool:
         """``layer in manager`` is ``True`` when the layer has an entry."""
-        return layer in self.cache
+        with self._lock:
+            return layer in self.cache

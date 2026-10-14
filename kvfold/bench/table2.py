@@ -232,6 +232,7 @@ def run_table2(
 
 
 def main() -> None:  # pragma: no cover
+    """Run the paper Table 2 benchmark command."""
     parser = argparse.ArgumentParser(description="Paper Table 2 reproduction")
     parser.add_argument("--m", type=int, default=8)
     parser.add_argument("--T", type=int, default=1024)

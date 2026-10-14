@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 
 from kvfold.core.budget import (
-    Pick,
-    Plan,
+    Bisect,
     Cell,
     Greedy,
-    Bisect,
+    Pick,
+    Plan,
     bytes_original,
     candidate_feature_ranks,
     candidate_token_ranks,
@@ -79,7 +79,7 @@ def test_candidate_token_ranks_large_subset() -> None:
 
 def test_joint_allocator_invalid_target_ratio() -> None:
     """target_ratio <= 1 raises ValueError at construction."""
-    with pytest.raises(ValueError, match="must be > 1.0"):
+    with pytest.raises(ValueError, match=r"must be > 1\.0"):
         Bisect(target_ratio=1.0)
 
 
@@ -126,7 +126,8 @@ def test_joint_allocator_uses_tau_table() -> None:
     result = alloc.optimize([cell], tau_table=tau_table)
     # The picked allocation has error 0 when (rT, rF) == (2, 2).
     best = min(result.allocations, key=lambda a: a.error)
-    assert best.r_token == 2 and best.r_feature == 2
+    assert best.r_token == 2
+    assert best.r_feature == 2
     assert best.error == 0.0
 
 

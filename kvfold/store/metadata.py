@@ -88,7 +88,7 @@ class LayerMeta:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "LayerMeta":
+    def from_dict(cls, d: dict[str, Any]) -> LayerMeta:
         """Inverse of :meth:`to_dict`."""
         return cls(**d)
 
@@ -109,11 +109,12 @@ class Meta:
 
     method: str
     dtype: str
+    schema_version: int = 1
     layers: list[LayerMeta] = field(default_factory=list)
     layer_groups: int = 1
     bits_allowed: tuple[int, ...] = (0, 2, 4, 8)
     extras: dict[str, Any] = field(default_factory=dict)
-    # Ponytail: O(1) (layer, kind) -> index lookup alongside the list.
+    # Keep an O(1) (layer, kind) -> index lookup alongside the list.
     # The list stays the source of truth for ordering; the dict shadows
     # it for membership checks. ``rebuild_index`` resyncs after bulk
     # operations that mutate the list directly (tests, deserialise).
@@ -175,6 +176,7 @@ class Meta:
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-friendly dict."""
         return {
+            "schema_version": self.schema_version,
             "method": self.method,
             "dtype": self.dtype,
             "layers": [entry.to_dict() for entry in self.layers],
@@ -183,12 +185,17 @@ class Meta:
             "extras": self.extras,
         }
 
+    def snapshot(self) -> Meta:
+        """Return an independent metadata snapshot for callers."""
+        return type(self).from_dict(self.to_dict())
+
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Meta":
+    def from_dict(cls, d: dict[str, Any]) -> Meta:
         """Inverse of :meth:`to_dict`."""
         meta = cls(
             method=d["method"],
             dtype=d["dtype"],
+            schema_version=int(d.get("schema_version", 1)),
             layers=[LayerMeta.from_dict(x) for x in d.get("layers", [])],
             layer_groups=d.get("layer_groups", 1),
             bits_allowed=tuple(d.get("bits_allowed", (0, 2, 4, 8))),

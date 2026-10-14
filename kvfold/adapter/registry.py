@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Callable, Type
+from collections.abc import Callable
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class Family(ABC):
     def install(self, model: object, pool: object) -> Callable[[], None] | None:
         """Install the family-specific hooks on ``model``."""
 
-    def uninstall(self, model: object, pool: object) -> None:
+    def uninstall(self, model: object, pool: object) -> None:  # noqa: B027
         """Inverse of :meth:`install`. Default: no-op."""
 
 
@@ -39,55 +39,80 @@ class NoOpFamily(Family):
 
     name: str = ""
 
-    def install(self, model: object, pool: object) -> Callable[[], None] | None:
+    def install(self, _model: object, _pool: object) -> Callable[[], None] | None:
+        """Return no cleanup callback because this family needs no hooks."""
         return None
 
 
 class Llama(NoOpFamily):
+    """No-op policy for Llama-family models."""
+
     name = "llama"
 
 
 class Mistral(NoOpFamily):
+    """No-op policy for Mistral-family models."""
+
     name = "mistral"
 
 
 class Qwen2(NoOpFamily):
+    """No-op policy for Qwen2-family models."""
+
     name = "qwen2"
 
 
 class Qwen2Moe(NoOpFamily):
+    """No-op policy for Qwen2 mixture-of-experts models."""
+
     name = "qwen2_moe"
 
 
 class Gemma(NoOpFamily):
+    """No-op policy for Gemma-family models."""
+
     name = "gemma"
 
 
 class Gemma2(NoOpFamily):
+    """No-op policy for Gemma 2-family models."""
+
     name = "gemma2"
 
 
 class Phi(NoOpFamily):
+    """No-op policy for Phi-family models."""
+
     name = "phi"
 
 
 class Phi3(NoOpFamily):
+    """No-op policy for Phi 3-family models."""
+
     name = "phi3"
 
 
 class Mixtral(NoOpFamily):
+    """No-op policy for Mixtral-family models."""
+
     name = "mixtral"
 
 
 class Falcon(NoOpFamily):
+    """No-op policy for Falcon-family models."""
+
     name = "falcon"
 
 
 class DeepSeek(NoOpFamily):
+    """No-op policy for DeepSeek-family models."""
+
     name = "deepseek"
 
 
 class InternLM(NoOpFamily):
+    """No-op policy for InternLM-family models."""
+
     name = "internlm"
 
 
@@ -97,7 +122,7 @@ class FamilyRegistry:
     def __init__(self) -> None:
         self.entries: dict[str, Family] = {}
 
-    def register(self, family_cls: Type[Family]) -> Type[Family]:
+    def register(self, family_cls: type[Family]) -> type[Family]:
         """Bind ``family_cls.name`` to a fresh instance of ``family_cls``.
 
         Idempotent: re-registering the same class under the same ``name``
@@ -115,12 +140,15 @@ class FamilyRegistry:
         return family_cls
 
     def names(self) -> tuple[str, ...]:
+        """Return registered model-family names in insertion order."""
         return tuple(self.entries)
 
     def resolve(self, model_type: str) -> Family | None:
+        """Return the family policy for ``model_type``, if registered."""
         return self.entries.get(model_type)
 
     def install(self, model: object, pool: object, model_type: str) -> Callable[[], None] | None:
+        """Install the policy selected by ``model_type`` on ``model``."""
         family = self.resolve(model_type)
         if family is None:
             log.warning(
@@ -139,7 +167,7 @@ def known_model_types() -> list[str]:
     return sorted(REGISTRY.names())
 
 
-def register(family_cls: Type[Family]) -> Type[Family]:
+def register(family_cls: type[Family]) -> type[Family]:
     """Module-level decorator helper for family registration."""
     return REGISTRY.register(family_cls)
 
@@ -155,7 +183,20 @@ def install(model: object, pool: object, model_type: str) -> Callable[[], None] 
 
 
 def _register_builtins() -> None:
-    for cls in (Llama, Mistral, Qwen2, Qwen2Moe, Gemma, Gemma2, Phi, Phi3, Mixtral, Falcon, DeepSeek, InternLM):
+    for cls in (
+        Llama,
+        Mistral,
+        Qwen2,
+        Qwen2Moe,
+        Gemma,
+        Gemma2,
+        Phi,
+        Phi3,
+        Mixtral,
+        Falcon,
+        DeepSeek,
+        InternLM,
+    ):
         REGISTRY.register(cls)
 
 
@@ -163,24 +204,24 @@ _register_builtins()
 
 
 __all__ = [
-    "Family",
-    "NoOpFamily",
-    "FamilyRegistry",
     "REGISTRY",
-    "register",
-    "known_model_types",
-    "resolve",
-    "install",
-    "Llama",
-    "Mistral",
-    "Qwen2",
-    "Qwen2Moe",
+    "DeepSeek",
+    "Falcon",
+    "Family",
+    "FamilyRegistry",
     "Gemma",
     "Gemma2",
+    "InternLM",
+    "Llama",
+    "Mistral",
+    "Mixtral",
+    "NoOpFamily",
     "Phi",
     "Phi3",
-    "Mixtral",
-    "Falcon",
-    "DeepSeek",
-    "InternLM",
+    "Qwen2",
+    "Qwen2Moe",
+    "install",
+    "known_model_types",
+    "register",
+    "resolve",
 ]

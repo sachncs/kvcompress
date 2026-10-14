@@ -31,7 +31,7 @@ from typing import Any
 
 import torch
 
-from kvfold.errors import CacheValidationError, DTypeError, ShapeError
+from kvfold.errors import CacheValidationError, ShapeError
 
 log = logging.getLogger(__name__)
 
@@ -162,7 +162,45 @@ class Payload:
         n = 1
         for d in self.shape:
             n *= int(d)
-        return n * DTYPE_BYTES.get(self.dtype, self.dtype.itemsize if hasattr(self.dtype, "itemsize") else 0)
+        return n * DTYPE_BYTES.get(
+            self.dtype, self.dtype.itemsize if hasattr(self.dtype, "itemsize") else 0
+        )
+
+    @property
+    def bytes_resident(self) -> int:
+        """Resident tensor-storage bytes, counting shared storage once.
+
+        ``bytes_compressed`` is a logical payload size based on visible
+        elements. This property uses PyTorch storage sizes, which captures
+        allocator-visible backing storage and padding more accurately for
+        capacity planning.
+        """
+        total = 0
+        seen: set[tuple[str, int | None, int, int]] = set()
+
+        def walk(value: object) -> None:
+            nonlocal total
+            if isinstance(value, torch.Tensor):
+                storage = value.untyped_storage()
+                key = (
+                    value.device.type,
+                    value.device.index,
+                    storage.data_ptr(),
+                    storage.nbytes(),
+                )
+                if key not in seen:
+                    seen.add(key)
+                    total += storage.nbytes()
+            elif isinstance(value, dict):
+                for nested in value.values():
+                    walk(nested)
+            elif isinstance(value, (list, tuple)):
+                for nested in value:
+                    walk(nested)
+
+        for value in self.data.values():
+            walk(value)
+        return total
 
 
 class Compressor(abc.ABC):
@@ -209,11 +247,18 @@ class Compressor(abc.ABC):
         dtype / device / range checks.
         """
         if key.shape != value.shape:
-            raise CacheValidationError(layer=-1, expected=tuple(key.shape), actual=tuple(value.shape))
+            raise CacheValidationError(
+                layer=-1, expected=tuple(key.shape), actual=tuple(value.shape)
+            )
         if key.dim() != 3:
             raise ShapeError(
                 f"expected 3-D tensor (m, T, dh); got {key.dim()}-D with shape {tuple(key.shape)}",
                 hint="KV tensors must be (heads, length, head_dim)",
+            )
+        if any(int(size) == 0 for size in key.shape):
+            raise ShapeError(
+                f"KV tensors cannot contain a zero-length dimension: {tuple(key.shape)}",
+                hint="provide at least one head, token, and feature element",
             )
 
     @abc.abstractmethod
@@ -248,7 +293,7 @@ class Compressor(abc.ABC):
 
     def clear_history(self) -> None:
         """Drop any per-instance stats history. Default: no-op."""
-        return None
+        return
 
     def history(self) -> list[Stats]:
         """Return a list of per-call stats records. Default: empty."""
@@ -258,4 +303,4 @@ class Compressor(abc.ABC):
         return f"{type(self).__name__}(method={self.method!r})"
 
 
-__all__ = ["Compressor", "Payload", "Stats", "DTYPE_BYTES"]
+__all__ = ["DTYPE_BYTES", "Compressor", "Payload", "Stats"]

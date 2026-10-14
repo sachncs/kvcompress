@@ -1,7 +1,9 @@
 # vLLM integration
 
 kvfold ships with two vLLM integration paths. Both are optional and
-require ``vllm>=0.7``.
+require ``vllm>=0.19,<1.0`` for the Shape B offload handler. Shape A remains
+the more portable export/import path, but should still be tested against the
+installed vLLM release before deployment.
 
 ## Shape A: ``export_kv`` / ``import_kv``
 
@@ -61,7 +63,7 @@ Both helpers accept the same ``method`` keyword as
 
 ```python
 # 0.1.x
-export_kv(model, path, method="flashjolt", compression_ratio=3.0)
+export_kv(model, path, method="flash", ratio=3.0)
 
 # 0.2.0
 export_kv(model, path, method="flash", ratio=3.0)

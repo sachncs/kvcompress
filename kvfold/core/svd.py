@@ -21,13 +21,13 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal, Type
+from typing import Literal, cast
 
 import torch
 
 from kvfold.errors import ShapeError
 
-__all__ = ["Decomposition", "Decomposer", "Exact", "Randomized", "DecomposerRegistry"]
+__all__ = ["Decomposer", "DecomposerRegistry", "Decomposition", "Exact", "Randomized"]
 
 
 log = logging.getLogger(__name__)
@@ -109,10 +109,18 @@ class Exact(Decomposer):
     name: Literal["exact", "randomised"] = "exact"
 
     def decompose(self, a: torch.Tensor, rank: int) -> Decomposition:
+        """Compute a full SVD and retain the requested rank."""
         if a.dim() != 2:
-            raise ShapeError(f"Exact decomposer expects 2-D matrix; got {a.dim()}-D shape {tuple(a.shape)}")
+            raise ShapeError(
+                f"Exact decomposer expects 2-D matrix; got {a.dim()}-D shape {tuple(a.shape)}"
+            )
         compute_dtype = a.dtype if a.dtype in (torch.float32, torch.float64) else torch.float32
-        a_compute = a.to(compute_dtype) if a.dtype != compute_dtype else a
+        output_device = a.device
+        # MPS currently lacks QR, which is required by randomized SVD. Keep
+        # the public tensors on MPS while running this numerically sensitive
+        # decomposition on CPU until the backend provides the operator.
+        compute_device = torch.device("cpu") if a.device.type == "mps" else a.device
+        a_compute = a.to(device=compute_device, dtype=compute_dtype)
         m, n = a.shape
         max_rank = min(m, n)
         rank = max(1, min(int(rank), max_rank))
@@ -126,6 +134,11 @@ class Exact(Decomposer):
             u_out = u_out.to(a.dtype)
             s_out = s_out.to(a.dtype)
             vh_out = vh_out.to(a.dtype)
+        if output_device != compute_device:
+            u_out = u_out.to(output_device)
+            s_out = s_out.to(output_device)
+            vh_out = vh_out.to(output_device)
+            s = s.to(output_device)
         return Decomposition(
             u=u_out,
             s=s_out,
@@ -145,15 +158,20 @@ class Randomized(Decomposer):
 
     name: Literal["exact", "randomised"] = "randomised"
 
-    def __init__(self, *, oversampling: int = 10, n_power: int = 2, seed: int = 0, cap: int | None = None) -> None:
+    def __init__(
+        self, *, oversampling: int = 10, n_power: int = 2, seed: int = 0, cap: int | None = None
+    ) -> None:
         self.oversampling = int(oversampling)
         self.n_power = int(n_power)
         self.seed = int(seed)
         self.cap = int(cap) if cap is not None else None
 
     def decompose(self, a: torch.Tensor, rank: int) -> Decomposition:
+        """Compute a seeded randomized SVD capped at the requested sketch size."""
         if a.dim() != 2:
-            raise ShapeError(f"Randomized decomposer expects 2-D matrix; got {a.dim()}-D shape {tuple(a.shape)}")
+            raise ShapeError(
+                f"Randomized decomposer expects 2-D matrix; got {a.dim()}-D shape {tuple(a.shape)}"
+            )
         m, n = a.shape
         max_rank = min(m, n)
         rank = max(1, min(int(rank), max_rank))
@@ -164,9 +182,15 @@ class Randomized(Decomposer):
         k = min(k, max_rank)
 
         compute_dtype = a.dtype if a.dtype in (torch.float32, torch.float64) else torch.float32
-        a_compute = a.to(compute_dtype) if a.dtype != compute_dtype else a
+        output_device = a.device
+        # MPS currently lacks QR, which is required by randomized SVD. Keep
+        # the public tensors on MPS while running this decomposition on CPU
+        # until the backend provides the operator.
+        compute_device = torch.device("cpu") if a.device.type == "mps" else a.device
+        a_compute = a.to(device=compute_device, dtype=compute_dtype)
 
-        gen = torch.Generator(device="cpu")
+        # The generator must live on the same device as ``omega``.
+        gen = torch.Generator(device=compute_device)
         gen.manual_seed(self.seed + rank)
         omega = torch.randn(n, k, dtype=compute_dtype, device=a_compute.device, generator=gen)
         y = a_compute @ omega
@@ -179,23 +203,23 @@ class Randomized(Decomposer):
         u_b, s_b, vh_b = torch.linalg.svd(b, full_matrices=False)
         u = q @ u_b
 
-        if rank > s_b.shape[0]:
-            rank = s_b.shape[0]
+        rank = min(rank, s_b.shape[0])
         u_r = u[:, :rank].contiguous()
         s_r = s_b[:rank].contiguous()
         vh_r = vh_b[:rank, :].contiguous()
 
         a_fro_sq = float(torch.sum(a_compute * a_compute))
         retained = float(torch.sum(s_r * s_r))
-        if a_fro_sq > 0:
-            tail_mass_value = max(0.0, 1.0 - retained / a_fro_sq)
-        else:
-            tail_mass_value = 0.0
+        tail_mass_value = max(0.0, 1.0 - retained / a_fro_sq) if a_fro_sq > 0 else 0.0
 
         if a.dtype != compute_dtype:
             u_r = u_r.to(a.dtype)
             s_r = s_r.to(a.dtype)
             vh_r = vh_r.to(a.dtype)
+        if output_device != compute_device:
+            u_r = u_r.to(output_device)
+            s_r = s_r.to(output_device)
+            vh_r = vh_r.to(output_device)
 
         log.debug(
             "Randomized: rank=%d oversampling=%d n_power=%d tail_mass=%.4e",
@@ -218,24 +242,30 @@ class DecomposerRegistry:
     """Registry of :class:`Decomposer` strategies."""
 
     def __init__(self) -> None:
-        self.entries: dict[str, Type[Decomposer]] = {
+        self.entries: dict[str, type[Decomposer]] = {
             "exact": Exact,
             "randomised": Randomized,
         }
 
-    def register(self, name: str, cls: Type[Decomposer]) -> Type[Decomposer]:
+    def register(self, name: str, cls: type[Decomposer]) -> type[Decomposer]:
+        """Register a decomposer class under ``name``."""
         if not issubclass(cls, Decomposer):
             raise TypeError(f"{cls.__name__} must inherit from Decomposer")
         self.entries[name] = cls
         return cls
 
-    def resolve(self, name: str) -> Type[Decomposer]:
+    def resolve(self, name: str) -> type[Decomposer]:
+        """Return the decomposer class registered under ``name``."""
         try:
             return self.entries[name]
         except KeyError:
-            raise KeyError(f"unknown decomposer {name!r}; available: {list(self.entries)}") from None
+            raise KeyError(
+                f"unknown decomposer {name!r}; available: {list(self.entries)}"
+            ) from None
 
-    def default(self, method: Literal["auto", "exact", "randomised"], **kwargs: object) -> Decomposer:
+    def default(
+        self, method: Literal["auto", "exact", "randomised"], **kwargs: object
+    ) -> Decomposer:
         """Construct the appropriate strategy for ``method``.
 
         ``"auto"`` picks :class:`Exact` when no kwargs are given, else
@@ -247,8 +277,17 @@ class DecomposerRegistry:
             return Exact()
         if method == "randomised":
             valid = {"oversampling", "n_power", "seed", "cap"}
-            filtered = {k: v for k, v in kwargs.items() if k in valid}
-            return Randomized(**filtered)
+            filtered: dict[str, int | None] = {
+                k: int(cast(int, v)) if v is not None else None
+                for k, v in kwargs.items()
+                if k in valid
+            }
+            return Randomized(
+                oversampling=filtered.get("oversampling") or 10,
+                n_power=filtered.get("n_power") or 2,
+                seed=filtered.get("seed") or 0,
+                cap=filtered.get("cap"),
+            )
         raise ValueError(f"unknown decomposer method {method!r}")
 
 

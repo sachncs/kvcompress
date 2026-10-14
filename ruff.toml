@@ -1,3 +1,26 @@
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 extend-exclude = ["build", "dist", ".venv"]
+
+[lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "PT", "TID", "ARG", "PL"]
+# Lazy imports are intentional: optional integrations must not become hard
+# dependencies of the core package. Scientific tensor notation is also kept
+# in algorithm and kernel code for parity with the published equations.
+ignore = [
+    "PLR0913", "PLR2004", "B008", "UP040",
+    "PLC0415", "N803", "N806", "N815", "RUF002", "RUF003",
+    # Protocol-compatible constructors intentionally accept unused options.
+    "ARG001", "ARG002",
+]
+
+[lint.per-file-ignores]
+"tests/**/*.py" = ["PLR0915", "N806", "ARG"]
+"examples/**/*.py" = ["E402"]
+"kvfold/adapter/huggingface.py" = ["E402", "PLR0915"]
+"kvfold/adapter/vllm.py" = ["PLR0912", "PLR0915"]
+"kvfold/adapter/vllm_offload.py" = ["PLR0912", "PLR0915"]
+"kvfold/cli.py" = ["PLR0917"]
+"kvfold/core/budget.py" = ["PLR0912", "PLR0915", "PLR0917"]
+"kvfold/kernel/triton/**/*.py" = ["E402", "PLR0917", "PLW0603"]
+"kvfold/store/compress.py" = ["PLR0917"]

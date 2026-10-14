@@ -10,16 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from kvfold.adapter import registry
 from kvfold.adapter.registry import (
+    REGISTRY,
     Family,
     FamilyRegistry,
-    REGISTRY,
     install,
     known_model_types,
     resolve,
 )
-
 
 EXPECTED_FAMILIES = {
     "llama",
@@ -73,6 +71,7 @@ def test_register_adds_new_family() -> None:
 def test_register_same_class_is_idempotent() -> None:
     """Re-registering the same family class is a no-op (reload-safe)."""
     from kvfold.adapter.registry import Llama
+
     before = REGISTRY.entries.get("llama")
     REGISTRY.register(Llama)
     assert REGISTRY.entries.get("llama") is before

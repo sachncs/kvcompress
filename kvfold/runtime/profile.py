@@ -105,7 +105,7 @@ class Profile:
             agg["total_ms"] += r.duration_ms
             agg["bytes_in"] += r.bytes_in
             agg["bytes_out"] += r.bytes_out
-        for name, agg in out.items():
+        for _name, agg in out.items():
             agg["mean_ms"] = agg["total_ms"] / agg["count"]
         return out
 

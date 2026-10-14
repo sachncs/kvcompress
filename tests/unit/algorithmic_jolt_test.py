@@ -96,8 +96,8 @@ def test_flash_short_context_matches_exact_jolt() -> None:
     fjolt = Flash(ratio=3.0, bits=(0, 4, 8))
     kp_j, vp_j = jolt.compress(K, V)
     kp_f, vp_f = fjolt.compress(K, V)
-    K_j, V_j = jolt.restore(kp_j, vp_j)
-    K_f, V_f = fjolt.restore(kp_f, vp_f)
+    K_j, _V_j = jolt.restore(kp_j, vp_j)
+    K_f, _V_f = fjolt.restore(kp_f, vp_f)
     err_j = float(torch.linalg.norm(K - K_j) / torch.linalg.norm(K))
     err_f = float(torch.linalg.norm(K - K_f) / torch.linalg.norm(K))
     # Both errors are finite.
@@ -186,7 +186,7 @@ def test_jolt_dtype_preservation() -> None:
         V = torch.randn(2, 32, 8, dtype=dtype)
         comp = Jolt(ratio=2.0, bits=(0, 4, 8))
         kp, vp = comp.compress(K, V)
-        K_hat, V_hat = comp.restore(kp, vp)
+        K_hat, _V_hat = comp.restore(kp, vp)
         assert K_hat.dtype == dtype, f"dtype changed: {dtype} -> {K_hat.dtype}"
 
 
@@ -196,7 +196,7 @@ def test_jolt_actually_uses_tucker_when_ratio_above_one() -> None:
     torch.manual_seed(0)
     K = torch.randn(8, 256, 64)
     comp = Jolt(ratio=2.0, bits=(0, 4, 8))
-    kp, vp = comp.compress(K, V := torch.randn_like(K))
+    kp, _vp = comp.compress(K, _V := torch.randn_like(K))
     # The token rank should be < T (256).
     assert kp.metadata["r_token"] < 256
     # The feature rank should be < dh (64).

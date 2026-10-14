@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Literal
 
 import torch
 
@@ -24,6 +23,8 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class ReconstructionResult:
+    """One method's reconstruction and storage measurements."""
+
     method: str
     bits: int
     rel_err_K: float
@@ -58,8 +59,18 @@ def make_synthetic_kv(
     k_feature = torch.randn(head_dim, k_feature_rank)
     v_token = torch.randn(length, v_token_rank)
     v_feature = torch.randn(head_dim, v_feature_rank)
-    K = torch.einsum("ta,dr,ar->td", k_token, k_feature, k_core).unsqueeze(0).expand(m, length, head_dim).contiguous()
-    V = torch.einsum("ta,dr,ar->td", v_token, v_feature, v_core).unsqueeze(0).expand(m, length, head_dim).contiguous()
+    K = (
+        torch.einsum("ta,dr,ar->td", k_token, k_feature, k_core)
+        .unsqueeze(0)
+        .expand(m, length, head_dim)
+        .contiguous()
+    )
+    V = (
+        torch.einsum("ta,dr,ar->td", v_token, v_feature, v_core)
+        .unsqueeze(0)
+        .expand(m, length, head_dim)
+        .contiguous()
+    )
     return K, V
 
 
@@ -81,6 +92,7 @@ def run_table2(
     compression_ratio: float = 2.0,
     bits: int = 4,
 ) -> list[ReconstructionResult]:
+    """Run the synthetic reconstruction comparison for all baseline methods."""
     K, V = make_synthetic_kv(m=m, length=length, head_dim=head_dim, seed=seed)
     methods: list[tuple[str, dict[str, int | float]]] = [
         ("jolt", {"ratio": compression_ratio}),
@@ -109,6 +121,7 @@ def run_table2(
 
 
 def main() -> None:
+    """Run the command-line Table 2 reconstruction benchmark."""
     import argparse
     import json
 
@@ -122,14 +135,27 @@ def main() -> None:
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
-    results = run_table2(m=args.m, length=args.length, head_dim=args.head_dim, seed=args.seed, compression_ratio=args.ratio, bits=args.bits)
+    results = run_table2(
+        m=args.m,
+        length=args.length,
+        head_dim=args.head_dim,
+        seed=args.seed,
+        compression_ratio=args.ratio,
+        bits=args.bits,
+    )
     rows = [r.__dict__ for r in results]
-    print(f"{'method':<8} {'bits':>5} {'rel_err_K':>12} {'rel_err_V':>12} {'bytes_K':>10} {'ratio':>10}")
+    print(
+        f"{'method':<8} {'bits':>5} {'rel_err_K':>12} "
+        f"{'rel_err_V':>12} {'bytes_K':>10} {'ratio':>10}"
+    )
     for r in results:
-        print(f"{r.method:<8} {r.bits:>5} {r.rel_err_K:>12.4f} {r.rel_err_V:>12.4f} {r.bytes_K:>10} {r.compression_ratio:>10.2f}")
+        print(
+            f"{r.method:<8} {r.bits:>5} {r.rel_err_K:>12.4f} "
+            f"{r.rel_err_V:>12.4f} {r.bytes_K:>10} {r.compression_ratio:>10.2f}"
+        )
     if args.output:
         with open(args.output, "w") as f:
             json.dump(rows, f, indent=2)
 
 
-__all__ = ["ReconstructionResult", "make_synthetic_kv", "rel_err", "run_table2", "main"]
+__all__ = ["ReconstructionResult", "main", "make_synthetic_kv", "rel_err", "run_table2"]

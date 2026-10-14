@@ -24,19 +24,28 @@ from __future__ import annotations
 
 import dataclasses
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Final, Literal, Mapping, Type, TypeAlias
+from collections.abc import Mapping
+from typing import Any, ClassVar, Final, Literal, TypeAlias, cast
 
 import torch
 
 from kvfold.errors import MethodConfigError
 
-
 Method: TypeAlias = Literal[
-    "jolt", "flash", "low", "int2", "int4", "int8", "fp8", "fp16", "bf16", "pass",
+    "jolt",
+    "flash",
+    "low",
+    "int2",
+    "int4",
+    "int8",
+    "fp8",
+    "fp16",
+    "bf16",
+    "pass",
 ]
 
 
-class MethodConfig(ABC):
+class MethodConfig(ABC):  # noqa: PLW1641 - concrete configs define value semantics
     """Abstract base for every method's configuration object.
 
     Subclasses are dataclasses. The base class is not itself a dataclass
@@ -44,10 +53,11 @@ class MethodConfig(ABC):
     """
 
     method: ClassVar[Method]
-    registry: ClassVar["MethodConfigRegistry"]
+    registry: ClassVar[MethodConfigRegistry]
 
     @abstractmethod
     def validate(self) -> None:
+        """Validate JoLT-specific ranges and categorical options."""
         """Raise :class:`MethodConfigError` if any field is out of range."""
 
     def to_dict(self) -> dict[str, Any]:
@@ -61,7 +71,7 @@ class MethodConfig(ABC):
         return {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "MethodConfig":
+    def from_dict(cls, data: Mapping[str, Any]) -> MethodConfig:
         """Construct a config from its ``to_dict()`` snapshot."""
         return cls(**dict(data))
 
@@ -99,11 +109,14 @@ class JoltConfig(MethodConfig):
     seed: int = 0
 
     def validate(self) -> None:
+        """Validate JoLT-specific ranges and categorical options."""
         if self.ratio < 1.0:
             raise MethodConfigError("jolt", "ratio", f"must be >= 1.0; got {self.ratio}")
         for b in self.bits:
             if b not in (0, 2, 4, 8):
-                raise MethodConfigError("jolt", "bits", f"each entry must be 0, 2, 4, or 8; got {b}")
+                raise MethodConfigError(
+                    "jolt", "bits", f"each entry must be 0, 2, 4, or 8; got {b}"
+                )
         if self.distribution not in ("gaussian", "rademacher", "sparse"):
             raise MethodConfigError("jolt", "distribution", f"unknown {self.distribution!r}")
         if self.layer_groups < 1:
@@ -133,6 +146,7 @@ class FlashConfig(MethodConfig):
     seed: int = 0
 
     def validate(self) -> None:
+        """Validate Flash-specific ranges and cap policy."""
         if self.ratio < 1.0:
             raise MethodConfigError("flash", "ratio", f"must be >= 1.0; got {self.ratio}")
         if self.cap is not None and self.cap < 1:
@@ -155,6 +169,7 @@ class LowRankConfig(MethodConfig):
     seed: int = 0
 
     def validate(self) -> None:
+        """Validate the requested token-mode rank."""
         if self.rank < 1:
             raise MethodConfigError("low", "rank", f"must be >= 1; got {self.rank}")
 
@@ -177,6 +192,7 @@ class IntConfig(MethodConfig):
     group_size: int | None = None
 
     def validate(self) -> None:
+        """Validate integer quantisation bit-width and grouping."""
         if self.bits not in (2, 4, 8):
             raise MethodConfigError(self.method, "bits", f"must be 2, 4, or 8; got {self.bits}")
         if self.group_size is not None and self.group_size < 1:
@@ -200,6 +216,7 @@ class FloatConfig(MethodConfig):
     dtype: torch.dtype = torch.float16
 
     def validate(self) -> None:
+        """Validate that the selected storage dtype is a 16-bit float."""
         if self.dtype not in (torch.float16, torch.bfloat16):
             raise MethodConfigError(
                 self.method, "dtype", f"must be torch.float16 or torch.bfloat16; got {self.dtype}"
@@ -221,6 +238,7 @@ class PassConfig(MethodConfig):
     dtype: torch.dtype | None = None
 
     def validate(self) -> None:
+        """Validate the optional passthrough storage dtype."""
         if self.dtype is not None and not self.dtype.is_floating_point:
             raise MethodConfigError("pass", "dtype", "must be a floating-point dtype when provided")
 
@@ -246,6 +264,7 @@ class Float8Config(MethodConfig):
     group_size: int | None = None
 
     def validate(self) -> None:
+        """Validate FP8 variant and grouping options."""
         if self.variant not in ("e4m3", "e5m2"):
             raise MethodConfigError("fp8", "variant", f"unknown {self.variant!r}")
         if self.group_size is not None and self.group_size < 1:
@@ -254,30 +273,40 @@ class Float8Config(MethodConfig):
 
 @dataclasses.dataclass(frozen=True)
 class Int2Config(IntConfig):
+    """Configuration for two-bit integer residuals."""
+
     method: ClassVar[Method] = "int2"
     bits: int = 2
 
 
 @dataclasses.dataclass(frozen=True)
 class Int4Config(IntConfig):
+    """Configuration for four-bit integer residuals."""
+
     method: ClassVar[Method] = "int4"
     bits: int = 4
 
 
 @dataclasses.dataclass(frozen=True)
 class Int8Config(IntConfig):
+    """Configuration for eight-bit integer residuals."""
+
     method: ClassVar[Method] = "int8"
     bits: int = 8
 
 
 @dataclasses.dataclass(frozen=True)
 class Fp16Config(FloatConfig):
+    """Configuration for float16 casting."""
+
     method: ClassVar[Method] = "fp16"
     dtype: torch.dtype = dataclasses.field(default=torch.float16, init=False)
 
 
 @dataclasses.dataclass(frozen=True)
 class Bf16Config(FloatConfig):
+    """Configuration for bfloat16 casting."""
+
     method: ClassVar[Method] = "bf16"
     dtype: torch.dtype = dataclasses.field(default=torch.bfloat16, init=False)
 
@@ -293,9 +322,9 @@ class MethodConfigRegistry:
     """
 
     def __init__(self) -> None:
-        self.entries: dict[Method, Type[MethodConfig]] = {}
+        self.entries: dict[Method, type[MethodConfig]] = {}
 
-    def register(self, name: Method, config_cls: Type[MethodConfig]) -> None:
+    def register(self, name: Method, config_cls: type[MethodConfig]) -> None:
         """Bind ``name`` to ``config_cls``.
 
         Idempotent: re-registering the same ``(name, config_cls)`` pair
@@ -318,14 +347,14 @@ class MethodConfigRegistry:
         """Return the registered method names in insertion order."""
         return tuple(self.entries)
 
-    def resolve(self, name: str) -> Type[MethodConfig]:
+    def resolve(self, name: str) -> type[MethodConfig]:
         """Return the config class bound to ``name``.
 
         Raises:
             KeyError: If ``name`` is not registered.
         """
         try:
-            return self.entries[name]
+            return self.entries[cast(Method, name)]
         except KeyError:
             raise KeyError(f"unknown method {name!r}; registered: {self.names()}") from None
 
@@ -336,7 +365,7 @@ class MethodConfigRegistry:
         field name.
         """
         config_cls = self.resolve(name)
-        valid_fields = {f.name for f in dataclasses.fields(config_cls)}
+        valid_fields = {f.name for f in dataclasses.fields(cast(Any, config_cls))}
         unknown = set(kwargs) - valid_fields
         if unknown:
             raise MethodConfigError(
@@ -370,10 +399,11 @@ REGISTRY.register("pass", PassConfig)
 
 
 __all__ = [
+    "REGISTRY",
     "Bf16Config",
+    "FlashConfig",
     "Float8Config",
     "FloatConfig",
-    "FlashConfig",
     "Fp16Config",
     "Int2Config",
     "Int4Config",
@@ -385,5 +415,4 @@ __all__ = [
     "MethodConfig",
     "MethodConfigRegistry",
     "PassConfig",
-    "REGISTRY",
 ]

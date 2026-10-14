@@ -21,14 +21,14 @@ export const navLinks = [
   { label: 'How it works', href: '#how' },
   { label: 'Benchmarks', href: '#benchmarks' },
   { label: 'Integrations', href: '#integrations' },
-  { label: 'Docs', href: '#docs' },
+  { label: 'Docs', href: 'https://github.com/sachncs/kvcompress#readme' },
 ];
 
 export const hero = {
   eyebrow: 'v0.2.0 · Open Source · Apache-2.0',
   title: 'KV cache, folded',
   subtitle:
-    'A single function call shrinks the attention cache of any decoder-only LLM — without retraining, without quality cliffs, without leaving Hugging Face.',
+    'A single function call reduces decoder-only LLM KV-cache memory — with explicit quality and compatibility trade-offs, inside Hugging Face.',
   primaryCta: { label: 'pip install kvfold', href: '#install' },
   secondaryCta: { label: 'Read the paper', href: 'https://arxiv.org/abs/2607.12550' },
   codeLines: [
@@ -61,14 +61,14 @@ export const valueProps = [
       'Faithful implementation of Krishnan & Schulz (2026) — partial Tucker decomposition with a JL-rotated low-bit residual.',
   },
   {
-    title: 'Production-ready paths.',
+    title: 'Deployment paths, clearly scoped.',
     description:
-      'vLLM Shape A export/import, Shape B offload subclass, and optional Triton kernels for NVIDIA.',
+      'vLLM export/import, an offload integration, and optional Triton kernels for NVIDIA hardware.',
   },
   {
     title: 'Honest failure modes.',
     description:
-      'Recoverable errors emit warnings instead of crashing. Cache, allocator, and adapter all have explicit contracts.',
+      'Cache, allocator, and adapter boundaries expose explicit contracts and failure context.',
   },
 ];
 
@@ -79,7 +79,7 @@ export const methods = [
     description:
       'Partial Tucker decomposition with a JL-rotated low-bit residual. Pin head and layer modes; truncate token and feature modes.',
     ratio: '2–4×',
-    quality: 'near-lossless',
+    quality: 'high fidelity in tested regimes',
   },
   {
     name: 'flash',
@@ -190,6 +190,13 @@ export const fidelityBenchmark = {
   note: 'm=8, T=256, dh=128, target_ratio = 2.0.',
 };
 
+export const benchmarkEvidence = {
+  docsUrl: 'https://github.com/sachncs/kvcompress/blob/master/docs/benchmarks/running.md',
+  memoryCommand: 'python -m scripts.run_memory_benchmark --T 1024 --dh 128 --ratios 2 3 4 5 8',
+  speedCommand: 'python -m scripts.run_speed_benchmark --T 1024 --dh 128 --ratio 3',
+  fidelityCommand: 'python -m scripts.run_table2_reconstruction --T 1024 --ratio 2.0',
+} as const;
+
 export const integrations = [
   {
     name: 'Hugging Face',
@@ -255,7 +262,7 @@ export const faqs = [
   },
   {
     q: 'Will my generation quality drop?',
-    a: 'JoLT and Flash are designed to operate in the paper’s “free zone” — ratios where reconstruction error is dominated by numerical noise. int4 and fp8 trade quality for size; pick accordingly.',
+    a: 'Quality depends on method, ratio, model, sequence length, and workload. The repository’s synthetic CPU benchmarks show the trade-offs; validate on your own model before rollout.',
   },
   {
     q: 'Does it work with vLLM?',

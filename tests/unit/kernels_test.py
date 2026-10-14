@@ -41,7 +41,7 @@ def test_jl_project_fallback() -> None:
 def test_quantize_int8_fallback() -> None:
     torch.manual_seed(0)
     x = torch.randn(4, 8)
-    packed, scale, zp = quantize_int8(x)
+    packed, _scale, _zp = quantize_int8(x)
     assert packed.dtype == torch.uint8
 
 

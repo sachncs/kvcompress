@@ -43,11 +43,15 @@ class Pass(Compressor):
     def __init__(self, *, dtype: torch.dtype | None = None, **unused: Any) -> None:
         if unused:
             from kvfold.errors import MethodConfigError
-            raise MethodConfigError("pass", ",".join(sorted(unused.keys())), f"unknown field(s); pass accepts only dtype")
+
+            raise MethodConfigError(
+                "pass", ",".join(sorted(unused.keys())), "unknown field(s); pass accepts only dtype"
+            )
         self.dtype = dtype if dtype is not None else torch.float16
 
     @classmethod
     def default_config(cls) -> PassConfig:
+        """Return the default passthrough configuration."""
         return PassConfig()
 
     def compress(self, key: torch.Tensor, value: torch.Tensor) -> tuple[Payload, Payload]:
@@ -77,7 +81,9 @@ class Pass(Compressor):
         )
         return kp, vp
 
-    def restore(self, key_payload: Payload, value_payload: Payload) -> tuple[torch.Tensor, torch.Tensor]:
+    def restore(
+        self, key_payload: Payload, value_payload: Payload
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Reconstruct K and V from the cached buffers."""
         k = key_payload.data["value"].to(key_payload.dtype)
         v = value_payload.data["value"].to(value_payload.dtype)

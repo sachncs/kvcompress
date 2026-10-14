@@ -18,10 +18,18 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
-
 StateT = TypeVar("StateT")
+
+
+@dataclass(frozen=True)
+class AdapterState:
+    """Immutable lifecycle snapshot shared by framework adapters."""
+
+    name: str
+    attached: bool
 
 
 class Adapter(AbstractContextManager, ABC, Generic[StateT]):
@@ -44,12 +52,12 @@ class Adapter(AbstractContextManager, ABC, Generic[StateT]):
         """Return the adapter's current state. Subclasses override."""
         raise NotImplementedError
 
-    def __enter__(self) -> "Adapter":
+    def __enter__(self) -> Adapter:
         self.attach()
         return self
 
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+    def __exit__(self, _exc_type: object, _exc: object, _tb: object) -> None:
         self.detach()
 
 
-__all__ = ["Adapter"]
+__all__ = ["Adapter", "AdapterState"]

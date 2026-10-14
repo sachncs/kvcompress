@@ -34,7 +34,7 @@ roughly ``(m·T·dh) / (m·T·r + r·dh)`` for ``c=1``, dropping further when
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import torch
 
@@ -71,6 +71,7 @@ class Low(Compressor):
     ) -> None:
         if unused:
             from kvfold.errors import MethodConfigError
+
             raise MethodConfigError(
                 "low",
                 ",".join(sorted(unused.keys())),
@@ -82,6 +83,7 @@ class Low(Compressor):
 
     @classmethod
     def default_config(cls) -> LowRankConfig:
+        """Return the default low-rank configuration."""
         return LowRankConfig()
 
     def compress(self, key: torch.Tensor, value: torch.Tensor) -> tuple[Payload, Payload]:
@@ -96,7 +98,9 @@ class Low(Compressor):
         vp = self.build_payload(value, v_res, m, T, dh)
         return kp, vp
 
-    def restore(self, key_payload: Payload, value_payload: Payload) -> tuple[torch.Tensor, torch.Tensor]:
+    def restore(
+        self, key_payload: Payload, value_payload: Payload
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Inverse of :meth:`compress`."""
         k = self.reconstruct_payload(key_payload)
         v = self.reconstruct_payload(value_payload)
@@ -136,4 +140,4 @@ class Low(Compressor):
         flat = (u * s) @ vh
         m = int(payload.metadata["m"])
         T = int(payload.metadata["T"])
-        return flat.reshape(m, T, -1).to(payload.dtype)
+        return cast(torch.Tensor, flat.reshape(m, T, -1).to(payload.dtype))

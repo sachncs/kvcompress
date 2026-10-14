@@ -14,10 +14,9 @@ enable_compression(model, method="flash", ratio=3.0)
 
 ## "Invalid `cache_implementation` (`kvfold`)."
 
-`kvfold` automatically maps whatever you pass to `cache_implementation`
-to `"dynamic"` under the hood, since Hugging Face's strict allow-list does
-not include `"kvfold"`. This message means the mapping failed for some
-reason; please open an issue.
+`kvfold` is the compatibility alias for the supported Hugging Face dynamic
+cache implementation. Other accepted values are `dynamic` and `dynamic_full`;
+invalid values fail during setup instead of being silently ignored.
 
 ## "not implemented" — unknown method
 

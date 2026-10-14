@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 
 from kvfold.bench.memory import run_memory_sweep
+from kvfold.bench.provenance import environment_metadata
 
 log = logging.getLogger(__name__)
 
@@ -36,13 +37,29 @@ def main() -> None:
     print("-" * 70)
     for r in rows:
         print(
-            f"{r['method']:<14} {r['ratio_target']:>10.2f} {r['bytes_original']:>12} {r['bytes_compressed']:>14} {r['ratio_achieved']:>9.2f}x"
+            f"{r['method']:<14} {r['ratio_target']:>10.2f} "
+            f"{r['bytes_original']:>12} {r['bytes_compressed']:>14} "
+            f"{r['ratio_achieved']:>9.2f}x"
         )
 
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w") as f:
-            json.dump(rows, f, indent=2)
+            json.dump(
+                {
+                    "metadata": environment_metadata(seed=args.seed, warmup=0, iterations=1),
+                    "parameters": {
+                        "m": args.m,
+                        "T": args.T,
+                        "dh": args.dh,
+                        "ratios": args.ratios,
+                        "methods": args.methods,
+                    },
+                    "results": rows,
+                },
+                f,
+                indent=2,
+            )
 
 
 if __name__ == "__main__":

@@ -87,6 +87,7 @@ def test_pass_stats_correct(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
 def test_pass_extra_kwargs_rejected(k_v: tuple[torch.Tensor, torch.Tensor]) -> None:
     """Unknown kwargs raise MethodConfigError at construction time."""
     from kvfold.errors import MethodConfigError
-    k, v = k_v
+
+    _k, _v = k_v
     with pytest.raises(MethodConfigError, match="random_unused_arg"):
         Pass(dtype=torch.float32, random_unused_arg=42)

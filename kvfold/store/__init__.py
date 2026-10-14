@@ -24,11 +24,13 @@ adapter. The cache is purely a key-value store indexed by layer number.
 
 from kvfold.store.compress import Cache
 from kvfold.store.manager import Pool
-from kvfold.store.metadata import Meta, LayerMeta
+from kvfold.store.metadata import LayerMeta, Meta
+from kvfold.store.ports import CacheBackend
 
 __all__ = [
-    "Pool",
     "Cache",
-    "Meta",
+    "CacheBackend",
     "LayerMeta",
+    "Meta",
+    "Pool",
 ]

@@ -1,8 +1,13 @@
 # Manual GPU verification
 
-The kvfold test suite runs entirely on CPU; GPU-dependent paths are
-verified manually on a CUDA machine. This document records the
+The default kvfold test suite runs on CPU, and the repository now includes an
+Apple MPS integration lane (`pytest -m mps`). GPU-dependent CUDA/Triton and
+vLLM paths are verified manually on a CUDA machine. This document records the
 commands to run when validating a new release on hardware.
+
+The local MPS lane validates the supported compressor round trips and the
+documented CPU fallback for Flash's randomized SVD because MPS does not yet
+implement the required QR operator. FP8 is explicitly unsupported on MPS.
 
 ## Triton kernel path
 
@@ -28,7 +33,7 @@ within ``1e-5`` relative Frobenius error on a synthetic
 
 ```bash
 pip install "kvfold[vllm]"
-pytest -v tests/integration/test_vllm_offload.py
+pytest -v tests/unit/vllm_kv_offload_test.py -k real_vllm
 ```
 
 The handler installs against ``vllm.v1.kv_offload.worker.OffloadingHandler``

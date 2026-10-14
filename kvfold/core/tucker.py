@@ -31,11 +31,11 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 
-from kvfold.core.svd import Exact, Decomposer
+from kvfold.core.svd import Decomposer, Exact
 
 log = logging.getLogger(__name__)
 
@@ -188,16 +188,23 @@ def reconstruct_partial_tucker(
         raise ValueError(f"u_feature shape {factors.u_feature.shape} != expected {(d, rd)}")
     if backend == "triton":
         from kvfold.errors import KernelNotAvailableError
+
         try:
             from kvfold.kernel.triton.tucker import triton_tucker_reconstruct
         except ImportError as exc:
             raise KernelNotAvailableError(backend="triton", required="triton package") from exc
-        return triton_tucker_reconstruct(factors.core, factors.u_token, factors.u_feature)
-    return torch.einsum(
-        "mar,ta,dr->mtd",
-        factors.core,
-        factors.u_token,
-        factors.u_feature,
+        return cast(
+            torch.Tensor,
+            triton_tucker_reconstruct(factors.core, factors.u_token, factors.u_feature),
+        )
+    return cast(
+        torch.Tensor,
+        torch.einsum(
+            "mar,ta,dr->mtd",
+            factors.core,
+            factors.u_token,
+            factors.u_feature,
+        ),
     )
 
 
@@ -206,7 +213,7 @@ def partial_tucker_st_hosvd(
     *,
     r_token: int | None = None,
     r_feature: int | None = None,
-    svd: Exact | None = None,
+    svd: Decomposer | None = None,
 ) -> Tucker:
     """Sequentially truncated HOSVD for partial Tucker decomposition.
 
@@ -237,7 +244,7 @@ def partial_tucker_st_hosvd(
     """
     if x.dim() != 3:
         raise ValueError(f"x must be 3-D, got {tuple(x.shape)}")
-    m, t, d = x.shape
+    _m, t, d = x.shape
 
     # Cap ranks by the axis length; negative or zero ranks are coerced to 1.
     rt_max = t
@@ -341,7 +348,11 @@ class TuckerDecomposer(ABC):
     """Strategy for partial Tucker decomposition."""
 
     @abstractmethod
-    def decompose(self, x: torch.Tensor, r_token: int | None = None, r_feature: int | None = None) -> Tucker: ...
+    def decompose(
+        self, x: torch.Tensor, r_token: int | None = None, r_feature: int | None = None
+    ) -> Tucker:
+        """Decompose ``x`` into partial Tucker factors."""
+        raise NotImplementedError
 
 
 class TuckerReconstructor(ABC):
@@ -354,7 +365,9 @@ class TuckerReconstructor(ABC):
     backend: str = "torch"
 
     @abstractmethod
-    def reconstruct(self, factors: Tucker, target_shape: tuple[int, int, int]) -> torch.Tensor: ...
+    def reconstruct(self, factors: Tucker, target_shape: tuple[int, int, int]) -> torch.Tensor:
+        """Reconstruct a tensor from Tucker factors."""
+        raise NotImplementedError
 
 
 class HoSVDDecomposer(TuckerDecomposer):
@@ -363,7 +376,10 @@ class HoSVDDecomposer(TuckerDecomposer):
     def __init__(self, decomposer: Decomposer | None = None) -> None:
         self.decomposer = decomposer or Exact()
 
-    def decompose(self, x: torch.Tensor, r_token: int | None = None, r_feature: int | None = None) -> Tucker:
+    def decompose(
+        self, x: torch.Tensor, r_token: int | None = None, r_feature: int | None = None
+    ) -> Tucker:
+        """Decompose ``x`` into partial Tucker factors."""
         return partial_tucker_st_hosvd(x, r_token=r_token, r_feature=r_feature, svd=self.decomposer)
 
 
@@ -373,6 +389,7 @@ class TorchReconstructor(TuckerReconstructor):
     backend: str = "torch"
 
     def reconstruct(self, factors: Tucker, target_shape: tuple[int, int, int]) -> torch.Tensor:
+        """Reconstruct a tensor from partial Tucker factors."""
         return reconstruct_partial_tucker(factors, target_shape)
 
 
@@ -385,14 +402,18 @@ class TuckerBackendRegistry:
         }
 
     def register(self, backend: str, reconstructor: TuckerReconstructor) -> TuckerReconstructor:
+        """Register a reconstruction strategy under ``backend``."""
         self.entries[backend] = reconstructor
         return reconstructor
 
     def resolve(self, backend: str) -> TuckerReconstructor:
+        """Return the reconstructor registered under ``backend``."""
         try:
             return self.entries[backend]
         except KeyError:
-            raise KeyError(f"unknown tucker backend {backend!r}; available: {list(self.entries)}") from None
+            raise KeyError(
+                f"unknown tucker backend {backend!r}; available: {list(self.entries)}"
+            ) from None
 
 
 BACKEND_REGISTRY: TuckerBackendRegistry = TuckerBackendRegistry()

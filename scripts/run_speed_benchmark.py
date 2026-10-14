@@ -7,6 +7,7 @@ import json
 import logging
 from pathlib import Path
 
+from kvfold.bench.provenance import environment_metadata
 from kvfold.bench.speed import run_speed_sweep
 
 log = logging.getLogger(__name__)
@@ -19,22 +20,48 @@ def main() -> None:
     parser.add_argument("--dh", type=int, default=128)
     parser.add_argument("--ratio", type=float, default=3.0)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--warmup", type=int, default=1)
+    parser.add_argument("--iterations", type=int, default=5)
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
-    rows = run_speed_sweep(m=args.m, T=args.T, dh=args.dh, ratio=args.ratio, seed=args.seed)
+    rows = run_speed_sweep(
+        m=args.m,
+        T=args.T,
+        dh=args.dh,
+        ratio=args.ratio,
+        seed=args.seed,
+        warmup=args.warmup,
+        iterations=args.iterations,
+    )
 
     print(f"{'method':<14} {'compress_ms':>14} {'decompress_ms':>14} {'ratio':>10}")
     print("-" * 60)
     for r in rows:
         print(
-            f"{r['method']:<14} {r['compress_ms']:>14.2f} {r['decompress_ms']:>14.2f} {r['ratio_achieved']:>9.2f}x"
+            f"{r['method']:<14} {r['compress_ms']:>14.2f} "
+            f"{r['decompress_ms']:>14.2f} {r['ratio_achieved']:>9.2f}x"
         )
 
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w") as f:
-            json.dump(rows, f, indent=2)
+            json.dump(
+                {
+                    "metadata": environment_metadata(
+                        seed=args.seed, warmup=args.warmup, iterations=args.iterations
+                    ),
+                    "parameters": {
+                        "m": args.m,
+                        "T": args.T,
+                        "dh": args.dh,
+                        "ratio": args.ratio,
+                    },
+                    "results": rows,
+                },
+                f,
+                indent=2,
+            )
 
 
 if __name__ == "__main__":

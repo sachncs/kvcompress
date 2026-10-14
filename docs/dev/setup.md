@@ -5,14 +5,15 @@
 ```bash
 git clone https://github.com/sachncs/kvcompress
 cd kvcompress
-pip install -e ".[dev,bench,docs]"
+uv sync --locked --extra dev --extra bench --extra docs
 ```
 
-This installs:
+This installs into the project-managed `.venv`:
 
 - The package in editable mode.
 - Test dependencies (`pytest`, `pytest-cov`, `hypothesis`).
 - Lint/format (`ruff`) and type check (`mypy`).
+- Google-style docstring and convention checks (`pydocstyle`).
 - Documentation (`mkdocs`).
 - Benchmark extras (`matplotlib`, `pandas`, `datasets`).
 
@@ -20,13 +21,13 @@ This installs:
 
 ```bash
 # Fast unit tests only (no model downloads).
-pytest -m "not slow and not integration and not gpu"
+uv run pytest -m "not slow and not integration and not gpu"
 
 # All tests including integration.
-pytest
+uv run pytest
 
 # Coverage.
-pytest --cov=kvfold --cov-report=term-missing
+uv run pytest --cov=kvfold --cov-report=term-missing
 ```
 
 The first run downloads a 500 MB GPT-2 model for the integration test
@@ -35,9 +36,11 @@ fixtures. Subsequent runs use the cached copy.
 ## Lint, format, type-check
 
 ```bash
-ruff check kvfold tests examples scripts
-ruff format --check kvfold tests examples scripts
-mypy kvfold
+uv run ruff check kvfold tests examples scripts
+uv run ruff format --check kvfold tests examples scripts
+uv run mypy kvfold
+uv run pydocstyle --convention=google --match='.*\\.py' --add-ignore=D100,D104,D105,D107 kvfold
+uv run python scripts/check_conventions.py
 ```
 
 These three are also run by GitHub Actions on every push.
@@ -103,5 +106,5 @@ docs/
 ├── user/
 ├── dev/
 ├── research/
-└── benchmarks/
+└── bench/
 ```

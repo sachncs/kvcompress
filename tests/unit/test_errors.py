@@ -182,12 +182,9 @@ def test_error_codes_unique() -> None:
     ],
 )
 def test_caught_by_base(exc: KVCompressError) -> None:
-    try:
+    with pytest.raises(KVCompressError) as caught:
         raise exc
-    except KVCompressError as caught:
-        assert caught is exc
-    else:
-        pytest.fail("KVCompressError did not catch the subclass")
+    assert caught.value is exc
 
 
 def test_typo_in_import_is_a_typo() -> None:

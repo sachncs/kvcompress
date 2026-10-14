@@ -4,6 +4,9 @@ on:
   push:
     branches: [master, main]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 6"
 
 jobs:
   test:
@@ -23,7 +26,11 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            uv.lock
+
+      - uses: astral-sh/setup-uv@v5
 
       - name: Install CPU torch
         run: |
@@ -34,17 +41,126 @@ jobs:
       - name: Lint
         run: ruff check kvfold tests examples scripts
 
+      - name: Verify lockfile
+        run: uv lock --check
+
       - name: Format check
         run: ruff format --check kvfold tests examples scripts
 
       - name: Type check
         run: mypy kvfold
+      - name: Google-style docstrings
+        run: pydocstyle --convention=google --match='.*\.py' --add-ignore=D100,D104,D105,D107 kvfold
+      - name: Semi-private naming conventions
+        run: python scripts/check_conventions.py
+      - name: Documentation links
+        run: python scripts/check_doc_links.py
 
       - name: Unit tests + coverage
         run: |
           python -m pytest --cov=kvfold --cov-report=term-missing \
                  -m "not slow and not integration and not gpu"
 
+      - name: Record verification environment
+        run: |
+          {
+            python --version
+            python -m pip freeze
+          } > verification-environment.txt
+      - name: Upload verification environment
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ matrix.os }}-py${{ matrix.python }}
+          path: verification-environment.txt
+
       - name: Coverage gate
         run: |
           coverage report --fail-under=90
+
+      - name: Build wheel and smoke-test install
+        run: |
+          python -m pip install build
+          python -m build --wheel
+          python -m venv /tmp/kvfold-wheel-test
+          /tmp/kvfold-wheel-test/bin/python -m pip install dist/*.whl
+          /tmp/kvfold-wheel-test/bin/python -c "import kvfold; print(kvfold.__version__)"
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-py${{ matrix.python }}
+          path: dist/*.whl
+
+  site:
+    name: site
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Audit all frontend dependencies
+        run: npm audit
+      - name: Generate frontend SBOM
+        run: npx --yes @cyclonedx/cyclonedx-npm --output-file npm-sbom.json --output-format json
+      - name: Upload frontend SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-sbom
+          path: site/npm-sbom.json
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser smoke tests
+        run: npm run test:e2e
+
+  security:
+    name: dependency security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Export locked runtime dependencies
+        run: uv export --locked --no-dev --no-emit-project --format requirements-txt > /tmp/requirements.txt
+      - name: Audit Python dependencies
+        run: uvx --from pip-audit pip-audit -r /tmp/requirements.txt --strict --progress-spinner off
+      - name: Generate Python SBOM
+        run: uvx --from pip-audit pip-audit -r /tmp/requirements.txt --format cyclonedx-json --output python-sbom.json --progress-spinner off
+      - name: Upload Python SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sbom
+          path: python-sbom.json
+
+  integration:
+    name: network integration
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CPU runtime
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+      - name: Run network integration tests
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: python -m pytest -m integration --maxfail=1 -q

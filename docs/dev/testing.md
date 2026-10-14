@@ -3,7 +3,7 @@
 ## Layout
 
 - `tests/unit/` — fast tests, no network, no model downloads.
-- `tests/integration/` — tests that download real HF models (GPT-2).
+- `tests/integration/` — tests that download a pinned real HF model revision (GPT-2).
 - `tests/property/` — Hypothesis property tests.
 - `tests/fixtures/` — shared fixtures.
 
@@ -13,19 +13,19 @@
   `test_<integration_target>.py` for integration tests.
 - One assertion concept per test.
 - Mark slow / integration / GPU tests with `@pytest.mark.<marker>`.
-- Coverage of `kvcompress/` is targeted at ≥ 95%.
+- Coverage of `kvfold/` is gated at ≥ 90% in CI.
 
 ## Running
 
 ```bash
 # Unit only — fast, run on every save.
-pytest -m "not slow and not integration and not gpu"
+uv run pytest -m "not slow and not integration and not gpu"
 
 # All tests.
-pytest
+uv run pytest
 
 # Coverage report.
-pytest --cov=kvcompress --cov-report=term-missing
+uv run pytest --cov=kvfold --cov-report=term-missing
 ```
 
 ## Property tests
@@ -84,5 +84,7 @@ class _FakeModel:
 
 ## Coverage
 
-The CI gate fails if `coverage report --fail-under=80` exits non-zero.
-We aim higher (95%+) but don't gate on it to keep velocity.
+The CI gate fails if coverage falls below 90%. The fast gate excludes optional
+benchmark/research entry points and vLLM/Triton backends; those paths require
+the separate integration/GPU jobs and must not be treated as covered by the
+unit-test percentage.

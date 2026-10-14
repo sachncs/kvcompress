@@ -16,7 +16,6 @@ import torch
 
 from kvfold.core.tucker import Tucker, reconstruct_partial_tucker
 
-
 pytestmark = pytest.mark.gpu
 
 

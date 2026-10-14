@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 import torch
+
+from kvfold.errors import SerializationError
 
 
 class FakeDynamicLayer:
@@ -147,6 +150,7 @@ def test_import_round_trip_recovers_kv_separately(fake_model: Any, tmp_path: Pat
             [layer.values for layer in new_model.past_key_values.layers],
             original_k,
             original_v,
+            strict=False,
         )
     ):
         assert not torch.equal(k_new, v_new), f"layer {layer_idx}: K and V are identical"
@@ -155,3 +159,43 @@ def test_import_round_trip_recovers_kv_separately(fake_model: Any, tmp_path: Pat
         rel_err_v = float(torch.linalg.norm(v_orig - v_new) / torch.linalg.norm(v_orig))
         assert rel_err_k < 1.5, f"layer {layer_idx}: K rel_err {rel_err_k:.3f}"
         assert rel_err_v < 1.5, f"layer {layer_idx}: V rel_err {rel_err_v:.3f}"
+
+
+def test_import_rejects_malformed_serialized_keys_by_default(
+    fake_model: Any, tmp_path: Path
+) -> None:
+    """Malformed cache files fail before mutating the destination cache."""
+    pytest.importorskip("safetensors")
+    from safetensors.torch import save_file
+
+    from kvfold.adapter.vllm import import_kv
+
+    out = tmp_path / "malformed.safetensors"
+    save_file({"not-a-cell": torch.ones(1)}, str(out))
+    out.with_suffix(out.suffix + ".meta.json").write_text(
+        json.dumps({"cell_metadata": {}}), encoding="utf-8"
+    )
+    original = [layer.keys.clone() for layer in fake_model.past_key_values.layers]
+
+    with pytest.raises(SerializationError, match="malformed serialized tensor key"):
+        import_kv(fake_model, str(out))
+
+    for layer, expected in zip(fake_model.past_key_values.layers, original, strict=True):
+        assert torch.equal(layer.keys, expected)
+
+
+def test_import_rejects_unknown_schema_version(fake_model: Any, tmp_path: Path) -> None:
+    """Incompatible serialized metadata fails before cache mutation."""
+    pytest.importorskip("safetensors")
+    from safetensors.torch import save_file
+
+    from kvfold.adapter.vllm import import_kv
+
+    out = tmp_path / "future.safetensors"
+    save_file({"0/key/value": torch.ones(1)}, str(out))
+    out.with_suffix(out.suffix + ".meta.json").write_text(
+        json.dumps({"schema_version": 99, "cell_metadata": {}}), encoding="utf-8"
+    )
+
+    with pytest.raises(SerializationError, match="schema version"):
+        import_kv(fake_model, str(out))

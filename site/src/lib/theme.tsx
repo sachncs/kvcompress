@@ -30,6 +30,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    const onPreferenceChange = (event: MediaQueryListEvent) => {
+      if (!window.localStorage.getItem(STORAGE_KEY)) {
+        setTheme(event.matches ? 'light' : 'dark');
+      }
+    };
+    media.addEventListener('change', onPreferenceChange);
+    return () => media.removeEventListener('change', onPreferenceChange);
+  }, []);
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme,

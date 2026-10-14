@@ -11,4 +11,4 @@ Each module is importable; the CLI exposes them as ``kvfold paper {table1, table
 
 from __future__ import annotations
 
-__all__ = ["perplexity", "table2", "longbench"]
+__all__ = ["longbench", "perplexity", "table2"]

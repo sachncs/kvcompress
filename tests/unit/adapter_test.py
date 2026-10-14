@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from kvfold.adapter.registry import (
-    Family,
-    FamilyRegistry,
     REGISTRY,
+    Family,
     install,
     known_model_types,
-    register,
     resolve,
 )
-from kvfold.api import enable_compression, CompressionHandle
+from kvfold.api import CompressionHandle, enable_compression
 
 
 class FakeModel:
@@ -68,6 +68,7 @@ def test_registry_register_custom() -> None:
 def test_registry_register_duplicate_is_idempotent() -> None:
     """Re-registering the same family class is a no-op (so reloads are safe)."""
     from kvfold.adapter.registry import Llama
+
     before = REGISTRY.entries.get("llama")
     REGISTRY.register(Llama)
     assert REGISTRY.entries.get("llama") is before
@@ -90,8 +91,8 @@ def test_registry_register_duplicate_different_class_raises() -> None:
 
 def test_install_dispatches() -> None:
     model = FakeModel("llama")
-    from kvfold.store.manager import Pool
     from kvfold.core.jolt import Jolt
+    from kvfold.store.manager import Pool
 
     mgr = Pool(compressor=Jolt(ratio=3.0))
     # Should not raise.
@@ -100,8 +101,8 @@ def test_install_dispatches() -> None:
 
 def test_install_unknown_uses_generic() -> None:
     model = FakeModel("nonexistent")
-    from kvfold.store.manager import Pool
     from kvfold.core.jolt import Jolt
+    from kvfold.store.manager import Pool
 
     mgr = Pool(compressor=Jolt(ratio=3.0))
     # Should not raise even though no shim exists.
@@ -125,6 +126,57 @@ def test_enable_compression_disables() -> None:
     # No assertion on internal state; just that it doesn't raise.
 
 
+def test_hf_adapter_exposes_polymorphic_lifecycle_state() -> None:
+    from kvfold.adapter.huggingface import HF
+
+    adapter = HF(model=FakeModel("llama"), method="jolt", ratio=2.0)
+    assert adapter.state().attached is False
+    with adapter as attached:
+        assert attached.state().attached is True
+        assert attached.state().name == "huggingface"
+    assert adapter.state().attached is False
+
+
+def test_hf_uses_model_scoped_cache_hook_when_available() -> None:
+    import transformers.generation.utils as generation_utils
+
+    model = FakeModel("llama")
+
+    def prepare_cache(*_args: object, **_kwargs: object) -> object:
+        return generation_utils.DynamicCache
+
+    model._prepare_cache_for_generation = prepare_cache
+    original = model._prepare_cache_for_generation
+    handle = enable_compression(model, method="pass", ratio=1.0)
+    try:
+        assert handle.adapter.patched_modules == {}
+        scoped_class = model._prepare_cache_for_generation()
+        assert scoped_class is not generation_utils.DynamicCache
+    finally:
+        handle.disable()
+    assert model._prepare_cache_for_generation is original
+
+
+def test_two_model_scoped_adapters_can_coexist() -> None:
+    import transformers.generation.utils as generation_utils
+
+    def add_hook(model: FakeModel) -> FakeModel:
+        def prepare_cache(*_args: object, **_kwargs: object) -> object:
+            return generation_utils.DynamicCache
+
+        model._prepare_cache_for_generation = prepare_cache
+        return model
+
+    first = enable_compression(add_hook(FakeModel("llama")), method="pass", ratio=1.0)
+    second = enable_compression(add_hook(FakeModel("mistral")), method="pass", ratio=1.0)
+    try:
+        assert first.adapter.patched_modules == {}
+        assert second.adapter.patched_modules == {}
+    finally:
+        second.disable()
+        first.disable()
+
+
 def test_enable_compression_requires_target_or_ratio() -> None:
     model = FakeModel("llama")
     with pytest.raises(ValueError, match="target_memory"):
@@ -137,11 +189,11 @@ def test_target_memory_parses() -> None:
     assert parse_target_memory("25%") == 4.0
     assert parse_target_memory("50%") == 2.0
     assert parse_target_memory(0.25) == 4.0
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="fraction or"):
         parse_target_memory("abc")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="fraction"):
         parse_target_memory(0)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"in \(0, 100\]"):
         parse_target_memory("150%")
 
 
@@ -156,11 +208,72 @@ def test_handle_stats_dict() -> None:
         handle.disable()
 
 
+def test_compression_stats_snapshot_is_atomic() -> None:
+    from kvfold.api import CompressionStats
+
+    stats = CompressionStats()
+    stats.record_compress(bytes_original=100, bytes_compressed=40, bytes_resident=48)
+    stats.record_decompress()
+    assert stats.snapshot() == {
+        "compress_calls": 1,
+        "decompress_calls": 1,
+        "bytes_original": 100,
+        "bytes_compressed": 40,
+        "bytes_resident": 48,
+        "ratio": 2.5,
+        "memory_saved_bytes": 60,
+    }
+
+
+def test_compression_handle_references_cannot_be_reassigned() -> None:
+    model = FakeModel("llama")
+    handle = enable_compression(model, method="pass", ratio=1.0)
+    try:
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            handle.model = object()  # type: ignore[misc]
+    finally:
+        handle.disable()
+
+
 def test_enable_compression_unknown_method_raises() -> None:
     from kvfold.errors import UnsupportedMethodError
+
     model = FakeModel("llama")
     with pytest.raises(UnsupportedMethodError, match="not-a-method"):
         enable_compression(model, method="not-a-method", ratio=2.0)
+
+
+def test_invalid_cache_implementation_fails_early() -> None:
+    with pytest.raises(ValueError, match="cache_implementation"):
+        enable_compression(
+            FakeModel("llama"), method="flash", ratio=2.0, cache_implementation="static"
+        )
+
+
+def test_missing_transformers_cache_api_fails_before_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import transformers.cache_utils as cu
+
+    from kvfold.adapter import huggingface as hf_module
+    from kvfold.errors import TransformersCompatibilityError
+
+    original = cu.DynamicCache
+    monkeypatch.setattr(cu, "DynamicCache", None)
+    adapter = hf_module.HF(model=FakeModel("llama"), method="flash", ratio=2.0)
+    with pytest.raises(TransformersCompatibilityError, match="DynamicCache"):
+        adapter.enable()
+    assert not hasattr(adapter.model.generation_config, "cache_implementation")
+    monkeypatch.setattr(cu, "DynamicCache", original)
+
+
+def test_enable_compression_rejects_unknown_method_kwargs() -> None:
+    """Typos in method-specific options fail instead of being ignored."""
+    from kvfold.errors import MethodConfigError
+
+    model = FakeModel("llama")
+    with pytest.raises(MethodConfigError, match="not_a_real_option"):
+        enable_compression(model, method="flash", ratio=2.0, not_a_real_option=True)
 
 
 def test_enable_disables_leak_free_when_no_prior_attr() -> None:
@@ -208,6 +321,15 @@ def test_double_enable_raises_runtime_error() -> None:
         h1.disable()
 
 
+def test_second_model_is_rejected_while_global_patch_is_active() -> None:
+    first = enable_compression(FakeModel("llama"), method="flash", ratio=2.0)
+    try:
+        with pytest.raises(RuntimeError, match="one Hugging Face model"):
+            enable_compression(FakeModel("mistral"), method="flash", ratio=2.0)
+    finally:
+        first.disable()
+
+
 def test_handle_is_active_property() -> None:
     model = FakeModel("llama")
     handle = enable_compression(model, method="flash", ratio=2.0)
@@ -236,6 +358,7 @@ def test_enable_rolls_back_on_failure() -> None:
     must be the original class.
     """
     import transformers.cache_utils as cu
+
     from kvfold.adapter import huggingface as hf_module
     from kvfold.adapter.huggingface import HF
 
@@ -263,3 +386,25 @@ def test_enable_rolls_back_on_failure() -> None:
         assert adapter.enabled is False
     finally:
         hf_module.registry_install = original_install
+
+
+def test_disable_does_not_clobber_third_party_dynamic_cache_change() -> None:
+    import transformers.cache_utils as cu
+
+    from kvfold.adapter.huggingface import HF
+
+    original = cu.DynamicCache
+
+    class ThirdPartyCache(original):
+        pass
+
+    adapter = HF(model=FakeModel("llama"), method="flash", ratio=2.0)
+    adapter.enable()
+    try:
+        cu.DynamicCache = ThirdPartyCache
+        adapter.disable()
+        assert cu.DynamicCache is ThirdPartyCache
+    finally:
+        if adapter.enabled:
+            adapter.disable()
+        cu.DynamicCache = original

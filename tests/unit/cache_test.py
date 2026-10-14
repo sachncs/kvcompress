@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import threading
+
 import pytest
 import torch
 
-from kvfold.store.compress import Cache
-from kvfold.store.manager import Pool
-from kvfold.store.metadata import Meta, LayerMeta
 from kvfold.core.base import Payload, Stats
 from kvfold.core.identity import Pass
+from kvfold.errors import CacheMissingLayerError
+from kvfold.store.compress import Cache, LayerEntry, normalize_kv
+from kvfold.store.manager import Pool
+from kvfold.store.metadata import LayerMeta, Meta
 
 
 class Identity(Pass):
@@ -76,6 +79,23 @@ def test_store_4d_input_normalizes(comp: Identity) -> None:
     assert k_hat.shape == (8, 8, 16)
 
 
+def test_cache_moves_reconstructed_tensors_to_requested_device(
+    comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]
+) -> None:
+    cache = Cache(compressor=comp, device="cpu")
+    cache.store(layer=0, key=kv[0], value=kv[1])
+    key, value = cache.retrieve(0)
+    assert key.device.type == "cpu"
+    assert value.device.type == "cpu"
+
+
+def test_normalize_kv_rejects_invalid_inputs() -> None:
+    with pytest.raises(ValueError, match="shape mismatch"):
+        normalize_kv(torch.zeros(1, 2, 3), torch.zeros(1, 2, 4))
+    with pytest.raises(ValueError, match="unsupported K/V rank"):
+        normalize_kv(torch.zeros(2, 3), torch.zeros(2, 3))
+
+
 def test_clear(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     cache = Cache(compressor=comp)
     cache.store(layer=0, key=kv[0], value=kv[1])
@@ -103,6 +123,28 @@ def test_max_layers_lru(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -
     assert 2 in cache
 
 
+def test_retrieve_refreshes_lru(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
+    cache = Cache(compressor=comp, max_layers=2)
+    cache.store(layer=0, key=kv[0], value=kv[1])
+    cache.store(layer=1, key=kv[0], value=kv[1])
+    cache.retrieve(0)
+    cache.store(layer=2, key=kv[0], value=kv[1])
+    assert list(cache.layers()) == [0, 2]
+
+
+def test_replacing_layer_does_not_duplicate_metadata(
+    comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]
+) -> None:
+    cache = Cache(compressor=comp, max_layers=1)
+    cache.store(layer=0, key=kv[0], value=kv[1])
+    cache.store(layer=0, key=kv[0] * 2, value=kv[1] * 2)
+    assert len(cache.metadata().layers) == 2
+    assert set(cache.metadata().index) == {(0, "key"), (0, "value")}
+
+    cache.store(layer=1, key=kv[0], value=kv[1])
+    assert set(cache.metadata().index) == {(1, "key"), (1, "value")}
+
+
 def test_memory_used(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     cache = Cache(compressor=comp)
     cache.store(layer=0, key=kv[0], value=kv[1])
@@ -110,6 +152,7 @@ def test_memory_used(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> N
     original = cache.memory_original()
     assert used > 0
     assert original > 0
+    assert cache.memory_resident() >= used
     # Identity stores as fp16, so used ≈ original / 2.
     assert used < original
 
@@ -121,6 +164,7 @@ def test_stats(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     assert s["n_layers"] == 1
     assert "bytes_original" in s
     assert "bytes_compressed" in s
+    assert s["bytes_resident"] >= s["bytes_compressed"]
     assert s["method"] == "pass-test"
 
 
@@ -147,6 +191,34 @@ def test_payload_access(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -
     assert p.method == "pass-test"
     with pytest.raises(ValueError, match="kind"):
         cache.payload(0, "weird")
+
+
+def test_cache_reports_missing_layers_and_partial_payloads(comp: Identity) -> None:
+    cache = Cache(compressor=comp)
+    with pytest.raises(KeyError, match="not in cache"):
+        cache.retrieve(7)
+
+    cache.entries[7] = LayerEntry(layer=7, key=None, value=None)
+    with pytest.raises(KeyError, match="not fully populated"):
+        cache.retrieve(7)
+    with pytest.raises(CacheMissingLayerError):
+        cache.payload(7, "key")
+
+
+def test_failed_metadata_preparation_preserves_existing_layer(
+    comp: Identity, kv: tuple[torch.Tensor, torch.Tensor], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = Cache(compressor=comp)
+    cache.store(layer=0, key=kv[0], value=kv[1])
+    original = cache.entries[0]
+
+    def fail(*_args: object, **_kwargs: object) -> LayerMeta:
+        raise ValueError("malformed payload metadata")
+
+    monkeypatch.setattr("kvfold.store.compress.payload_to_meta", fail)
+    with pytest.raises(ValueError, match="malformed payload"):
+        cache.store(layer=0, key=kv[0], value=kv[1])
+    assert cache.entries[0] is original
 
 
 def test_metadata_layer_roundtrip() -> None:
@@ -179,11 +251,22 @@ def test_metadata_layer_roundtrip() -> None:
 def test_cache_manager(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     mgr = Pool(compressor=comp)
     mgr.store(0, kv[0], kv[1])
-    k, v = mgr.retrieve(0)
+    k, _v = mgr.retrieve(0)
     assert k.shape == kv[0].shape
     assert 0 in mgr
     mgr.clear()
     assert len(mgr) == 0
+
+
+def test_cache_manager_accepts_injected_backend(
+    comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]
+) -> None:
+    """Pool depends on the cache port, not only the in-memory implementation."""
+    backend = Cache(compressor=comp)
+    mgr = Pool(compressor=comp, backend=backend)
+    mgr.store(0, kv[0], kv[1])
+    assert mgr.cache is backend
+    assert mgr.live_layers == [0]
 
 
 def test_cache_manager_evict(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
@@ -199,3 +282,55 @@ def test_cache_manager_stats(comp: Identity, kv: tuple[torch.Tensor, torch.Tenso
     s = mgr.stats()
     assert "live_layers" in s
     assert 0 in s["live_layers"]
+    assert mgr.memory_used() > 0
+    assert mgr.memory_original() > 0
+    assert mgr.compression_ratio() >= 1.0
+    assert mgr.metadata().method == "pass-test"
+
+
+def test_pool_live_layers_matches_lru_eviction(
+    comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]
+) -> None:
+    pool = Pool(compressor=comp, max_layers=1)
+    pool.store(0, kv[0], kv[1])
+    pool.store(1, kv[0], kv[1])
+    assert pool.live_layers == [1]
+    assert list(pool.layers()) == [1]
+
+
+def test_cache_serializes_concurrent_store_and_retrieve(
+    comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]
+) -> None:
+    """Concurrent generations cannot corrupt entries or metadata."""
+    cache = Cache(compressor=comp)
+    errors: list[BaseException] = []
+
+    def worker(layer: int) -> None:
+        try:
+            cache.store(layer, kv[0], kv[1])
+            cache.retrieve(layer)
+        except BaseException as exc:  # pragma: no cover - assertion below reports it
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(layer,)) for layer in range(16)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    assert len(cache) == 16
+    assert len(cache.metadata().index) == 32
+
+
+def test_metadata_is_an_independent_snapshot() -> None:
+    """Mutating returned metadata must not corrupt cache bookkeeping."""
+    compressor = Pass(dtype=torch.float32)
+    cache = Cache(compressor=compressor)
+    key = torch.randn(2, 4, 8)
+    cache.store(0, key, key)
+
+    snapshot = cache.metadata()
+    snapshot.layers.clear()
+    snapshot.rebuild_index()
+
+    assert len(cache.metadata().layers) == 2

@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { useTheme } from '../lib/theme';
 
 function SunIcon() {
@@ -28,8 +27,6 @@ function GithubIcon() {
 
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
   return (
     <button
       type="button"
@@ -37,7 +34,7 @@ export function ThemeToggle() {
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
       className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-400 ring-1 ring-white/10 transition-all duration-300 hover:text-ink-50 hover:ring-white/20 dark:text-ink-400 dark:ring-white/10 dark:hover:text-ink-50 light:text-ink-700 light:ring-ink-900/10 light:hover:text-ink-900 light:hover:ring-ink-900/20"
     >
-      {mounted ? (theme === 'dark' ? <SunIcon /> : <MoonIcon />) : <MoonIcon />}
+      {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
     </button>
   );
 }

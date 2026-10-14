@@ -5,6 +5,7 @@ import { navLinks } from '../lib/content';
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 16);
@@ -27,7 +28,13 @@ export function Navbar() {
         </a>
         <nav className="hidden items-center gap-7 md:flex">
           {navLinks.map((l) => (
-            <a key={l.href} href={l.href} className="nav-link light:nav-link-light">
+            <a
+              key={l.href}
+              href={l.href}
+              target={l.href.startsWith('http') ? '_blank' : undefined}
+              rel={l.href.startsWith('http') ? 'noreferrer' : undefined}
+              className="nav-link light:nav-link-light"
+            >
               {l.label}
             </a>
           ))}
@@ -35,8 +42,35 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           <GitHubButton />
           <ThemeToggle />
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-400 ring-1 ring-white/10 md:hidden light:text-ink-700 light:ring-ink-900/10"
+            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span aria-hidden className="text-lg leading-none">{menuOpen ? '×' : '☰'}</span>
+          </button>
         </div>
       </div>
+      {menuOpen && (
+        <nav className="border-t border-white/[0.06] bg-ink-950/95 px-6 py-4 backdrop-blur-xl md:hidden light:border-ink-900/[0.06] light:bg-white/95">
+          <div className="container-x flex flex-col gap-1 px-0">
+            {navLinks.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                target={l.href.startsWith('http') ? '_blank' : undefined}
+                rel={l.href.startsWith('http') ? 'noreferrer' : undefined}
+                className="rounded-xl px-3 py-3 text-sm text-ink-300 hover:bg-white/[0.05] hover:text-ink-50 light:text-ink-700 light:hover:bg-ink-900/[0.04] light:hover:text-ink-900"
+                onClick={() => setMenuOpen(false)}
+              >
+                {l.label}
+              </a>
+            ))}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

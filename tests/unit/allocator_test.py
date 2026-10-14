@@ -7,9 +7,9 @@ import math
 import pytest
 
 from kvfold.core.budget import (
+    Bisect,
     Cell,
     Greedy,
-    Bisect,
     Pick,
 )
 

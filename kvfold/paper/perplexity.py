@@ -28,6 +28,8 @@ import time
 
 import torch
 
+from kvfold.api import MethodName
+
 log = logging.getLogger(__name__)
 
 
@@ -43,8 +45,7 @@ def wikitext_load(sequence_length: int = 1024, split: str = "test") -> list[torc
     input_ids = enc.input_ids[0]
     n_chunks = input_ids.numel() // sequence_length
     chunks = [
-        input_ids[i * sequence_length : (i + 1) * sequence_length].long()
-        for i in range(n_chunks)
+        input_ids[i * sequence_length : (i + 1) * sequence_length].long() for i in range(n_chunks)
     ]
     return chunks
 
@@ -60,8 +61,8 @@ def perplexity(model: torch.nn.Module, chunks: list[torch.Tensor], device: torch
     total_tokens = 0
     with torch.no_grad():
         for chunk in chunks:
-            chunk = chunk.unsqueeze(0).to(device)
-            out = model(chunk, labels=chunk)
+            input_chunk = chunk.unsqueeze(0).to(device)
+            out = model(input_chunk, labels=input_chunk)
             loss = float(out.loss)
             total_loss += loss * chunk.numel()
             total_tokens += chunk.numel()
@@ -74,13 +75,17 @@ def run_table1_perplexity(
     model_name: str = "gpt2",
     ratios: tuple[float, ...] = (1.0, 2.0, 3.0, 4.0, 5.0, 8.0),
     sequence_length: int = 1024,
-    method: str = "jolt",
+    method: MethodName = "jolt",
     seed: int = 0,
-) -> list[dict[str, float]]:
+) -> list[dict[str, float | str]]:
     """Run the full Table 1 sweep and return one row per ratio."""
     from transformers import AutoModelForCausalLM
 
-    from kvfold.api import CompressionHandle, build_compressor, disable_compression, enable_compression
+    from kvfold.api import (
+        CompressionHandle,
+        disable_compression,
+        enable_compression,
+    )
 
     log.info("Loading model %s and WikiText tokens", model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -88,7 +93,7 @@ def run_table1_perplexity(
     chunks = wikitext_load(sequence_length=sequence_length)
     log.info("Loaded %d chunks of length %d", len(chunks), sequence_length)
 
-    rows: list[dict[str, float]] = []
+    rows: list[dict[str, float | str]] = []
     base_perp = perplexity(model, chunks, device)
     rows.append(
         {
@@ -107,7 +112,7 @@ def run_table1_perplexity(
         if handle is not None:
             disable_compression(handle)
         t0 = time.perf_counter()
-        handle = enable_compression(model, method=method, compression_ratio=ratio, seed=seed)
+        handle = enable_compression(model, method=method, ratio=ratio, seed=seed)
         perp = perplexity(model, chunks, device)
         wall_ms = (time.perf_counter() - t0) * 1000
         rows.append(
@@ -124,6 +129,7 @@ def run_table1_perplexity(
 
 
 def main() -> None:
+    """Run the command-line Table 1 perplexity sweep."""
     import argparse
     import json
 
@@ -144,10 +150,13 @@ def main() -> None:
         seed=args.seed,
     )
     for row in rows:
-        print(f"ratio={row['ratio']:>5}  method={row['method']:<10}  ppl={row['perplexity']:.3f}  wall={row['wall_ms']:.1f}ms")
+        print(
+            f"ratio={row['ratio']:>5}  method={row['method']:<10} "
+            f"ppl={row['perplexity']:.3f}  wall={row['wall_ms']:.1f}ms"
+        )
     if args.output:
         with open(args.output, "w") as f:
             json.dump(rows, f, indent=2)
 
 
-__all__ = ["wikitext_load", "perplexity", "run_table1_perplexity", "main"]
+__all__ = ["main", "perplexity", "run_table1_perplexity", "wikitext_load"]

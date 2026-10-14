@@ -53,4 +53,4 @@ def __getattr__(name: str) -> Any:
     return value
 
 
-__all__ = list(LAZY_EXPORTS) + ["CONFIG_REGISTRY"]
+__all__ = [*list(LAZY_EXPORTS), "CONFIG_REGISTRY"]  # noqa: PLE0604

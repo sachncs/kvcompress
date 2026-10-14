@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import { hero, site } from '../lib/content';
+import { hero } from '../lib/content';
 import { Reveal } from '../lib/Reveal';
 
 function HeroCode() {
@@ -96,7 +96,7 @@ export function Hero() {
               </a>
             </div>
             <p className="mt-4 text-xs text-ink-500 light:text-ink-500">
-              Python 3.11+ · MIT-style Apache-2.0 · {site.paper.year} paper implementation
+              Python 3.11–3.13 · Apache-2.0 · independent paper implementation
             </p>
           </div>
         </Reveal>
@@ -121,8 +121,8 @@ export function Hero() {
             <dl className="relative grid grid-cols-2 divide-x divide-white/[0.06] light:divide-ink-900/[0.06] sm:grid-cols-4">
               {[
                 { k: '4×', v: 'max compression' },
-                { k: '416', v: 'unit tests' },
-                { k: '90%', v: 'coverage gate' },
+                { k: '400+', v: 'tests in repo' },
+                { k: 'CPU', v: 'reference benchmarks' },
                 { k: '0', v: 'model surgery' },
               ].map((m) => (
                 <div

@@ -16,7 +16,7 @@
               ▼                   ▼                   ▼
        ┌─────────────┐    ┌──────────────┐    ┌─────────────┐
        │ Compressor  │    │ Pool         │    │ DynamicCache │
-       │ (core/base) │    │(store/manager│    │  (patched)   │
+       │ (core/base) │    │(store/manager│    │ (scoped hook)│
        └──────┬──────┘    └──────┬───────┘    └─────────────┘
               │                  │
               │ uses             │ stores
@@ -58,9 +58,12 @@ call from the HF model generates one flow through the system:
 |---|---|---|
 | `Compressor` | `kvfold/core/base.py` | ABC for all compressors. New methods plug in here. |
 | `Payload` | `kvfold/core/base.py` | Self-describing payload with serializable metadata. |
-| `Meta` | `kvfold/store/metadata.py` | Layer-indexed summary for safetensors round-trips. |
+| `Meta` | `kvfold/store/metadata.py` | Versioned, layer-indexed summary for safetensors round-trips. |
 | `Cell` | `kvfold/core/budget.py` | One (layer group, K/V) cell the allocator solves. |
 | `Pick` | `kvfold/core/budget.py` | One cell's (rT, rd, b) decision. |
+| `CompressorEntry` | `kvfold/core/dispatch.py` | Immutable method descriptor: config, implementation, and capabilities. |
+| `Adapter` / `AdapterState` | `kvfold/adapter/base.py` | Polymorphic attach/detach lifecycle and immutable ownership snapshot. |
+| `CacheBackend` | `kvfold/store/ports.py` | Injected storage port for in-memory, bounded, persistent, or remote caches. |
 | `HF` | `kvfold/adapter/huggingface.py` | Bridges HF cache ↔ Compressor. |
 | Family shims | `kvfold/adapter/registry.py` | Per-family model patches (mostly no-ops today). |
 
@@ -96,7 +99,11 @@ Decoding inverts the chain.
 3. **New quantization scheme**: subclass `IntQuantImpl` (or implement
    the `Quantizer` protocol). Add a dispatch entry in
    `core/quantization.get_quantizer`.
-4. **New cache backend**: subclass `Cache`. The HF adapter only needs
-   `store`, `retrieve`, and `memory_used`.
+4. **New cache backend**: implement `CacheBackend` and inject it into
+   `Pool(backend=...)`. The default `Cache` remains the in-memory adapter.
 5. **New benchmark**: add a module to `bench/` and wire it in
    `cli.py`'s `benchmark` command.
+
+The public `kvfold.method_descriptors()` API exposes the same immutable method
+bindings used by dispatch, so tooling and documentation can consume one
+canonical capability registry instead of maintaining a second list.

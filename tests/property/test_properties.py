@@ -14,8 +14,7 @@ from kvfold.core.quant import (
     quantize_tensor,
 )
 
-
-# ponytail: JoLT's reconstruction error is bounded by sqrt(sum(s[r:]²) /
+# JoLT's reconstruction error is bounded by sqrt(sum(s[r:]²) /
 # sum(s²)) where the sum is over the truncated singular values. The
 # existing algorithmic tests use 1.0 as the practical bound; tightening
 # from the prior 2.0 to 1.7 catches the most common regressions while
@@ -124,6 +123,6 @@ def test_jolt_roundtrip_is_bounded() -> None:
     V = make_smooth_tensor(m=2, T=64, dh=16, rank_T=8, rank_d=4)
     comp = Jolt(ratio=2.0, bits=(0, 4, 8))
     kp, vp = comp.compress(K, V)
-    k_hat, v_hat = comp.restore(kp, vp)
+    k_hat, _v_hat = comp.restore(kp, vp)
     rel_err = torch.linalg.norm(K - k_hat) / torch.linalg.norm(K)
     assert rel_err.item() < JOJT_REL_ERR_BOUND

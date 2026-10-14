@@ -20,6 +20,7 @@ from kvfold.config import (
     Int8Config,
     JoltConfig,
     LowRankConfig,
+    Method,
     MethodConfig,
     MethodConfigRegistry,
     PassConfig,
@@ -29,7 +30,18 @@ from kvfold.errors import MethodConfigError
 
 def test_registry_has_all_methods() -> None:
     names = REGISTRY.names()
-    assert set(names) == {"jolt", "flash", "low", "int2", "int4", "int8", "fp8", "fp16", "bf16", "pass"}
+    assert set(names) == {
+        "jolt",
+        "flash",
+        "low",
+        "int2",
+        "int4",
+        "int8",
+        "fp8",
+        "fp16",
+        "bf16",
+        "pass",
+    }
 
 
 def test_registry_resolve_known() -> None:
@@ -81,7 +93,7 @@ def test_registry_register_different_class_under_same_name_raises() -> None:
 def test_registry_register_wrong_type_raises() -> None:
     reg = MethodConfigRegistry()
     with pytest.raises(TypeError):
-        reg.register("xx",  object)
+        reg.register("xx", object)
 
 
 def test_jolt_config_validates_ratio() -> None:
@@ -127,7 +139,7 @@ def test_low_rank_config_validates_rank() -> None:
         LowRankConfig(rank=0).validate()
 
 
-@pytest.mark.parametrize("cls,bits", [(Int2Config, 2), (Int4Config, 4), (Int8Config, 8)])
+@pytest.mark.parametrize(("cls", "bits"), [(Int2Config, 2), (Int4Config, 4), (Int8Config, 8)])
 def test_int_config_valid_bits(cls: type[MethodConfig], bits: int) -> None:
     cls(bits=bits).validate()
 
@@ -144,7 +156,8 @@ def test_int_config_validates_group_size() -> None:
 
 
 def test_float_config_validates_dtype_when_constructed() -> None:
-    """FloatConfig.validate() rejects non-16-bit dtypes; exercised via a non-frozen subclass path."""
+    """FloatConfig rejects non-16-bit dtypes via a non-frozen subclass."""
+
     # The public surface only exposes Fp16Config / Bf16Config with frozen dtypes;
     # we still verify the validate logic by subclassing FloatConfig in-test.
     @dataclasses.dataclass(frozen=True)
@@ -169,6 +182,7 @@ def test_pass_config_rejects_non_float() -> None:
 
 def test_float8_config_validates_variant() -> None:
     from kvfold.errors import MethodConfigError
+
     with pytest.raises(MethodConfigError):
         Float8Config(variant="e3m2").validate()
 
@@ -179,7 +193,7 @@ def test_float8_config_validates_group_size() -> None:
 
 
 @pytest.mark.parametrize(
-    "cls,kwargs",
+    ("cls", "kwargs"),
     [
         (JoltConfig, {"ratio": 4.0, "bits": (0, 4)}),
         (FlashConfig, {"ratio": 2.0}),

@@ -33,14 +33,24 @@ def test_vllm_lazy_exports() -> None:
 
 def test_vllm_offload_lazy_exports() -> None:
     from kvfold.adapter import (
-        Offload,
         EvictPool,
+        Offload,
         is_vllm_offload_available,
+        vllm_offload_version,
     )
 
     assert Offload.__name__ == "Offload"
     assert EvictPool.__name__ == "EvictPool"
     assert callable(is_vllm_offload_available)
+    assert callable(vllm_offload_version)
+
+
+def test_family_registry_lazy_exports() -> None:
+    from kvfold.adapter import Family, FamilyRegistry, known_model_types
+
+    assert Family.__name__ == "Family"
+    assert FamilyRegistry.__name__ == "FamilyRegistry"
+    assert "llama" in known_model_types()
 
 
 def test_unknown_attribute_raises() -> None:

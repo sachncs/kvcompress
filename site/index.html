@@ -12,12 +12,19 @@
       content="kvfold is a Python library that compresses the KV cache of any decoder-only LLM — JoLT, Flash, int4, fp8 — with one function call. Drop-in for Hugging Face and vLLM."
     />
     <meta name="author" content="sachin" />
+    <script>
+      (() => {
+        const stored = localStorage.getItem('kvfold-theme');
+        const theme = stored || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        document.documentElement.className = theme;
+      })();
+    </script>
 
     <meta property="og:type" content="website" />
     <meta property="og:title" content="kvfold — Universal plug-and-play KV cache compression" />
     <meta
       property="og:description"
-      content="Compress any decoder-only LLM's KV cache to a fraction of its size — without retraining, without quality cliffs."
+      content="Compress decoder-only LLM KV caches without retraining, with quality and memory trade-offs you can measure on your workload."
     />
     <meta property="og:image" content="./og.svg" />
 

@@ -8,6 +8,7 @@ this module checks the actual math.
 
 from __future__ import annotations
 
+import itertools
 import math
 
 import torch
@@ -152,7 +153,7 @@ def test_truncation_increases_error_monotonically() -> None:
         rel = torch.linalg.norm(X - X_hat) / torch.linalg.norm(X)
         errors.append(rel.item())
     # Strict monotonic decrease (allow tiny float noise).
-    for prev, nxt in zip(errors, errors[1:]):
+    for prev, nxt in itertools.pairwise(errors):
         assert nxt <= prev + 1e-6, f"error didn't decrease: {prev} -> {nxt}"
 
 

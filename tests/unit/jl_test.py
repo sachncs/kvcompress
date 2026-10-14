@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from kvfold.core.jl import CACHE, Gaussian, Rademacher, Sparse
+from kvfold.core.jl import CACHE, Sparse
 
 
 @pytest.fixture(autouse=True)
@@ -26,7 +26,15 @@ def rademacher_projection(out_dim: int, in_dim: int, *, seed: int, **kwargs: obj
 
 
 def sparse_projection(out_dim: int, in_dim: int, *, seed: int, sparsity: float = 0.1):
-    return CACHE.get_or_build(out_dim, in_dim, distribution="sparse", seed=seed, device="cpu", dtype=torch.float32, projector=Sparse(sparsity))
+    return CACHE.get_or_build(
+        out_dim,
+        in_dim,
+        distribution="sparse",
+        seed=seed,
+        device="cpu",
+        dtype=torch.float32,
+        projector=Sparse(sparsity),
+    )
 
 
 def test_gaussian_projection_shape() -> None:
@@ -97,5 +105,6 @@ def test_rademacher_entries() -> None:
 def test_apply_shape_mismatch_raises() -> None:
     p = gaussian_projection(4, 4, seed=0)
     from kvfold.errors import ShapeError
+
     with pytest.raises(ShapeError):
         p.apply(torch.randn(2, 3, 5))
