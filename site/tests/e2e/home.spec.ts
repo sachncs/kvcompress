@@ -29,16 +29,23 @@ test('theme toggle updates the document theme', async ({ page }) => {
   await expect.poll(() => page.locator('html').getAttribute('class')).not.toBe(before);
 });
 
-test('documentation and benchmark evidence links are external and scoped', async ({ page }) => {
+test('documentation and benchmark evidence stay on the product site', async ({ page }) => {
   await page.goto('/');
   const docs = page.getByRole('navigation').getByRole('link', { name: 'Docs' });
-  await expect(docs).toHaveAttribute('target', '_blank');
-  await expect(docs).toHaveAttribute('href', /github\.com\/sachncs\/kvcompress/);
+  await expect(docs).not.toHaveAttribute('target', '_blank');
+  await expect(docs).toHaveAttribute('href', /page=docs/);
   await page.getByText('View values and reproduction commands').click();
   await expect(page.getByRole('link', { name: /full benchmark protocol/i })).toHaveAttribute(
     'href',
-    /docs\/benchmarks\/running\.md/,
+    /page=docs/,
   );
+});
+
+test('standalone documentation and onboarding pages render', async ({ page }) => {
+  await page.goto('?page=docs');
+  await expect(page.getByRole('heading', { name: /compress the cache/i })).toBeVisible();
+  await page.goto('?page=onboarding');
+  await expect(page.getByRole('heading', { name: /clean path from clone/i })).toBeVisible();
 });
 
 test('reduced motion renders content without an entrance fade', async ({ page }) => {

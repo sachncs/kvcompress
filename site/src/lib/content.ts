@@ -17,11 +17,11 @@ export const site = {
 } as const;
 
 export const navLinks = [
-  { label: 'Methods', href: '#methods' },
-  { label: 'How it works', href: '#how' },
-  { label: 'Benchmarks', href: '#benchmarks' },
-  { label: 'Integrations', href: '#integrations' },
-  { label: 'Docs', href: 'https://github.com/sachncs/kvcompress#readme' },
+  { label: 'Methods', href: '?page=home#methods' },
+  { label: 'How it works', href: '?page=home#how' },
+  { label: 'Benchmarks', href: '?page=home#benchmarks' },
+  { label: 'Integrations', href: '?page=home#integrations' },
+  { label: 'Docs', href: '?page=docs' },
 ];
 
 export const hero = {
@@ -63,7 +63,7 @@ export const valueProps = [
   {
     title: 'Deployment paths, clearly scoped.',
     description:
-      'vLLM export/import, an offload integration, and optional Triton kernels for NVIDIA hardware.',
+      'vLLM export/import and optional Triton paths are exposed, with hardware verification still pending.',
   },
   {
     title: 'Honest failure modes.',
@@ -129,7 +129,7 @@ export const howSteps = [
     n: '01',
     title: 'Wrap the cache.',
     body:
-      'enable_compression patches transformers.DynamicCache in-place. Attention forward passes write into a compressed cache without modification.',
+      'enable_compression installs a model-scoped cache hook. Attention forward passes write into compressed backing storage without model surgery.',
   },
   {
     n: '02',
@@ -141,7 +141,7 @@ export const howSteps = [
     n: '03',
     title: 'Set a budget.',
     body:
-      'Pass a ratio (3.0) or a memory target (0.25). A joint Lagrangian allocator bisects λ to hit the global byte budget across layers.',
+      'Pass a ratio (3.0) or a numeric memory target (0.25). A joint Lagrangian allocator bisects λ to hit the global byte budget across layers.',
   },
   {
     n: '04',
@@ -191,7 +191,7 @@ export const fidelityBenchmark = {
 };
 
 export const benchmarkEvidence = {
-  docsUrl: 'https://github.com/sachncs/kvcompress/blob/master/docs/benchmarks/running.md',
+  docsUrl: '?page=docs#benchmarks',
   memoryCommand: 'python -m scripts.run_memory_benchmark --T 1024 --dh 128 --ratios 2 3 4 5 8',
   speedCommand: 'python -m scripts.run_speed_benchmark --T 1024 --dh 128 --ratio 3',
   fidelityCommand: 'python -m scripts.run_table2_reconstruction --T 1024 --ratio 2.0',
@@ -202,19 +202,19 @@ export const integrations = [
     name: 'Hugging Face',
     description:
       'Transparent DynamicCache interception. Works with GPT-2, Llama, Mistral, Qwen, and any decoder-only causal LM that uses cache_implementation.',
-    badge: 'first-class',
+    badge: 'validated CPU / MPS',
   },
   {
     name: 'vLLM',
     description:
       'Shape A (export_kv / import_kv) for everywhere vLLM runs. Shape B (Offload subclass) for production GPU deployments.',
-    badge: 'two shapes',
+    badge: 'API guarded · hardware pending',
   },
   {
     name: 'Triton',
     description:
       'Optional fused Tucker reconstruction, JL projection, and INT8 quantize kernels. Falls back to PyTorch einsum on non-NVIDIA systems.',
-    badge: 'optional',
+    badge: 'CUDA pending',
   },
 ];
 
@@ -266,11 +266,11 @@ export const faqs = [
   },
   {
     q: 'Does it work with vLLM?',
-    a: 'Yes — Shape A (export_kv / import_kv) works everywhere vLLM runs. Shape B (a subclass of vllm.v1.kv_offload.KVCacheOffloadWorker) targets production GPU deployments.',
+    a: 'The adapter exposes Shape A (export_kv / import_kv) and Shape B (KVCacheOffloadWorker). API validation is covered; real vLLM/CUDA execution remains pending.',
   },
   {
     q: 'What models are supported?',
-    a: 'Any decoder-only causal LM. The HF adapter handles family-specific cache layout shims via a registry. Encoder-decoder and Mamba-style models are out of scope.',
+    a: 'Decoder-only causal LMs with the supported model-scoped cache hook. GPT-2 is validated locally; broader model, long-context, and CUDA coverage remain release gates.',
   },
   {
     q: 'Is this the official paper code?',
@@ -280,27 +280,27 @@ export const faqs = [
 
 export const footerLinks = {
   product: [
-    { label: 'Methods', href: '#methods' },
-    { label: 'How it works', href: '#how' },
-    { label: 'Benchmarks', href: '#benchmarks' },
-    { label: 'Integrations', href: '#integrations' },
+    { label: 'Methods', href: '?page=home#methods' },
+    { label: 'How it works', href: '?page=home#how' },
+    { label: 'Benchmarks', href: '?page=home#benchmarks' },
+    { label: 'Integrations', href: '?page=home#integrations' },
   ],
   resources: [
-    { label: 'Documentation', href: 'https://github.com/sachncs/kvcompress#readme' },
-    { label: 'Research notes', href: 'https://github.com/sachncs/kvcompress/tree/master/docs/research' },
-    { label: 'API reference', href: 'https://github.com/sachncs/kvcompress/tree/master/docs/user' },
+    { label: 'Documentation', href: '?page=docs' },
+    { label: 'Developer onboarding', href: '?page=onboarding' },
+    { label: 'API reference', href: '?page=docs#api' },
     { label: 'Examples', href: 'https://github.com/sachncs/kvcompress/tree/master/examples' },
   ],
   community: [
     { label: 'GitHub', href: 'https://github.com/sachncs/kvcompress' },
     { label: 'Issues', href: 'https://github.com/sachncs/kvcompress/issues' },
     { label: 'Discussions', href: 'https://github.com/sachncs/kvcompress/discussions' },
-    { label: 'Changelog', href: 'https://github.com/sachncs/kvcompress/blob/master/CHANGELOG.md' },
+    { label: 'Release notes', href: 'https://github.com/sachncs/kvcompress/releases' },
   ],
   legal: [
     { label: 'License (Apache-2.0)', href: 'https://github.com/sachncs/kvcompress/blob/master/LICENSE' },
-    { label: 'Security', href: 'https://github.com/sachncs/kvcompress/blob/master/SECURITY.md' },
-    { label: 'Code of Conduct', href: 'https://github.com/sachncs/kvcompress/blob/master/CODE_OF_CONDUCT.md' },
-    { label: 'Contributing', href: 'https://github.com/sachncs/kvcompress/blob/master/CONTRIBUTING.md' },
+    { label: 'Security', href: '?page=onboarding#security' },
+    { label: 'Code of Conduct', href: 'https://github.com/sachncs/kvcompress/community' },
+    { label: 'Contributing', href: '?page=onboarding#contributing' },
   ],
 } as const;

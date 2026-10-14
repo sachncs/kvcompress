@@ -204,8 +204,6 @@ export function Benchmarks() {
             </div>
             <a
               href={benchmarkEvidence.docsUrl}
-              target="_blank"
-              rel="noreferrer"
               className="mt-4 inline-block text-xs text-accent-300 underline underline-offset-4 light:text-accent-600"
             >
               Read the full benchmark protocol →

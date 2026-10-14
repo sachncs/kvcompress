@@ -1,4 +1,5 @@
 import { ThemeProvider } from './lib/theme';
+import type { ReactNode } from 'react';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { Hero } from './sections/Hero';
@@ -10,12 +11,32 @@ import { Integrations } from './sections/Integrations';
 import { Install } from './sections/Install';
 import { FAQ } from './sections/FAQ';
 import { CTA } from './sections/CTA';
+import { DocsPage } from './pages/DocsPage';
+import { OnboardingPage } from './pages/OnboardingPage';
 
-export default function App() {
+function Shell({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <div className="relative min-h-screen overflow-x-clip bg-ink-950 text-ink-50 light:bg-ink-50 light:text-ink-900">
         <Navbar />
+        {children}
+        <Footer />
+      </div>
+    </ThemeProvider>
+  );
+}
+
+export default function App() {
+  const page = new URLSearchParams(window.location.search).get('page');
+
+  if (page === 'docs') {
+    return <Shell><DocsPage /></Shell>;
+  }
+  if (page === 'onboarding') {
+    return <Shell><OnboardingPage /></Shell>;
+  }
+
+  return <Shell>
         <main>
           <Hero />
           <ValueProps />
@@ -27,8 +48,5 @@ export default function App() {
           <FAQ />
           <CTA />
         </main>
-        <Footer />
-      </div>
-    </ThemeProvider>
-  );
+      </Shell>;
 }
