@@ -46,6 +46,8 @@ test('standalone documentation and onboarding pages render', async ({ page }) =>
   await expect(page.getByRole('heading', { name: /compress the cache/i })).toBeVisible();
   await page.goto('?page=onboarding');
   await expect(page.getByRole('heading', { name: /clean path from clone/i })).toBeVisible();
+  await page.goto('?page=examples');
+  await expect(page.getByRole('heading', { name: /start with a pattern/i })).toBeVisible();
 });
 
 test('reduced motion renders content without an entrance fade', async ({ page }) => {

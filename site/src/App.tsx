@@ -13,6 +13,7 @@ import { FAQ } from './sections/FAQ';
 import { CTA } from './sections/CTA';
 import { DocsPage } from './pages/DocsPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { ExamplesPage } from './pages/ExamplesPage';
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -34,6 +35,9 @@ export default function App() {
   }
   if (page === 'onboarding') {
     return <Shell><OnboardingPage /></Shell>;
+  }
+  if (page === 'examples') {
+    return <Shell><ExamplesPage /></Shell>;
   }
 
   return <Shell>

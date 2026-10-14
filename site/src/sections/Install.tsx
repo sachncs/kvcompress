@@ -13,10 +13,10 @@ export function Install() {
           <div className="mx-auto max-w-2xl text-center">
             <span className="chip light:chip-light">Get started</span>
             <h2 className="mt-5 text-balance text-display-2 font-semibold tracking-tighter">
-              pip install. One import. You're done.
+              Install from source. One import. You're in.
             </h2>
             <p className="mt-5 text-base text-ink-300 light:text-ink-600">
-              No model surgery. No build step. No mandatory GPU.
+              The package is pre-release. Clone the repository, install editable, then validate on your workload.
             </p>
           </div>
         </Reveal>

@@ -38,7 +38,7 @@ export function DocsPage() {
           <h2 className="page-section-title">The 60-second path</h2>
           <p className="body-copy">Use a numeric memory fraction. For example, <code>0.25</code> asks the allocator to target roughly one quarter of the original cache.</p>
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <LinkCard number="01" title="Install" body="pip install kvfold" />
+            <LinkCard number="01" title="Install from source" body="Clone the repo and install it editable." />
             <LinkCard number="02" title="Enable" body="Call enable_compression once per model." />
             <LinkCard number="03" title="Measure" body="Inspect stats and validate quality before rollout." />
           </div>

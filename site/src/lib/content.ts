@@ -29,7 +29,7 @@ export const hero = {
   title: 'KV cache, folded',
   subtitle:
     'A single function call reduces decoder-only LLM KV-cache memory — with explicit quality and compatibility trade-offs, inside Hugging Face.',
-  primaryCta: { label: 'pip install kvfold', href: '#install' },
+  primaryCta: { label: 'Install from source', href: '#install' },
   secondaryCta: { label: 'Read the paper', href: 'https://arxiv.org/abs/2607.12550' },
   codeLines: [
     { text: 'from', tone: 'kw' },
@@ -219,14 +219,17 @@ export const integrations = [
 ];
 
 export const codeSnippets = {
-  install: `# Install from PyPI
-pip install kvfold
+  install: `# Install from source while the package is pre-release
+git clone https://github.com/sachncs/kvcompress
+cd kvcompress
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev,bench]"
 
-# Optional extras
-pip install "kvfold[triton]"   # Triton kernels for reconstruction / JL
-pip install "kvfold[vllm]"     # vLLM adapter
-pip install "kvfold[bench]"    # matplotlib, pandas, datasets
-pip install "kvfold[dev]"      # pytest, ruff, hypothesis, mypy`,
+# Optional hardware / serving extras
+python -m pip install -e ".[triton]"   # CUDA/Triton path — pending hardware validation
+python -m pip install -e ".[vllm]"     # vLLM API path — execution validation pending`,
   quickstart: `import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from kvfold import enable_compression
@@ -289,7 +292,7 @@ export const footerLinks = {
     { label: 'Documentation', href: '?page=docs' },
     { label: 'Developer onboarding', href: '?page=onboarding' },
     { label: 'API reference', href: '?page=docs#api' },
-    { label: 'Examples', href: 'https://github.com/sachncs/kvcompress/tree/master/examples' },
+    { label: 'Examples', href: '?page=examples' },
   ],
   community: [
     { label: 'GitHub', href: 'https://github.com/sachncs/kvcompress' },

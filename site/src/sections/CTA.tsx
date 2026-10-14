@@ -28,7 +28,7 @@ export function CTA() {
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
                 <a href="#install" className="btn-primary light:btn-light-primary">
-                  pip install kvfold
+                  Install from source
                 </a>
                 <a
                   href="https://github.com/sachncs/kvcompress"
