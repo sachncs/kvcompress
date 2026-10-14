@@ -65,7 +65,7 @@ call from the HF model generates one flow through the system:
 | `Adapter` / `AdapterState` | `kvfold/adapter/base.py` | Polymorphic attach/detach lifecycle and immutable ownership snapshot. |
 | `CacheBackend` | `kvfold/store/ports.py` | Injected storage port for in-memory, bounded, persistent, or remote caches. |
 | `HF` | `kvfold/adapter/huggingface.py` | Bridges HF cache ↔ Compressor. |
-| Family shims | `kvfold/adapter/registry.py` | Per-family model patches (mostly no-ops today). |
+| Model-family dispatch | — | Intentionally absent; the supported DynamicCache hook is model-agnostic. |
 
 ## Algorithm data flow (one cell)
 
@@ -93,9 +93,10 @@ Decoding inverts the chain.
    `restore`. Register via `from kvfold.core.dispatch import register as
    _register; @_register("mymethod", MyClass)`. See
    [Adding a compressor](adding_a_compressor.md).
-2. **New model family**: write `adapter/<name>.py` exposing `install`.
-   Register in `adapter/registry.py`. See
-   [Adding an adapter](adding_an_adapter.md).
+2. **New serving integration**: add an explicit adapter implementing the
+   `Adapter` lifecycle. Do not add no-op model-family shims; model-specific
+   behavior belongs in a tested adapter only when the framework contract
+   requires it.
 3. **New quantization scheme**: subclass `IntQuantImpl` (or implement
    the `Quantizer` protocol). Add a dispatch entry in
    `core/quantization.get_quantizer`.

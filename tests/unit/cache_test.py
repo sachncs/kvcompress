@@ -165,7 +165,7 @@ def test_stats(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
     assert "bytes_original" in s
     assert "bytes_compressed" in s
     assert s["bytes_resident"] >= s["bytes_compressed"]
-    assert s["method"] == "pass-test"
+    assert s["method"] == "pass"
 
 
 def test_metadata(comp: Identity, kv: tuple[torch.Tensor, torch.Tensor]) -> None:
@@ -285,7 +285,7 @@ def test_cache_manager_stats(comp: Identity, kv: tuple[torch.Tensor, torch.Tenso
     assert mgr.memory_used() > 0
     assert mgr.memory_original() > 0
     assert mgr.compression_ratio() >= 1.0
-    assert mgr.metadata().method == "pass-test"
+    assert mgr.metadata().method == "pass"
 
 
 def test_pool_live_layers_matches_lru_eviction(

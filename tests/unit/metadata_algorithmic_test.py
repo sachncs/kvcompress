@@ -63,7 +63,7 @@ def test_layer_compression_ratio_property() -> None:
         bytes_original=1000,
         bytes_compressed=500,
     )
-    assert lc.ratio == 2.0
+    assert lc.compression_ratio == 2.0
     # No payload → 1.0 (the no-cache pass).
     lc2 = LayerMeta(
         layer=0,
@@ -76,7 +76,7 @@ def test_layer_compression_ratio_property() -> None:
         bits=0,
         bytes_compressed=0,
     )
-    assert lc2.ratio == 1.0
+    assert lc2.compression_ratio == 1.0
 
 
 def test_compression_metadata_layer_lookup() -> None:
@@ -161,7 +161,7 @@ def test_compression_metadata_bytes_aggregates() -> None:
     )
     assert meta.bytes_original() == 2000
     assert meta.bytes_compressed() == 800
-    assert meta.ratio() == 2.5
+    assert meta.compression_ratio() == 2.5
 
 
 def test_compression_metadata_to_from_dict_roundtrip() -> None:
@@ -205,7 +205,7 @@ def test_compression_metadata_empty_layer() -> None:
     assert meta.layers == []
     assert meta.bytes_original() == 0
     assert meta.bytes_compressed() == 0
-    assert meta.ratio() == 1.0
+    assert meta.compression_ratio() == 1.0
 
 
 def test_compression_metadata_default_bits_allowed() -> None:

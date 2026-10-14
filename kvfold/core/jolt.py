@@ -72,8 +72,8 @@ _ALLOWED_DISTRIBUTIONS: tuple[Distribution, ...] = ("gaussian", "rademacher", "s
 def _coerce_distribution(value: object) -> Distribution:
     """Validate and narrow a distribution tag to the :data:`Distribution` literal.
 
-    Accepts the in-memory form (``"gaussian"`` / ``"rademacher"`` /
-    ``"sparse"``) and the legacy stringified form from older payloads.
+    Accepts one of the supported distribution tags: ``"gaussian"``,
+    ``"rademacher"``, or ``"sparse"``.
     Raises :class:`ValueError` for unknown values.
     """
     if value in _ALLOWED_DISTRIBUTIONS:

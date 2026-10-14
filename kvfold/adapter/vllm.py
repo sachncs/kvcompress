@@ -38,7 +38,8 @@ from typing import Any
 
 import torch
 
-from kvfold.api import build_compressor, parse_target_memory
+from kvfold.api import build_compressor as _build_compressor
+from kvfold.api import parse_target_memory
 from kvfold.core.base import Compressor
 from kvfold.errors import SerializationError
 from kvfold.runtime.profile import Profile
@@ -46,7 +47,6 @@ from kvfold.store.compress import Cache
 from kvfold.store.metadata import Meta
 
 __all__ = [
-    "build_compressor",
     "export_kv",
     "import_kv",
     "is_vllm_available",
@@ -126,7 +126,7 @@ def export_kv(
 
     cache = resolve_cache(model)
     if compressor is None:
-        compressor = build_compressor(
+        compressor = _build_compressor(
             method,
             ratio=ratio,
             bits=bits,
@@ -279,7 +279,7 @@ def import_kv(
         kwargs["ratio"] = effective_ratio or 3.0
         kwargs["bits"] = bits
         kwargs["seed"] = seed
-    compressor = build_compressor(method, **kwargs)
+    compressor = _build_compressor(method, **kwargs)
     tmp_cache = Cache(compressor=compressor)
 
     # Group tensors by (layer, kind). The key is the same `{layer}/{kind}/{name}`

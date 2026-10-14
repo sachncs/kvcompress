@@ -9,7 +9,7 @@ Thanks for your interest in contributing to kvfold.
 - [Style](docs/dev/style.md)
 - [Testing](docs/dev/testing.md)
 - [Adding a compressor](docs/dev/adding_a_compressor.md)
-- [Adding an adapter](docs/dev/adding_an_adapter.md)
+- [Architecture](docs/dev/architecture.md) — serving integration extension points
 
 ## Development workflow
 

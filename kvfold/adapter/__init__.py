@@ -1,18 +1,4 @@
-"""Model-family adapters and the Hugging Face entry point.
-
-This subpackage holds everything needed to integrate kvfold with a
-specific serving framework. The :mod:`.huggingface` module is the primary
-integration (it patches Hugging Face's :class:`~transformers.cache_utils.DynamicCache`
-so any HF causal LM gets compressed transparently). The
-:mod:`.registry` module maps Hugging Face ``config.model_type`` strings
-to family-specific shim modules. The per-family modules under
-``adapters/<family>.py`` are no-ops today (the DynamicCache subclass
-already covers them); they exist so the registry has a place to dispatch
-to.
-
-Future adapters (e.g. vLLM, TensorRT-LLM) will follow the same shape: a
-top-level adapter module plus, when needed, family shims.
-"""
+"""Serving-framework adapters and the Hugging Face entry point."""
 
 from __future__ import annotations
 
@@ -34,10 +20,6 @@ def __getattr__(name: str) -> Any:
         from kvfold.adapter import vllm_offload
 
         return getattr(vllm_offload, name)
-    if name in ("Family", "FamilyRegistry", "known_model_types"):
-        from kvfold.adapter import registry
-
-        return getattr(registry, name)
     raise AttributeError(f"module 'kvfold.adapter' has no attribute {name!r}")
 
 
@@ -46,14 +28,11 @@ __all__ = [
     "Adapter",
     "AdapterState",
     "EvictPool",
-    "Family",
-    "FamilyRegistry",
     "Offload",
     "export_kv",
     "import_kv",
     "is_vllm_available",
     "is_vllm_offload_available",
-    "known_model_types",
     "resolve_cache",
     "vllm_offload_version",
 ]

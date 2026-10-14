@@ -44,7 +44,8 @@ CI. We do provide:
 Yes, transparently. The HF adapter patches `DynamicCache`; attention
 implementation is independent.
 
-### How do I extend JoLT to a new model family?
+### How do I support a non-standard model cache?
 
-See [Adding an adapter](../dev/adding_an_adapter.md). Most families
-need only a no-op shim because `DynamicCache` interception covers them.
+Add a dedicated serving adapter implementing the lifecycle in
+`kvfold.adapter.base.Adapter`. The core Hugging Face path is intentionally
+model-agnostic and does not maintain no-op family shims.

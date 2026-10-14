@@ -1,4 +1,4 @@
-"""Tests for the HF adapter and family registry."""
+"""Tests for the model-scoped Hugging Face adapter."""
 
 from __future__ import annotations
 
@@ -6,13 +6,6 @@ import dataclasses
 
 import pytest
 
-from kvfold.adapter.registry import (
-    REGISTRY,
-    Family,
-    install,
-    known_model_types,
-    resolve,
-)
 from kvfold.api import CompressionHandle, enable_compression
 
 
@@ -33,80 +26,11 @@ class FakeModel:
         if has_cache_impl:
             self.generation_config.cache_implementation = None
 
+    def _prepare_cache_for_generation(self, *_args: object, **_kwargs: object) -> object:
+        """Provide the supported Transformers cache-construction hook."""
+        from transformers.generation import utils
 
-def test_registry_known_types() -> None:
-    types = known_model_types()
-    assert "llama" in types
-    assert "mistral" in types
-    assert "qwen2" in types
-
-
-def test_registry_resolve() -> None:
-    llama = resolve("llama")
-    assert llama is not None
-    assert llama.name == "llama"
-    assert resolve("unknown-type") is None
-
-
-def test_registry_register_custom() -> None:
-    class CustomFamily(Family):
-        name = "custom-test"
-
-        def install(self, model: object, pool: object):
-            return None
-
-    REGISTRY.register(CustomFamily)
-    try:
-        family = resolve("custom-test")
-        assert family is not None
-        assert family.name == "custom-test"
-    finally:
-        # Clean up so we don't pollute the global registry for other tests.
-        REGISTRY.entries.pop("custom-test", None)
-
-
-def test_registry_register_duplicate_is_idempotent() -> None:
-    """Re-registering the same family class is a no-op (so reloads are safe)."""
-    from kvfold.adapter.registry import Llama
-
-    before = REGISTRY.entries.get("llama")
-    REGISTRY.register(Llama)
-    assert REGISTRY.entries.get("llama") is before
-
-
-def test_registry_register_duplicate_different_class_raises() -> None:
-    """Registering a different class under the same name still raises."""
-    from kvfold.adapter.registry import Family, Llama
-
-    class SquatLlama(Family):
-        name = "llama"
-
-        def install(self, model: object, pool: object) -> None:
-            return None
-
-    with pytest.raises(ValueError, match="already registered"):
-        REGISTRY.register(SquatLlama)
-    REGISTRY.register(Llama)
-
-
-def test_install_dispatches() -> None:
-    model = FakeModel("llama")
-    from kvfold.core.jolt import Jolt
-    from kvfold.store.manager import Pool
-
-    mgr = Pool(compressor=Jolt(ratio=3.0))
-    # Should not raise.
-    install(model, mgr, model_type="llama")
-
-
-def test_install_unknown_uses_generic() -> None:
-    model = FakeModel("nonexistent")
-    from kvfold.core.jolt import Jolt
-    from kvfold.store.manager import Pool
-
-    mgr = Pool(compressor=Jolt(ratio=3.0))
-    # Should not raise even though no shim exists.
-    install(model, mgr, model_type="nonexistent")
+        return utils.DynamicCache
 
 
 def test_enable_compression_on_fake_model() -> None:
@@ -149,7 +73,6 @@ def test_hf_uses_model_scoped_cache_hook_when_available() -> None:
     original = model._prepare_cache_for_generation
     handle = enable_compression(model, method="pass", ratio=1.0)
     try:
-        assert handle.adapter.patched_modules == {}
         scoped_class = model._prepare_cache_for_generation()
         assert scoped_class is not generation_utils.DynamicCache
     finally:
@@ -170,8 +93,8 @@ def test_two_model_scoped_adapters_can_coexist() -> None:
     first = enable_compression(add_hook(FakeModel("llama")), method="pass", ratio=1.0)
     second = enable_compression(add_hook(FakeModel("mistral")), method="pass", ratio=1.0)
     try:
-        assert first.adapter.patched_modules == {}
-        assert second.adapter.patched_modules == {}
+        assert first.is_active is True
+        assert second.is_active is True
     finally:
         second.disable()
         first.disable()
@@ -181,6 +104,24 @@ def test_enable_compression_requires_target_or_ratio() -> None:
     model = FakeModel("llama")
     with pytest.raises(ValueError, match="target_memory"):
         enable_compression(model, method="jolt")
+
+
+def test_models_without_scoped_cache_hook_fail_clearly() -> None:
+    """Do not fall back to process-wide Transformers monkey-patching."""
+    from kvfold.errors import TransformersCompatibilityError
+
+    class UnsupportedModel:
+        class Config:
+            model_type = "unknown"
+
+        class GenConfig:
+            pass
+
+        config = Config()
+        generation_config = GenConfig()
+
+    with pytest.raises(TransformersCompatibilityError, match="_prepare_cache"):
+        enable_compression(UnsupportedModel(), method="pass", ratio=1.0)
 
 
 def test_target_memory_parses() -> None:
@@ -299,6 +240,11 @@ def test_enable_restores_prior_cache_implementation() -> None:
         config = Config()
         generation_config = GenConfig()
 
+        def _prepare_cache_for_generation(self, *_args: object, **_kwargs: object) -> object:
+            from transformers.generation import utils
+
+            return utils.DynamicCache
+
     model = Model()
     handle = enable_compression(model, method="flash", ratio=2.0)
     assert model.generation_config.cache_implementation == "dynamic"
@@ -319,12 +265,14 @@ def test_double_enable_raises_runtime_error() -> None:
         h1.disable()
 
 
-def test_second_model_is_rejected_while_global_patch_is_active() -> None:
+def test_second_model_can_use_a_scoped_hook_concurrently() -> None:
     first = enable_compression(FakeModel("llama"), method="flash", ratio=2.0)
+    second = enable_compression(FakeModel("mistral"), method="flash", ratio=2.0)
     try:
-        with pytest.raises(RuntimeError, match="one Hugging Face model"):
-            enable_compression(FakeModel("mistral"), method="flash", ratio=2.0)
+        assert first.is_active is True
+        assert second.is_active is True
     finally:
+        second.disable()
         first.disable()
 
 
@@ -343,66 +291,3 @@ def test_disable_is_idempotent() -> None:
     handle.disable()
     handle.disable()  # no-op
     assert handle.is_active is False
-
-
-def test_enable_rolls_back_on_failure() -> None:
-    """If ``enable()`` raises after a partial mutation, the runtime is
-    restored to its pre-enable state.
-
-    We force a failure by monkey-patching ``registry_install`` to raise
-    after the DynamicCache has already been patched. After the
-    exception, ``generation_config.cache_implementation`` must not have
-    been left set and the DynamicCache symbol in ``transformers.cache_utils``
-    must be the original class.
-    """
-    import transformers.cache_utils as cu
-
-    from kvfold.adapter import huggingface as hf_module
-    from kvfold.adapter.huggingface import HF
-
-    original_dynamic_cache = cu.DynamicCache
-    original_install = hf_module.registry_install
-
-    def boom(model, pool, model_type="llama"):
-        raise RuntimeError("simulated family-shim install failure")
-
-    hf_module.registry_install = boom
-    model = FakeModel("llama", has_cache_impl=False)
-    adapter = HF(
-        model=model,
-        method="flash",
-        ratio=2.0,
-    )
-    try:
-        with pytest.raises(RuntimeError, match="simulated"):
-            adapter.enable()
-        # generation_config was mutated then rolled back.
-        assert not hasattr(model.generation_config, "cache_implementation")
-        # DynamicCache is back to the original symbol.
-        assert cu.DynamicCache is original_dynamic_cache
-        # Adapter didn't latch "enabled".
-        assert adapter.enabled is False
-    finally:
-        hf_module.registry_install = original_install
-
-
-def test_disable_does_not_clobber_third_party_dynamic_cache_change() -> None:
-    import transformers.cache_utils as cu
-
-    from kvfold.adapter.huggingface import HF
-
-    original = cu.DynamicCache
-
-    class ThirdPartyCache(original):
-        pass
-
-    adapter = HF(model=FakeModel("llama"), method="flash", ratio=2.0)
-    adapter.enable()
-    try:
-        cu.DynamicCache = ThirdPartyCache
-        adapter.disable()
-        assert cu.DynamicCache is ThirdPartyCache
-    finally:
-        if adapter.enabled:
-            adapter.disable()
-        cu.DynamicCache = original

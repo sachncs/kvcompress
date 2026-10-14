@@ -13,6 +13,5 @@ to keep it healthy.
 - [Reproducibility](reproducibility.md) — seeds, devices, and benchmark provenance.
 - [Errors](errors.md) — typed failures and recovery policy.
 - [Adding a compressor](adding_a_compressor.md)
-- [Adding an adapter](adding_an_adapter.md)
 - [Release process](release.md) — versioning, changelog.
 - [Debugging](debugging.md) — logging, common pitfalls.

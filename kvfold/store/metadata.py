@@ -78,11 +78,6 @@ class LayerMeta:
             return 1.0
         return self.bytes_original / self.bytes_compressed
 
-    @property
-    def ratio(self) -> float:
-        """Backward-compat alias for :attr:`compression_ratio`."""
-        return self.compression_ratio
-
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a plain dict (JSON-friendly)."""
         return asdict(self)
@@ -168,10 +163,6 @@ class Meta:
         o = self.bytes_original()
         c = self.bytes_compressed()
         return o / c if c else 1.0
-
-    def ratio(self) -> float:
-        """Backward-compat alias for :meth:`compression_ratio`."""
-        return self.compression_ratio()
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-friendly dict."""

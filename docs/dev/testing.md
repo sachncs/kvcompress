@@ -36,6 +36,7 @@ testing. Common patterns:
 ```python
 from hypothesis import given, strategies as st
 
+
 @given(st.integers(min_value=2, max_value=8), st.integers(min_value=4, max_value=16))
 def test_int_quant_roundtrip_property(bits, last):
     torch.manual_seed(0)
@@ -44,7 +45,7 @@ def test_int_quant_roundtrip_property(bits, last):
     packed, scale, zp = q.quantize(x)
     x_hat = q.dequantize(packed, scale, zp)
     err = (x - x_hat).abs().max().item()
-    bin_size = (x.abs().amax().item() / q._qmax)
+    bin_size = x.abs().amax().item() / q._qmax
     assert err <= bin_size + 1e-3
 ```
 
@@ -60,6 +61,7 @@ download the model once per test run.
 @pytest.fixture(scope="session")
 def gpt2_model_with_pad():
     from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
     tok = GPT2Tokenizer.from_pretrained("gpt2")
     tok.pad_token = tok.eos_token
     model = GPT2LMHeadModel.from_pretrained("gpt2")
@@ -75,10 +77,15 @@ For unit tests that exercise the adapter without a real model, use the
 ```python
 class _FakeModel:
     def __init__(self, model_type="llama"):
-        class _Config: pass
+        class _Config:
+            pass
+
         self.config = _Config()
         self.config.model_type = model_type
-        class _GenConfig: cache_implementation = None
+
+        class _GenConfig:
+            cache_implementation = None
+
         self.generation_config = _GenConfig()
 ```
 

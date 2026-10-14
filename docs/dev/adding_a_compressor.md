@@ -43,6 +43,7 @@ class MyMethodCompressor(Compressor):
     ) -> tuple[Payload, Payload]:
         """Compress a (key, value) pair into two payloads."""
         from kvfold.core.base import Compressor
+
         Compressor.validate(key, value)
 
         k_payload = self._compress_one(key)
@@ -121,6 +122,7 @@ def test_bytes_reduced():
 
 def test_in_registry():
     from kvfold import build_compressor
+
     c = build_compressor("my-method")
     assert isinstance(c, MyMethodCompressor)
 ```

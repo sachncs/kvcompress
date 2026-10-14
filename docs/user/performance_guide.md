@@ -153,12 +153,12 @@ the decompression step. This is most helpful for short contexts.
 
 ```python
 {
-    "compress_calls": int,      # number of layer-write events
-    "decompress_calls": int,    # number of layer-read events
-    "bytes_original": int,      # uncompressed bytes across all events
-    "bytes_compressed": int,    # bytes in the compressed payloads
-    "bytes_resident": int,      # backing tensor-storage bytes
-    "ratio": float,             # bytes_original / bytes_compressed
+    "compress_calls": int,  # number of layer-write events
+    "decompress_calls": int,  # number of layer-read events
+    "bytes_original": int,  # uncompressed bytes across all events
+    "bytes_compressed": int,  # bytes in the compressed payloads
+    "bytes_resident": int,  # backing tensor-storage bytes
+    "ratio": float,  # bytes_original / bytes_compressed
     "memory_saved_bytes": int,  # bytes_original - bytes_compressed
 }
 ```

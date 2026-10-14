@@ -12,9 +12,9 @@ from kvfold import enable_compression
 
 handle = enable_compression(
     model,
-    method="flash",                # 'jolt', 'flash', 'low', 'int2', 'int4',
-                                   # 'int8', 'fp8', 'fp16', 'bf16', 'pass'
-    target_memory=0.25,             # OR ratio=4.0
+    method="flash",  # 'jolt', 'flash', 'low', 'int2', 'int4',
+    # 'int8', 'fp8', 'fp16', 'bf16', 'pass'
+    target_memory=0.25,  # OR ratio=4.0
     layer_groups=1,
     bits=(0, 2, 4, 8),
     seed=0,
@@ -49,7 +49,7 @@ Returned by `enable_compression`.
 
 ```python
 handle.stats_dict()  # {'compress_calls': 12, 'bytes_original': ..., ...}
-handle.disable()     # restore original behaviour
+handle.disable()  # restore original behaviour
 ```
 
 ### Methods
@@ -103,7 +103,7 @@ from kvfold import Cache, Pool, Meta
 cache = Cache(compressor=comp)
 cache.store(layer=0, key=k, value=v)
 k_hat, v_hat = cache.retrieve(0)
-cache.memory_used()      # bytes currently occupied
+cache.memory_used()  # bytes currently occupied
 cache.compression_ratio()
 cache.stats()
 ```

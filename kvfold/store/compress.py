@@ -106,7 +106,7 @@ class Cache:
                 by reference; the cache does not own its lifecycle.
             metadata: optional initial :class:`Meta`.
                 Mutated as entries are added. If ``None``, a fresh
-                metadata object is created using ``compressor.name``.
+            metadata object is created using ``compressor.method``.
             max_layers: optional cap on number of layers kept in memory;
                 older layers are evicted LRU. ``None`` means no eviction.
             device: device tensors will be moved to on reconstruction.
@@ -114,7 +114,7 @@ class Cache:
         """
         self.compressor = compressor
         self.metadata_ = metadata or Meta(
-            method=compressor.name,
+            method=compressor.method,
             dtype="unknown",
         )
         self.max_layers = max_layers
@@ -277,7 +277,7 @@ class Cache:
                 "bytes_compressed": compressed,
                 "bytes_resident": self.memory_resident(),
                 "compression_ratio": original / compressed if compressed else 1.0,
-                "method": self.compressor.name,
+                "method": self.compressor.method,
             }
 
     def metadata(self) -> Meta:

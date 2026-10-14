@@ -23,6 +23,7 @@ If you want to plug in another format:
 from kvfold.core.base import Compressor, Payload
 import torch
 
+
 class TSVDCompressor(Compressor):
     method = "t-svd"
 
@@ -51,6 +52,7 @@ Subclass `IntQuantImpl` or implement the `Quantizer` protocol:
 ```python
 from kvfold.core.quant import IntQuant
 
+
 class Int4PerGroup(IntQuant):
     """INT4 with per-group scales of 32."""
 
@@ -75,6 +77,7 @@ Combine JoLT with another compressor by composing in `compress`:
 from kvfold.core.base import Compressor, Payload
 from kvfold import Jolt, IntQuant
 
+
 class JoLTThenInt4(Compressor):
     """Run JoLT first, then quantize the result's residual to INT4."""
 
@@ -91,8 +94,7 @@ class JoLTThenInt4(Compressor):
         # ... extract residual factors, quantize, wrap ...
         ...
 
-    def restore(self, kp, vp):
-        ...
+    def restore(self, kp, vp): ...
 ```
 
 Register via `kvfold/core/builtins.py`:
@@ -104,9 +106,10 @@ from somewhere import JoLTThenInt4
 REGISTRY.register("jolt+int4", JoLTThenInt4)
 ```
 
-## Adding a new family
+## Adding a non-standard serving integration
 
-See [Adding an adapter](../dev/adding_an_adapter.md).
+Add a dedicated serving adapter implementing the lifecycle in
+`kvfold.adapter.base.Adapter`; do not add no-op model-family shims.
 
 ## Adding a new cache backend
 
@@ -117,6 +120,7 @@ Subclass `Cache` and override `store`, `retrieve`, and
 ```python
 from kvfold.store.compress import Cache
 import torch
+
 
 class DiskBackedCache(Cache):
     def store(self, layer, key, value, **kwargs):

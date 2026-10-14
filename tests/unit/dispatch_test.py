@@ -133,15 +133,12 @@ def test_int_kwargs_rejected_on_pass() -> None:
         build_compressor("pass", per_channel=True)
 
 
-def test_method_is_case_insensitive() -> None:
-    """Case-insensitive method names are normalised."""
-    a = build_compressor("INT4")
-    b = build_compressor("Int4")
-    from kvfold.core.int_quant import IntQuant
+def test_method_names_are_canonical_lowercase() -> None:
+    """Non-canonical method spellings fail instead of becoming aliases."""
+    from kvfold.errors import UnsupportedMethodError
 
-    assert isinstance(a, IntQuant)
-    assert isinstance(b, IntQuant)
-    assert type(a) is type(b)
+    with pytest.raises(UnsupportedMethodError, match="INT4"):
+        build_compressor("INT4")
 
 
 # ---------------------------------------------------------------------------

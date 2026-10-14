@@ -4,14 +4,15 @@
 
 ```python
 import logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s: %(message)s')
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 # kvfold-specific debug
 logging.getLogger("kvfold").setLevel(logging.DEBUG)
 ```
 
 You should see allocator decisions (`lambda_star`, `achieved_ratio`),
-compression timings, and family shim dispatch.
+compression timings and model-scoped cache-hook dispatch.
 
 ## Inspect a Cache
 
@@ -19,8 +20,8 @@ compression timings, and family shim dispatch.
 from kvfold import Cache
 
 cache = ...  # wherever you got it
-cache.stats()                        # bytes_original, bytes_compressed, n_layers
-print(cache.metadata_)               # Meta
+cache.stats()  # bytes_original, bytes_compressed, n_layers
+print(cache.metadata_)  # Meta
 m = cache.metadata_
 for entry in m.layers:
     print(entry.layer, entry.kind, entry.r_token, entry.r_feature, entry.bits)
@@ -52,6 +53,7 @@ print(prof.summary())
 
 ```python
 import transformers.cache_utils as cu
+
 print("DynamicCache class:", cu.DynamicCache)
 # Should print <class 'kvfold.adapter.huggingface.HF.enable.<locals>.KvCompressCache'>
 # after enable_compression.

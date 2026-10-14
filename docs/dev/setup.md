@@ -57,7 +57,6 @@ kvfold/
 ├── adapter/
 │   ├── base.py
 │   ├── huggingface.py        # HF adapter + DynamicCache interception
-│   ├── registry.py           # model_type -> Family
 │   ├── vllm.py               # vLLM Shape A: export_kv / import_kv
 │   └── vllm_offload.py       # VLLM Shape B: Offload
 ├── core/

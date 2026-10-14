@@ -106,7 +106,7 @@ def test_jolt_zero_length_raises_structured_shape_error() -> None:
 
 def test_jolt_method_name() -> None:
     comp = Jolt(ratio=2.0)
-    assert comp.name == "jolt"
+    assert comp.method == "jolt"
     assert comp.stats()["method"] == "jolt"
 
 
@@ -132,7 +132,7 @@ def test_flash_compress_decompress() -> None:
 
 def test_flash_method_name() -> None:
     comp = Flash(ratio=2.0)
-    assert comp.name == "flash"
+    assert comp.method == "flash"
 
 
 def test_flash_speedup_no_quality_loss() -> None:

@@ -73,10 +73,12 @@ compressor expose everything needed:
 ```python
 # Greedy ablation:
 from kvfold.core.budget import Greedy
+
 g = Greedy(target_ratio=3.0)
 result = g.optimize(cells)
 
 # Rank-only ablation (bits forced to 0):
 from kvfold import Jolt
+
 comp = Jolt(ratio=3.0, bits=(0,))
 ```

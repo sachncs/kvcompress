@@ -125,7 +125,7 @@ handle.disable()  # restore the original behaviour
 | Target memory | `target_memory` | — | Numeric fraction such as `0.25` (25%). Mutually exclusive with `ratio`. |
 | Layer groups | `layer_groups` | `1` | Number of contiguous layer groups the allocator splits the model into. Paper uses G = 1. |
 | Residual bit-widths | `bits` | `(0, 2, 4, 8)` | Tuple the allocator can choose from. |
-| Cache impl name | `cache_implementation` | `"kvfold"` | Registered with HF's `cache_implementation` mechanism. |
+| Cache impl name | `cache_implementation` | `"dynamic"` | Uses the model-scoped Transformers cache hook. |
 | Seed | `seed` | `0` | Seed for randomized components (SVD, JL). |
 
 Per-compressor kwargs (e.g. `rank=`, `factor_dtype=`, `per_channel=`,
@@ -260,8 +260,7 @@ kvfold/                            (top-level package)
   errors.py                  — Error hierarchy
   adapter/
     base.py
-    huggingface.py           — DynamicCache interception + family shim walk
-    registry.py              — Per-family registry
+    huggingface.py           — Model-scoped DynamicCache interception
     vllm.py                  — Shape A: export_kv / import_kv
     vllm_offload.py          — Shape B: Offload (KVCacheOffloadWorker subclass)
   core/

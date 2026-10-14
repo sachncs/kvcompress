@@ -377,10 +377,6 @@ class MethodConfigRegistry:
         config.validate()
         return config
 
-    def supported(self) -> tuple[Method, ...]:
-        """Return the registered method names (alias for :meth:`names`)."""
-        return self.names()
-
 
 REGISTRY: Final[MethodConfigRegistry] = MethodConfigRegistry()
 """Process-wide registry; populated by module import side effects."""

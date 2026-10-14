@@ -26,7 +26,6 @@ KV-cache-compression interface for any decoder-only LLM.
 | Pick a compression ratio | [user/performance_guide.md](user/performance_guide.md) |
 | See the API surface | [user/api.md](user/api.md) |
 | Add a new compressor | [dev/adding_a_compressor.md](dev/adding_a_compressor.md) |
-| Add a new model family | [dev/adding_an_adapter.md](dev/adding_an_adapter.md) |
 | Run the benchmarks | [benchmarks/running.md](benchmarks/running.md) |
 | Reproduce the paper's numbers | [research/reproduction_notes.md](research/reproduction_notes.md) |
 | Integrate with vLLM | [research/paper_notes.md](research/paper_notes.md#vllm-integration) |

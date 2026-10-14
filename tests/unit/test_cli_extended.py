@@ -106,6 +106,11 @@ def test_validate_hf_smoke_test_branch(monkeypatch: pytest.MonkeyPatch) -> None:
         def eval(self) -> _StubModel:
             return self
 
+        def _prepare_cache_for_generation(self, *_args, **_kwargs):
+            from transformers.generation import utils
+
+            return utils.DynamicCache
+
         def generate(self, ids, **kwargs):
             return torch.cat([ids, ids.new_zeros((1, kwargs["max_new_tokens"]))], dim=1)
 
@@ -297,6 +302,11 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
         def eval(self) -> _StubModel:
             return self
 
+        def _prepare_cache_for_generation(self, *_args, **_kwargs):
+            from transformers.generation import utils
+
+            return utils.DynamicCache
+
         def generate(self, ids, **kwargs):
             return torch.cat([ids, ids.new_zeros((1, kwargs["max_new_tokens"]))], dim=1)
 
@@ -321,7 +331,7 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
             max_new=2,
             seed=0,
             bits="0",
-            cache_implementation="kvfold",
+            cache_implementation="dynamic",
         )
 
 
@@ -403,7 +413,7 @@ def test_compress_requires_hf_dependencies(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(builtins, "__import__", fake_import)
     result = runner.invoke(
         app,
-        ["compress", "--model", "gpt2", "--target", "50%"],
+        ["compress", "--model", "gpt2", "--target", "0.5"],
     )
     assert result.exit_code != 0
     # typer.echo(..., err=True) goes to stderr; combine both streams.
@@ -426,6 +436,11 @@ def test_compress_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def eval(self) -> _StubModel:
             return self
+
+        def _prepare_cache_for_generation(self, *_args, **_kwargs):
+            from transformers.generation import utils
+
+            return utils.DynamicCache
 
         def generate(self, ids, **kwargs):
             return torch.cat([ids, ids.new_zeros((1, kwargs["max_new_tokens"]))], dim=1)

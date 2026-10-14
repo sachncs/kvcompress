@@ -7,14 +7,12 @@ method string to a concrete :class:`Compressor` subclass and its
 * a public method name (``"jolt"``, ``"flash"``, ...),
 * the :class:`Compressor` subclass that implements it,
 * the :class:`MethodConfig` subclass that configures it,
-* an optional kwarg adapter for backwards-friendly defaults.
+* an optional factory for method-specific construction.
 
 Adding a new method means: subclass :class:`Compressor` and
 :class:`MethodConfig`, then call :meth:`CompressorRegistry.register`.
 
-The legacy :func:`build_compressor` function is a thin façade that calls
-:func:`kvfold.api.build_compressor`; users should import from the public
-``kvfold`` namespace.
+The public construction entry point is :func:`kvfold.api.build_compressor`.
 """
 
 from __future__ import annotations
@@ -141,12 +139,10 @@ class CompressorRegistry:
     def resolve(self, method: str) -> CompressorEntry:
         """Return the entry for ``method`` or raise :class:`UnsupportedMethodError`.
 
-        Method names are matched case-insensitively: ``"INT4"`` resolves
-        the same as ``"int4"``.
+        Method names are canonical lowercase identifiers.
         """
-        key = method.lower() if isinstance(method, str) else method
         try:
-            return self.entries[key]
+            return self.entries[method]
         except KeyError:
             raise UnsupportedMethodError(method=method, supported=self.names()) from None
 

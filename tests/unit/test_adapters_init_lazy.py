@@ -45,14 +45,6 @@ def test_vllm_offload_lazy_exports() -> None:
     assert callable(vllm_offload_version)
 
 
-def test_family_registry_lazy_exports() -> None:
-    from kvfold.adapter import Family, FamilyRegistry, known_model_types
-
-    assert Family.__name__ == "Family"
-    assert FamilyRegistry.__name__ == "FamilyRegistry"
-    assert "llama" in known_model_types()
-
-
 def test_unknown_attribute_raises() -> None:
     import kvfold.adapter as sub
 

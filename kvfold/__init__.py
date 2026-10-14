@@ -75,8 +75,6 @@ LAZY_EXPORTS = {
     "dequantize_tensor": ("kvfold.core.quant", "dequantize_tensor"),
     "estimate_int_bytes": ("kvfold.core.quant", "estimate_int_bytes"),
     "Residual": ("kvfold.core.residual", "Residual"),
-    "Family": ("kvfold.adapter.registry", "Family"),
-    "FamilyRegistry": ("kvfold.adapter.registry", "FamilyRegistry"),
     "HF": ("kvfold.adapter.huggingface", "HF"),
     "Cache": ("kvfold.store.compress", "Cache"),
     "Pool": ("kvfold.store.manager", "Pool"),

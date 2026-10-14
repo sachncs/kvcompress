@@ -165,7 +165,7 @@ def enable_compression(
     ratio: float | None = None,
     layer_groups: int = 1,
     bits: tuple[int, ...] = (0, 2, 4, 8),
-    cache_implementation: str = "kvfold",
+    cache_implementation: str = "dynamic",
     seed: int = 0,
     **kwargs: Any,
 ) -> CompressionHandle:
@@ -261,7 +261,7 @@ def build_compressor(method: str, **kwargs: Any) -> Any:
     """
     from kvfold.core.dispatch import REGISTRY
 
-    return REGISTRY.build(method.lower() if isinstance(method, str) else method, **kwargs)
+    return REGISTRY.build(method, **kwargs)
 
 
 def supported_methods() -> tuple[str, ...]:

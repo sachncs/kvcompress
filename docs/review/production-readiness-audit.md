@@ -12,10 +12,10 @@ status is recorded below.
 | Check | Result | Meaning |
 | --- | --- | --- |
 | `uv run python -m compileall -q kvfold tests scripts` | Pass | Python files compile in the pinned local environment. |
-| `uv run pytest -m 'not slow and not integration and not gpu'` | Pass | 484 passed, 4 expected skips, 16 deselected under Python 3.12.14; 91.07% coverage. |
+| `uv run pytest -m 'not slow and not integration and not gpu'` | Pass | 454 passed, 4 expected skips, 16 deselected under Python 3.12.14; 90.83% coverage after removing dead compatibility tests. |
 | `uv run pytest -m integration -q` | Pass | 4 pinned GPT-2 tests plus 10 MPS tests passed locally; 490 tests deselected. |
 | `uv run pytest -m mps -q` | Pass | 10 Apple MPS tests passed, including Flash's CPU fallback for the MPS-missing QR operator; FP8 is explicitly tested as unsupported. |
-| `uv run coverage report --fail-under=90` | Pass | 91.07% on the core package; optional CUDA/Triton, vLLM, and benchmark/research paths remain separate. |
+| `uv run coverage report --fail-under=90` | Pass | 90.83% on the core package; optional CUDA/Triton, vLLM, and benchmark/research paths remain separate. |
 | `uv run mypy kvfold` | Pass | No issues in 52 source files. |
 | `uv run pydocstyle --convention=google ... kvfold` | Pass | Public classes, methods, and functions pass the documented Google-style check; module/package/constructor exceptions are explicit. |
 | `uv run vulture kvfold tests examples scripts` | Pass | No unused-code findings. |
@@ -31,6 +31,22 @@ status is recorded below.
 | `uv run python scripts/check_doc_links.py` | Pass | All relative Markdown links resolve from the repository root. |
 | `.github/workflows/{ci,release,gpu}.yaml` parse | Pass | Release and manual GPU workflow definitions also parse successfully with PyYAML. |
 
+## Principal-engineer verdict
+
+The codebase is materially cleaner after this pass: compatibility-only public
+aliases, the no-op family registry, the process-wide Transformers fallback, and
+their tests/docs were removed. CPU, MPS, GPT-2 integration, static analysis, and
+frontend gates are reproducible locally.
+
+It is still **not reliable enough to claim production KV-memory compression**.
+The highest-risk issue is architectural: the HF adapter currently keeps the
+framework's full K/V tensors and separately maintains compressed payloads, then
+reconstructs full tensors for attention reads. The reported compression ratio is
+therefore not yet equivalent to process resident-memory reduction. This must be
+fixed or measured with an authoritative resident-memory test before release.
+The private Transformers hook, CUDA/Triton execution, real vLLM, long-context
+stress, and clean external CI remain additional release gates.
+
 ## Findings
 
 ### P0 — release blockers
@@ -44,40 +60,47 @@ status is recorded below.
    scoped evidence-led claims and the CI/browser gates are documented. The live
    GitHub Pages URL must still be republished and checked before the old claims
    can be considered removed from the public surface.
-4. **Mostly resolved in this pass:** current Transformers models now use a
-   model-scoped `_prepare_cache_for_generation` hook, verified by GPT-2
-   integration tests; the process-wide patch remains an API-gated compatibility
-   fallback for older/custom objects and is still the residual isolation risk.
-5. **Mostly resolved in this pass:** the canonical Python package is `kvfold`,
-   the product is `kvfold`, and the repository slug is `kvcompress`; compatibility
-   aliases remain documented. A final stale-link sweep is still required.
+4. **Resolved for supported Transformers models in this pass:** current models
+   use a model-scoped `_prepare_cache_for_generation` hook, verified by GPT-2
+   integration tests; unsupported model objects without that hook now fail
+   clearly instead of entering a process-wide fallback path.
+5. **Resolved for the canonical package surface in this pass:** the package is
+   `kvfold`, the product is `kvfold`, and the repository slug is `kvcompress`;
+   compatibility aliases and dead adapter shim modules were removed. A final
+   external-link sweep is still required.
 
 ### P1 — reliability and correctness
 
 6. **Resolved in this pass:** rollback now catches ordinary `Exception` values,
    preserving process-control exceptions such as `KeyboardInterrupt` and
    `SystemExit`.
-7. **Resolved for the fallback patcher in this pass:** adapter enable/disable
-   transitions are serialized by a process-wide re-entrant lock, and teardown
-   restores exact prior symbols only when kvfold still owns them. Framework
-   version gating remains a separate compatibility-matrix item.
-8. **Resolved for current Transformers models in this pass:** `INSTALLED_ADAPTERS`
-   uses a weak-key mapping and model-scoped adapters can coexist. The adapter
-   still rejects a second model while the process-wide fallback patch is active.
-9. **Resolved in this pass:** `cache_implementation` now accepts the documented
-   `kvfold` compatibility alias plus `dynamic`/`dynamic_full`; invalid values
-   fail during setup instead of being silently ignored.
+7. **Resolved in this pass:** adapter enable/disable transitions are serialized
+   by a process-wide re-entrant lock, and the only supported integration path is
+   the model-scoped Transformers cache hook. The process-wide fallback patcher
+   was removed.
+8. **Resolved in this pass:** `INSTALLED_ADAPTERS` uses a weak-key mapping and
+   model-scoped adapters can coexist without mutating global Transformers module
+   symbols.
+9. **Resolved in this pass:** `cache_implementation` accepts only
+   `dynamic`/`dynamic_full`; the `kvfold` compatibility alias was removed and
+   invalid values fail during setup.
 10. **Resolved in this pass:** unknown per-method kwargs now raise
     `MethodConfigError` instead of being silently discarded.
 11. **Resolved for the in-memory cache in this pass:** replacement, eviction,
     metadata-index rebuilding, LRU reads, pool live-layer synchronization, and
     failed metadata preparation now preserve explicit invariants with regression
     tests. Persistence-level transactionality remains separate work.
-12. **Partially resolved in this pass:** payload statistics now expose logical
-    compressed bytes separately from backing tensor-storage (`bytes_resident`)
-    bytes, with shared storage counted once per payload. CUDA allocator
-    fragmentation, metadata overhead, and process-level reserved memory still
-    require deployment-specific measurement.
+12. **Critical unresolved reliability issue:** `HF.KvCompressCache.update()`
+    first lets Transformers retain the full K/V tensors, then mirrors them into
+    the compressed `Pool`; `__getitem__()` reconstructs full tensors back into
+    the framework cache. The reported `bytes_compressed` therefore describes
+    the mirror, not necessarily the model's resident KV memory. Until the
+    backing cache storage is replaced or process-level memory proves otherwise,
+    the product must not claim a 4× resident-memory reduction. Payload
+    statistics do expose logical compressed bytes separately from backing
+    tensor-storage (`bytes_resident`) bytes, but CUDA allocator fragmentation,
+    metadata overhead, and process-level reserved memory still require
+    deployment-specific measurement.
 13. **Partially resolved in this pass:** CPU float16/bfloat16/float8 paths,
     singleton and zero-length contracts, and several edge dimensions are tested;
     CUDA, non-contiguous/long-context stress, and the full dtype/device matrix
@@ -156,13 +179,10 @@ status is recorded below.
     locked atomic recording/snapshot methods. The public `CompressionHandle` is
     now frozen against reference replacement; its adapter remains the
     deliberately mutable lifecycle owner.
-30. **Policy established and partially applied in this pass:** the developer
-    style guide now defines semi-private naming, compatibility aliases, and
-    immutable snapshots. Cache/Pool locks, the JL projection cache, vLLM
-    offload storage, runtime buffers, and RNG snapshots now use underscored
-    names, and CI enforces the highest-risk public-field violations. Registry
-    mappings and compatibility aliases still need a staged migration where
-    external callers may rely on them.
+30. **Resolved for the canonical API in this pass:** public compatibility
+    aliases for compressor names, metadata ratios, cache implementation names,
+    adapter exports, and model-family shims were removed. The style guide now
+    requires explicit API breaks and underscored implementation state.
 31. **Mostly resolved in this pass:** current extension/style/architecture
     docs now describe the canonical package, ports, lifecycle, and naming policy;
     stale current method/module references were corrected, and a relative-link
@@ -236,8 +256,8 @@ status is recorded below.
 
 1. Extract a `CacheBackend`/`CompressorStrategy`/`AllocatorStrategy` contract and
    immutable configuration/value objects.
-2. Replace global patching with supported framework hooks where possible; isolate
-   the fallback patcher, lock lifecycle transitions, and make restoration exact.
+2. Use the supported model-scoped framework hook, lock lifecycle transitions,
+   and make restoration exact. Do not reintroduce process-wide monkey patches.
 3. Add transactional cache operations, invariant validation, structured errors,
    and logical/resident memory accounting.
 4. Add CPU edge-case, concurrency, import-order, multi-model, CUDA, Triton, and

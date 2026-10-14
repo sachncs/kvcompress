@@ -110,8 +110,8 @@ many commits.
   the supported API and require Google-style docstrings and tests.
 - Implementation state, locks, registries, rollback bookkeeping, and helper
   functions use a leading underscore (`_lock`, `_entries`, `_restore_state`).
-- Public compatibility aliases are allowed only when documented and covered by
-  deprecation tests; they must delegate to the underscored implementation.
+- Do not add public compatibility aliases. If an API must change, make the
+  break explicit in the migration guide and update every in-repository caller.
 - Prefer immutable snapshots (`AdapterState`, metric snapshots, descriptors)
   over exposing mutable internal state to callers.
 

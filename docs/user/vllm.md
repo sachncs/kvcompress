@@ -57,7 +57,7 @@ Both helpers accept the same ``method`` keyword as
 | ``int2`` / ``int4`` / ``int8`` | Per-cell integer quantisation |
 | ``fp8``      | IEEE E4M3 / E5M2 quantisation |
 | ``fp16`` / ``bf16`` | Dtype-only halving |
-| ``pass``     | No compression (alias for the old ``identity``) |
+| ``pass``     | No compression |
 
 ## Migrating from 0.1.x
 

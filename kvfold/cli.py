@@ -289,8 +289,8 @@ def compress(
     seed: int = typer.Option(0, help="RNG seed"),
     bits: str = typer.Option("0,2,4,8", help="comma-separated residual bit-widths"),
     cache_implementation: str = typer.Option(
-        "kvfold",
-        help="HF cache_implementation value (always overridden to 'dynamic' under the hood)",
+        "dynamic",
+        help="HF cache_implementation value: dynamic or dynamic_full",
     ),
 ) -> None:
     """Run a one-shot compression pass on a prompt and print the output.

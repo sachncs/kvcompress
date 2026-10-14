@@ -227,7 +227,3 @@ def test_each_config_has_method_attribute() -> None:
     assert Fp16Config.method == "fp16"
     assert Bf16Config.method == "bf16"
     assert PassConfig.method == "pass"
-
-
-def test_registry_supported_alias() -> None:
-    assert REGISTRY.supported() == REGISTRY.names()
