@@ -200,7 +200,17 @@ class Randomized(Decomposer):
 
         q, _ = torch.linalg.qr(y, mode="reduced")
         b = q.t() @ a_compute
-        u_b, s_b, vh_b = torch.linalg.svd(b, full_matrices=False)
+        try:
+            u_b, s_b, vh_b = torch.linalg.svd(b, full_matrices=False)
+        except RuntimeError:
+            # Repeated recompression can produce an ill-conditioned sketch on
+            # CPU/MPS. Retry with finite float64 input before surfacing a hard
+            # failure; silently returning invalid factors would corrupt KV.
+            stable_b = torch.nan_to_num(b.to(torch.float64), nan=0.0, posinf=0.0, neginf=0.0)
+            u_b, s_b, vh_b = torch.linalg.svd(stable_b, full_matrices=False)
+            u_b = u_b.to(b.dtype)
+            s_b = s_b.to(b.dtype)
+            vh_b = vh_b.to(b.dtype)
         u = q @ u_b
 
         rank = min(rank, s_b.shape[0])

@@ -9,14 +9,11 @@ is :func:`kvfold.api.enable_compression`, which
 DynamicCache subclass behaviour
 ================================
 
-The patched subclass overrides two methods:
-
-* ``update`` — after the parent's ``super().update(...)`` concatenates
-  the new K/V slice, we read the just-appended layer's tensors and call
-  :meth:`Pool.store` to compress and stash them.
-* ``__getitem__`` — before returning the layer's K/V, we ask the
-  manager to reconstruct them. This is the path the attention layer
-  hits when reading past keys.
+The patched subclass owns only metadata and compressed payloads. It does not
+call the parent's ``update`` implementation because that implementation would
+retain complete K/V tensors in ``DynamicLayer.keys`` and ``DynamicLayer.values``.
+Updated tensors are reconstructed and concatenated only for the current
+attention operation, then the persistent cache is compressed immediately.
 
 Both paths also bump the :class:`~kvfold.api.CompressionStats`
 counters wired by :func:`kvfold.api.enable_compression`.
@@ -152,6 +149,7 @@ class HF(Adapter[AdapterState]):
         # only forward kwargs the chosen method's config actually accepts.
         from kvfold.config import REGISTRY as CONFIG_REGISTRY
 
+        config_cls = None
         try:
             config_cls = CONFIG_REGISTRY.resolve(method)
             valid_fields = {f.name for f in dataclasses.fields(config_cls)}
@@ -169,7 +167,15 @@ class HF(Adapter[AdapterState]):
         compressor_kwargs: dict[str, Any] = dict(kwargs)
         if "ratio" in valid_fields:
             compressor_kwargs["ratio"] = ratio
-        if "bits" in valid_fields:
+        bits_field = getattr(config_cls, "__dataclass_fields__", {}).get("bits")
+        # Allocator methods accept candidate bit-width tuples; fixed-width
+        # methods (int2/int4/int8) deliberately expose a scalar config and
+        # must keep their own validated default.
+        if (
+            "bits" in valid_fields
+            and bits_field is not None
+            and isinstance(bits_field.default, tuple)
+        ):
             compressor_kwargs["bits"] = bits
         if "seed" in valid_fields:
             compressor_kwargs["seed"] = seed
@@ -328,10 +334,10 @@ class HF(Adapter[AdapterState]):
 
         The subclass intercepts two methods:
 
-        * ``update`` — compresses the layer's K/V after the parent's
-          concatenation.
-        * ``__getitem__`` — reconstructs the layer's K/V before the
-          attention layer reads past keys.
+        * ``update`` — reconstructs the prior compressed state, appends the
+          new slice, and stores only the compressed result.
+        * ``__getitem__`` — reconstructs the layer's K/V for callers using
+          the legacy cache indexing protocol.
 
         Both also bump ``cache.stats_ref`` (the CompressionStats on the
         handle) so users can read cumulative counts via
@@ -344,7 +350,58 @@ class HF(Adapter[AdapterState]):
         cache = self
 
         class KvCompressCache(dynamic_cache_cls):
-            """DynamicCache subclass that compresses on every update."""
+            """DynamicCache-compatible cache with compressed backing storage."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args, **kwargs)
+                self._kvfold_lengths: dict[int, int] = {}
+                self._kvfold_cumulative_lengths: dict[int, int] = {}
+                self._kvfold_shapes: dict[int, tuple[int, ...]] = {}
+                # Keep layer objects as framework metadata, but never let them
+                # own the persistent K/V tensors.
+                for layer in self.layers:
+                    layer.keys = None
+                    layer.values = None
+                    layer.is_initialized = False
+
+            def _ensure_layer(self, layer_idx: int) -> Any:
+                if layer_idx < len(self.layers):
+                    return self.layers[layer_idx]
+                if self.layer_class_to_replicate is None:
+                    raise IndexError(f"cache has no layer {layer_idx}")
+                while len(self.layers) <= layer_idx:
+                    self.layers.append(self.layer_class_to_replicate())
+                return self.layers[layer_idx]
+
+            def _stored_states(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor] | None:
+                if cache.manager is None or layer_idx not in cache.manager:
+                    return None
+                states = cache.manager.retrieve(layer_idx)
+                shape = self._kvfold_shapes.get(layer_idx)
+                if shape is not None and states[0].dim() != len(shape):
+                    states = (
+                        states[0].reshape(shape),
+                        states[1].reshape(shape),
+                    )
+                if cache.stats_ref is not None:
+                    cache.stats_ref.record_decompress()
+                return states
+
+            def _store_states(
+                self,
+                layer_idx: int,
+                key_states: torch.Tensor,
+                value_states: torch.Tensor,
+            ) -> None:
+                if cache.manager is None:
+                    return
+                cache.manager.store(layer_idx, key_states, value_states)
+                if cache.stats_ref is not None:
+                    cache.stats_ref.record_compress(
+                        bytes_original=cache.manager.memory_original(),
+                        bytes_compressed=cache.manager.memory_used(),
+                        bytes_resident=cache.manager.memory_resident(),
+                    )
 
             def update(
                 self,
@@ -353,12 +410,7 @@ class HF(Adapter[AdapterState]):
                 layer_idx: int,
                 cache_kwargs: dict | None = None,
             ):
-                """Forward to HF's ``DynamicCache.update`` then mirror to our store.
-
-                After the underlying HF cache stores K/V for this layer,
-                we read them back out of ``self.layers[layer_idx]`` and
-                delegate to :meth:`Pool.store` for the
-                compressed-cache mirror.
+                """Append K/V while keeping only compressed persistent state.
 
                 Args:
                     key_states: K tensor for this layer's new tokens.
@@ -371,39 +423,125 @@ class HF(Adapter[AdapterState]):
                     Whatever the HF parent returns (a tuple of updated
                     K, V that callers may use directly).
                 """
-                out = super().update(key_states, value_states, layer_idx, cache_kwargs)
-                if cache.manager is not None:
-                    layer_obj = self.layers[layer_idx]
-                    k = layer_obj.keys
-                    v = layer_obj.values
-                    cache.manager.store(layer_idx, k, v)
-                    if cache.stats_ref is not None:
-                        # Read both counts from the manager so they
-                        # reflect the current cache state, not an
-                        # accumulating per-call counter. Re-store
-                        # replaces the metadata entry, not adds to it.
-                        cache.stats_ref.record_compress(
-                            bytes_original=cache.manager.memory_original(),
-                            bytes_compressed=cache.manager.memory_used(),
-                            bytes_resident=cache.manager.memory_resident(),
-                        )
-                return out
+                layer = self._ensure_layer(layer_idx)
+                if cache.manager is None:
+                    return super().update(key_states, value_states, layer_idx, cache_kwargs)
+
+                previous = self._stored_states(layer_idx)
+                if previous is None:
+                    full_keys, full_values = key_states, value_states
+                    cumulative_length = key_states.shape[-2]
+                else:
+                    old_keys, old_values = previous
+                    full_keys = torch.cat((old_keys, key_states), dim=-2)
+                    full_values = torch.cat((old_values, value_states), dim=-2)
+                    cumulative_length = (
+                        self._kvfold_cumulative_lengths[layer_idx] + key_states.shape[-2]
+                    )
+
+                # Match DynamicSlidingWindowLayer: return the current window,
+                # but persist only window-1 states for the next update.
+                if getattr(layer, "is_sliding", False):
+                    window = int(layer.sliding_window)
+                    stored_keys = full_keys[..., -window + 1 :, :]
+                    stored_values = full_values[..., -window + 1 :, :]
+                else:
+                    stored_keys, stored_values = full_keys, full_values
+
+                self._store_states(layer_idx, stored_keys, stored_values)
+                self._kvfold_lengths[layer_idx] = stored_keys.shape[-2]
+                self._kvfold_cumulative_lengths[layer_idx] = cumulative_length
+                self._kvfold_shapes[layer_idx] = tuple(stored_keys.shape)
+                # Never assign full tensors to layer.keys/values.
+                return full_keys, full_values
 
             def __getitem__(self, layer_idx: int):
-                # The parent's __getitem__ signature varies across HF
-                # versions; we accept any positional layer index.
-                if (
-                    cache.manager is not None
-                    and layer_idx in cache.manager
-                    and getattr(self, "layers", None) is not None
-                    and layer_idx < len(self.layers)
+                states = self._stored_states(layer_idx)
+                if states is None:
+                    raise KeyError(f"cache has no compressed layer {layer_idx}")
+                return states
+
+            def __iter__(self):
+                for layer_idx in range(len(self)):
+                    yield self[layer_idx]
+
+            def __len__(self) -> int:
+                return len(self._kvfold_lengths)
+
+            def get_seq_length(self, layer_idx: int = 0) -> int:
+                return self._kvfold_cumulative_lengths.get(layer_idx, 0)
+
+            def get_max_cache_shape(self, layer_idx: int = 0) -> int:
+                if layer_idx < len(self.layers) and getattr(
+                    self.layers[layer_idx], "is_sliding", False
                 ):
-                    k, v = cache.manager.retrieve(layer_idx)
-                    self.layers[layer_idx].keys = k
-                    self.layers[layer_idx].values = v
-                    if cache.stats_ref is not None:
-                        cache.stats_ref.record_decompress()
-                return super().__getitem__(layer_idx)
+                    return int(self.layers[layer_idx].sliding_window)
+                return -1
+
+            def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int):
+                query_length = cache_position.shape[0]
+                layer = self._ensure_layer(layer_idx)
+                if getattr(layer, "is_sliding", False):
+                    window = int(layer.sliding_window)
+                    cumulative = self.get_seq_length(layer_idx)
+                    return (
+                        min(cumulative, window - 1) + query_length,
+                        max(cumulative - window + 1, 0),
+                    )
+                return self.get_seq_length(layer_idx) + query_length, 0
+
+            def to_legacy_cache(self):
+                return tuple(self[layer_idx] for layer_idx in range(len(self)))
+
+            def reset(self) -> None:
+                if cache.manager is not None:
+                    cache.manager.clear()
+                self._kvfold_lengths.clear()
+                self._kvfold_cumulative_lengths.clear()
+                self._kvfold_shapes.clear()
+
+            def crop(self, max_length: int) -> None:
+                for layer_idx in list(self._kvfold_lengths):
+                    keys, values = self[layer_idx]
+                    limit = max_length
+                    if limit < 0:
+                        limit = self.get_seq_length(layer_idx) - abs(limit)
+                    if keys.shape[-2] > limit:
+                        self._store_states(layer_idx, keys[..., :limit, :], values[..., :limit, :])
+                        self._kvfold_lengths[layer_idx] = limit
+                        self._kvfold_cumulative_lengths[layer_idx] = limit
+
+            def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+                for layer_idx in list(self._kvfold_lengths):
+                    keys, values = self[layer_idx]
+                    selected_keys = keys.index_select(0, beam_idx.to(keys.device))
+                    selected_values = values.index_select(0, beam_idx.to(values.device))
+                    self._store_states(
+                        layer_idx,
+                        selected_keys,
+                        selected_values,
+                    )
+                    self._kvfold_shapes[layer_idx] = tuple(selected_keys.shape)
+
+            def batch_repeat_interleave(self, repeats: int) -> None:
+                for layer_idx in list(self._kvfold_lengths):
+                    keys, values = self[layer_idx]
+                    repeated_keys = keys.repeat_interleave(repeats, dim=0)
+                    repeated_values = values.repeat_interleave(repeats, dim=0)
+                    self._store_states(
+                        layer_idx,
+                        repeated_keys,
+                        repeated_values,
+                    )
+                    self._kvfold_shapes[layer_idx] = tuple(repeated_keys.shape)
+
+            def batch_select_indices(self, indices: torch.Tensor) -> None:
+                for layer_idx in list(self._kvfold_lengths):
+                    keys, values = self[layer_idx]
+                    selected_keys = keys[indices, ...]
+                    selected_values = values[indices, ...]
+                    self._store_states(layer_idx, selected_keys, selected_values)
+                    self._kvfold_shapes[layer_idx] = tuple(selected_keys.shape)
 
         if not self.install_model_cache_hook(KvCompressCache):
             from kvfold.errors import TransformersCompatibilityError

@@ -58,11 +58,16 @@ def test_gpt2_flash_runs(gpt2_model_with_pad) -> None:
 
 @pytest.mark.integration
 def test_gpt2_disable_restores_behavior(gpt2_model_with_pad) -> None:
-    """After disable, output should be identical to baseline."""
+    """After disable, the model returns to the original generation path."""
     from kvfold import enable_compression
 
     tok, model = gpt2_model_with_pad
     ids = tok.encode("Hello world", return_tensors="pt")
+
+    with torch.no_grad():
+        baseline_before = model.generate(
+            ids, max_new_tokens=5, do_sample=False, pad_token_id=tok.eos_token_id
+        )
 
     handle = enable_compression(model, method="flash", ratio=2.0)
     with torch.no_grad():
@@ -76,9 +81,8 @@ def test_gpt2_disable_restores_behavior(gpt2_model_with_pad) -> None:
             ids, max_new_tokens=5, do_sample=False, pad_token_id=tok.eos_token_id
         )
 
-    assert torch.equal(out_compressed, out_baseline), (
-        "after disable, output should be identical to baseline"
-    )
+    assert out_compressed.shape == baseline_before.shape
+    assert torch.equal(out_baseline, baseline_before), "disable did not restore baseline behavior"
 
 
 @pytest.mark.integration

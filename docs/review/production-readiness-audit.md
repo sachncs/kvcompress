@@ -12,10 +12,10 @@ status is recorded below.
 | Check | Result | Meaning |
 | --- | --- | --- |
 | `uv run python -m compileall -q kvfold tests scripts` | Pass | Python files compile in the pinned local environment. |
-| `uv run pytest -m 'not slow and not integration and not gpu'` | Pass | 454 passed, 4 expected skips, 16 deselected under Python 3.12.14; 90.83% coverage after removing dead compatibility tests. |
-| `uv run pytest -m integration -q` | Pass | 4 pinned GPT-2 tests plus 10 MPS tests passed locally; 490 tests deselected. |
+| `uv run pytest -m 'not slow and not integration and not gpu'` | Pass | 454 passed, 4 expected skips, 18 deselected under Python 3.12.14; 90.97% coverage after removing dead compatibility tests. |
+| `uv run pytest -m integration -q` | Pass | 4 pinned GPT-2 tests, 10 MPS tests, and 2 CPU/MPS cache-residency tests passed locally; 460 tests deselected. |
 | `uv run pytest -m mps -q` | Pass | 10 Apple MPS tests passed, including Flash's CPU fallback for the MPS-missing QR operator; FP8 is explicitly tested as unsupported. |
-| `uv run coverage report --fail-under=90` | Pass | 90.83% on the core package; optional CUDA/Triton, vLLM, and benchmark/research paths remain separate. |
+| `uv run coverage report --fail-under=90` | Pass | 90.97% on the core package; optional CUDA/Triton, vLLM, and benchmark/research paths remain separate. |
 | `uv run mypy kvfold` | Pass | No issues in 52 source files. |
 | `uv run pydocstyle --convention=google ... kvfold` | Pass | Public classes, methods, and functions pass the documented Google-style check; module/package/constructor exceptions are explicit. |
 | `uv run vulture kvfold tests examples scripts` | Pass | No unused-code findings. |
@@ -38,14 +38,14 @@ aliases, the no-op family registry, the process-wide Transformers fallback, and
 their tests/docs were removed. CPU, MPS, GPT-2 integration, static analysis, and
 frontend gates are reproducible locally.
 
-It is still **not reliable enough to claim production KV-memory compression**.
-The highest-risk issue is architectural: the HF adapter currently keeps the
-framework's full K/V tensors and separately maintains compressed payloads, then
-reconstructs full tensors for attention reads. The reported compression ratio is
-therefore not yet equivalent to process resident-memory reduction. This must be
-fixed or measured with an authoritative resident-memory test before release.
-The private Transformers hook, CUDA/Triton execution, real vLLM, long-context
-stress, and clean external CI remain additional release gates.
+The storage architecture is now reliable for the validated CPU/MPS path: the HF
+adapter keeps framework layer objects as metadata only and stores K/V payloads
+in the compressed Pool. Authoritative CPU/MPS tests prove that framework-backed
+K/V storage is absent and compressed tensor storage is below raw K/V storage.
+This supports a production-readiness claim for the tested CPU/MPS scope, not a
+universal claim. CUDA/Triton execution, real vLLM, long-context stress, full
+device/dtype coverage, clean external CI, and live GitHub Pages verification
+remain release gates; CUDA is explicitly pending.
 
 ## Findings
 
@@ -90,17 +90,13 @@ stress, and clean external CI remain additional release gates.
     metadata-index rebuilding, LRU reads, pool live-layer synchronization, and
     failed metadata preparation now preserve explicit invariants with regression
     tests. Persistence-level transactionality remains separate work.
-12. **Critical unresolved reliability issue:** `HF.KvCompressCache.update()`
-    first lets Transformers retain the full K/V tensors, then mirrors them into
-    the compressed `Pool`; `__getitem__()` reconstructs full tensors back into
-    the framework cache. The reported `bytes_compressed` therefore describes
-    the mirror, not necessarily the model's resident KV memory. Until the
-    backing cache storage is replaced or process-level memory proves otherwise,
-    the product must not claim a 4× resident-memory reduction. Payload
-    statistics do expose logical compressed bytes separately from backing
-    tensor-storage (`bytes_resident`) bytes, but CUDA allocator fragmentation,
-    metadata overhead, and process-level reserved memory still require
-    deployment-specific measurement.
+12. **Resolved for CPU/MPS in this pass:** `HF.KvCompressCache.update()` no
+    longer calls the parent implementation that retains full K/V tensors. The
+    framework layer objects remain metadata-only, while the compressed `Pool`
+    is the persistent backing store; reconstruction is transient for attention.
+    CPU and MPS residency tests assert this directly and compare backing tensor
+    storage with raw K/V bytes. CUDA allocator fragmentation, metadata overhead,
+    and process-level reserved memory still require a CUDA deployment run.
 13. **Partially resolved in this pass:** CPU float16/bfloat16/float8 paths,
     singleton and zero-length contracts, and several edge dimensions are tested;
     CUDA, non-contiguous/long-context stress, and the full dtype/device matrix

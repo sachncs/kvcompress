@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
+import torch
 
 from kvfold.api import CompressionHandle, enable_compression
 
@@ -78,6 +79,34 @@ def test_hf_uses_model_scoped_cache_hook_when_available() -> None:
     finally:
         handle.disable()
     assert model._prepare_cache_for_generation is original
+
+
+def test_hf_cache_keeps_framework_layers_metadata_only() -> None:
+    """The model-facing cache must not retain decompressed K/V tensors."""
+    model = FakeModel("llama")
+    handle = enable_compression(model, method="pass", target_memory=1.0)
+    try:
+        cache = model._prepare_cache_for_generation()()
+        key = torch.randn(1, 2, 8, 4)
+        value = torch.randn_like(key)
+        cache.update(key, value, layer_idx=0)
+        cache.update(key[..., :2, :], value[..., :2, :], layer_idx=0)
+        assert cache.layers[0].keys is None
+        assert cache.layers[0].values is None
+        assert cache.get_seq_length(0) == 10
+        assert cache.get_mask_sizes(torch.arange(2), 0) == (12, 0)
+        assert cache.get_max_cache_shape(0) == -1
+        assert cache.to_legacy_cache()[0][0].shape[-2] == 10
+
+        cache.reorder_cache(torch.tensor([0]))
+        cache.batch_repeat_interleave(1)
+        cache.batch_select_indices(torch.tensor([0]))
+        cache.crop(4)
+        assert cache.get_seq_length(0) == 4
+        cache.reset()
+        assert len(cache) == 0
+    finally:
+        handle.disable()
 
 
 def test_two_model_scoped_adapters_can_coexist() -> None:
