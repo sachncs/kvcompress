@@ -148,7 +148,7 @@ Source: paper Table 1, Mistral-7B-v0.3 and LLaMA-2-13B on WikiText-2/C4.
 
 **These are not numbers this repo can reproduce** — they need a 7B/13B
 model on a 40 GB GPU. We do ship the paper's *recommendation* (stay
-in 2-3×) as `enable_compression(model, target_memory="33%")` which
+in 2-3×) as `enable_compression(model, target_memory=0.33)` which
 defaults to 3×.
 
 ## Reproducing the paper's numbers

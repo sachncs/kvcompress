@@ -33,6 +33,12 @@ function HeroCode() {
                   {tok.text}
                 </span>
               );
+            if (tok.tone === 'num')
+              return (
+                <span key={i} className="text-sky-300/90 light:text-sky-600">
+                  {tok.text}
+                </span>
+              );
             return (
               <span key={i} className="text-ink-200 light:text-ink-800">
                 {tok.text}

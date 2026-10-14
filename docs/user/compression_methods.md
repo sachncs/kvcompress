@@ -37,13 +37,13 @@ GQA degrades gracefully but MHA falls off a cliff at 4-5×.
 
 ```python
 # Recommended default for most workloads.
-enable_compression(model, method="flash", target_memory="33%")  # 3x
+enable_compression(model, method="flash", target_memory=0.33)  # 3x
 
 # Aggressive compression for batch / prompt-caching deployments.
-enable_compression(model, method="flash", target_memory="20%")  # 5x
+enable_compression(model, method="flash", target_memory=0.20)  # 5x
 
 # Maximum savings on long-context MHA models — expect quality loss.
-enable_compression(model, method="flash", target_memory="12%")  # 8x
+enable_compression(model, method="flash", target_memory=0.12)  # 8x
 ```
 
 See [Performance guide](performance_guide.md) for per-model guidance.

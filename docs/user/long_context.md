@@ -35,9 +35,9 @@ RULER single-needle at 8K context.
 For production deployments at 16K-128K tokens:
 
 - Use `flash` (not `jolt`) — the speedup matters at long contexts.
-- Pick `target_memory="33%"` (3×) for the free zone.
+- Pick `target_memory=0.33` (3×) for the free zone.
 - For batch / prompt-caching where many prefixes are resident at once,
-  consider `target_memory="20%"` (5×) — values dominate the cache at
+  consider `target_memory=0.20` (5×) — values dominate the cache at
   long contexts and JoLT is robust to 5× on GQA.
 
 See `benchmarks/long_context.py` (planned) for a fuller harness.

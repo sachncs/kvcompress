@@ -24,6 +24,9 @@ Unchanged:
 - `build_compressor` / `supported_methods` (function names)
 - `MethodName` (still exported from `kvfold.api`)
 
+`target_memory` now accepts a numeric fraction only. Use `target_memory=0.25`
+for a 4× target; percentage strings such as `"25%"` are rejected.
+
 ## Internal symbols
 
 Every internal class and function was renamed to a single word.

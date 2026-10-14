@@ -7,7 +7,7 @@ Common error messages and what to do about them.
 You passed both or neither. Pick one:
 
 ```python
-enable_compression(model, method="flash", target_memory="33%")
+enable_compression(model, method="flash", target_memory=0.33)
 # OR
 enable_compression(model, method="flash", ratio=3.0)
 ```

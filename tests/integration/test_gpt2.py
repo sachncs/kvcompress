@@ -19,7 +19,7 @@ def test_gpt2_identity_matches_baseline(gpt2_model_with_pad) -> None:
             ids, max_new_tokens=10, do_sample=False, pad_token_id=tok.eos_token_id
         )
 
-    handle = enable_compression(model, method="pass", target_memory="100%")
+    handle = enable_compression(model, method="pass", target_memory=1.0)
     try:
         with torch.no_grad():
             out = model.generate(

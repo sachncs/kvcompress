@@ -14,7 +14,7 @@ handle = enable_compression(
     model,
     method="flash",                # 'jolt', 'flash', 'low', 'int2', 'int4',
                                    # 'int8', 'fp8', 'fp16', 'bf16', 'pass'
-    target_memory="25%",           # OR ratio=4.0
+    target_memory=0.25,             # OR ratio=4.0
     layer_groups=1,
     bits=(0, 2, 4, 8),
     seed=0,
@@ -27,7 +27,7 @@ handle = enable_compression(
 |---|---|---|
 | `model` | `PreTrainedModel` | Hugging Face model to patch. |
 | `method` | `str` | Compressor name (see table above). |
-| `target_memory` | `str` or `float` | Target memory as a fraction (`0.25` or `"25%"`). Mutually exclusive with `ratio`. |
+| `target_memory` | `float` | Target memory as a fraction, such as `0.25` for 25% of original memory. Mutually exclusive with `ratio`. |
 | `ratio` | `float` | Target ratio (e.g. `3.0` for 3×). Mutually exclusive with `target_memory`. |
 | `layer_groups` | `int` | Number of contiguous layer groups for the allocator. Paper uses `1`; larger values give finer-grained control. |
 | `bits` | `tuple[int]` | Allowed residual bit-widths. Default `(0, 2, 4, 8)`. |

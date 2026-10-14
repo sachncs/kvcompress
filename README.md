@@ -84,7 +84,7 @@ model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0
 enable_compression(
     model,
     method="flash",
-    target_memory="25%",     # compress KV cache to 25% of original (4×)
+    target_memory=0.25,       # compress KV cache to 25% of original (4×)
 )
 
 out = model.generate(...)    # KV cache is compressed transparently
@@ -122,7 +122,7 @@ handle.disable()  # restore the original behaviour
 |---|---|---|---|
 | Compression method | `method` | `"flash"` | `"jolt"`, `"flash"`, `"low"`, `"int2"`, `"int4"`, `"int8"`, `"fp8"`, `"fp16"`, `"bf16"`, `"pass"` |
 | Target ratio | `ratio` | — | Float > 1.0. Mutually exclusive with `target_memory`. |
-| Target memory | `target_memory` | — | `"25%"` / `0.25`. Mutually exclusive with `ratio`. |
+| Target memory | `target_memory` | — | Numeric fraction such as `0.25` (25%). Mutually exclusive with `ratio`. |
 | Layer groups | `layer_groups` | `1` | Number of contiguous layer groups the allocator splits the model into. Paper uses G = 1. |
 | Residual bit-widths | `bits` | `(0, 2, 4, 8)` | Tuple the allocator can choose from. |
 | Cache impl name | `cache_implementation` | `"kvfold"` | Registered with HF's `cache_implementation` mechanism. |
@@ -178,7 +178,7 @@ model = AutoModelForCausalLM.from_pretrained(
 tok = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
 handle: CompressionHandle = enable_compression(
-    model, method="flash", target_memory="25%"
+    model, method="flash", target_memory=0.25
 )
 ids = tok("Hello, my name is", return_tensors="pt").input_ids.to(model.device)
 out = model.generate(ids, max_new_tokens=128, do_sample=False)

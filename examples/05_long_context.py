@@ -42,7 +42,7 @@ def main() -> None:
     log.info("prompt tokens: %d", ids.shape[1])
 
     for method in ("pass", "flash"):
-        handle = enable_compression(model, method=method, target_memory="33%")
+        handle = enable_compression(model, method=method, target_memory=0.33)
         try:
             with torch.no_grad():
                 out = model.generate(

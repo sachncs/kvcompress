@@ -186,20 +186,18 @@ def test_enable_compression_requires_target_or_ratio() -> None:
 def test_target_memory_parses() -> None:
     from kvfold.api import parse_target_memory
 
-    assert parse_target_memory("25%") == 4.0
-    assert parse_target_memory("50%") == 2.0
     assert parse_target_memory(0.25) == 4.0
-    with pytest.raises(ValueError, match="fraction or"):
-        parse_target_memory("abc")
+    with pytest.raises(TypeError, match="numeric fraction"):
+        parse_target_memory("25%")
     with pytest.raises(ValueError, match="fraction"):
         parse_target_memory(0)
-    with pytest.raises(ValueError, match=r"in \(0, 100\]"):
+    with pytest.raises(TypeError, match="numeric fraction"):
         parse_target_memory("150%")
 
 
 def test_handle_stats_dict() -> None:
     model = FakeModel("qwen2")
-    handle = enable_compression(model, method="flash", target_memory="33%")
+    handle = enable_compression(model, method="flash", target_memory=0.33)
     try:
         d = handle.stats_dict()
         assert "compress_calls" in d

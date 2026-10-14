@@ -17,7 +17,7 @@ from kvfold.adapter.vllm import export_kv, import_kv, is_vllm_available
 if is_vllm_available():
     meta = export_kv(model, "/tmp/kv.safetensors", method="flash", ratio=3.0)
     # ... later ...
-    import_kv(model, "/tmp/kv.safetensors", target_memory="50%")
+    import_kv(model, "/tmp/kv.safetensors", target_memory=0.50)
 ```
 
 * The exported file is a plain safetensors tensor store. No vLLM
@@ -25,7 +25,7 @@ if is_vllm_available():
   ``.meta.json``.
 * The compressor method (``flash``, ``jolt``, ``int4``, ...) is
   recorded in the sidecar so the importer can rebuild.
-* ``target_memory="100%"`` is a no-compression passthrough shortcut.
+* ``target_memory=1.0`` is a no-compression passthrough shortcut.
 
 ## Shape B: ``Offload`` vLLM OffloadHandler
 

@@ -13,8 +13,8 @@ This module exposes:
 * :func:`build_compressor` — direct access to the compressor factory.
 * :func:`supported_methods` — tuple of every supported method name.
 * :func:`method_descriptors` — immutable registry bindings for tooling.
-* :func:`parse_target_memory` — helper that converts ``"25%"`` / ``0.25``
-  to a ratio of ``4.0``.
+* :func:`parse_target_memory` — helper that converts a fraction such as
+  ``0.25`` to a ratio of ``4.0``.
 
 The Hugging Face integration lives here rather than in ``adapters/`` because
 this is the *only* function end-users need to know about.
@@ -161,7 +161,7 @@ def enable_compression(
     model: PreTrainedModel,
     *,
     method: MethodName = "flash",
-    target_memory: str | float | None = None,
+    target_memory: float | None = None,
     ratio: float | None = None,
     layer_groups: int = 1,
     bits: tuple[int, ...] = (0, 2, 4, 8),
@@ -176,9 +176,8 @@ def enable_compression(
             similar.
         method: compressor name. One of ``jolt``, ``flash``, ``low``,
             ``int2``, ``int4``, ``int8``, ``fp8``, ``fp16``, ``bf16``, ``pass``.
-        target_memory: target memory as a fraction of original. Examples:
-            ``"25%"`` (4× compression), ``"50%"`` (2×), or a float like
-            ``0.25``. Mutually exclusive with ``ratio``.
+        target_memory: target memory as a float fraction of original, such as
+            ``0.25`` for 4× compression. Mutually exclusive with ``ratio``.
         ratio: target compression ratio as a float (e.g. ``3.0`` for 3×).
             Mutually exclusive with ``target_memory``.
         layer_groups: number of contiguous layer groups the allocator splits
@@ -205,7 +204,7 @@ def enable_compression(
     elif ratio is None:
         raise ValueError("unreachable")
 
-    # ``target_memory="100%"`` is identity — short-circuit so we don't pay
+    # ``target_memory=1.0`` is identity — short-circuit so we don't pay
     # the allocator cost or hand the user a 3x default they didn't ask for.
     if ratio == 1.0:
         method = "pass"
@@ -219,7 +218,7 @@ def enable_compression(
 
     from kvfold.adapter.huggingface import HF
 
-    # Translate the public ``target_memory="100%"`` shortcut into the
+    # Translate the public ``target_memory=1.0`` shortcut into the
     # passthrough compressor to avoid spinning up the allocator at ratio=1.
     extra: dict[str, Any] = dict(kwargs)
     if method == "pass":
@@ -285,22 +284,14 @@ def method_descriptors() -> tuple[Any, ...]:
     return tuple(REGISTRY.descriptor(name) for name in REGISTRY.names())
 
 
-def parse_target_memory(value: str | float) -> float:
+def parse_target_memory(value: float) -> float:
     """Convert a target-memory specification to a compression ratio.
 
-    Examples:
-        ``"25%"`` → ``4.0``
-        ``"50%"`` → ``2.0``
+    Example:
         ``0.25`` → ``4.0``
     """
-    if isinstance(value, (int, float)):
-        if not 0 < value <= 1:
-            raise ValueError(f"target_memory fraction must be in (0, 1], got {value}")
-        return 1.0 / value
-    s = str(value).strip()
-    if s.endswith("%"):
-        pct = float(s[:-1])
-        if not 0 < pct <= 100:
-            raise ValueError(f"target_memory percent must be in (0, 100], got {pct}")
-        return 100.0 / pct
-    raise ValueError(f"target_memory must be a fraction or 'N%' string, got {value!r}")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"target_memory must be a numeric fraction, got {value!r}")
+    if not 0 < value <= 1:
+        raise ValueError(f"target_memory fraction must be in (0, 1], got {value}")
+    return 1.0 / value

@@ -26,7 +26,7 @@ from kvfold import enable_compression
 
 # Load any causal LM.
 model = AutoModelForCausalLM.from_pretrained("gpt2")
-handle = enable_compression(model, method="flash", target_memory="33%")
+handle = enable_compression(model, method="flash", target_memory=0.33)
 
 # Generate as usual. The KV cache is compressed transparently.
 tok = AutoTokenizer.from_pretrained("gpt2")
@@ -38,7 +38,7 @@ print("compression stats:", handle.stats_dict())
 handle.disable()  # restore original behaviour
 ```
 
-The `target_memory="33%"` argument is equivalent to `ratio=3.0`
+The `target_memory=0.33` argument is equivalent to `ratio=3.0`.
 (33% of original = 1/3 = 3× compression). You can use either.
 
 ## What `enable_compression` actually does
@@ -82,13 +82,13 @@ Outside:
 
 ```python
 # Default: 3× (free zone)
-enable_compression(model, method="flash", target_memory="33%")
+enable_compression(model, method="flash", target_memory=0.33)
 
 # Aggressive for GQA
-enable_compression(model, method="flash", target_memory="20%")  # 5×
+enable_compression(model, method="flash", target_memory=0.20)  # 5×
 
 # Maximum savings (lossy)
-enable_compression(model, method="flash", target_memory="12%")  # 8×
+enable_compression(model, method="flash", target_memory=0.12)  # 8×
 ```
 
 You can also use absolute bytes:
@@ -100,7 +100,7 @@ enable_compression(model, method="flash", ratio=3.0)
 ## Inspecting what happened
 
 ```python
-handle = enable_compression(model, method="flash", target_memory="33%")
+handle = enable_compression(model, method="flash", target_memory=0.33)
 model.generate(...)  # run as usual
 
 # Cumulative stats

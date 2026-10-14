@@ -283,7 +283,7 @@ def compress(
         "flash",
         help="compression method: jolt, flash, low, int2, int4, int8, fp8, fp16, bf16, pass",
     ),
-    target: str = typer.Option("33%", help="target memory fraction (e.g. 33%)"),
+    target: float = typer.Option(0.33, help="target memory fraction (e.g. 0.25)"),
     prompt: str = typer.Option("Hello, my name is", help="prompt text"),
     max_new: int = typer.Option(20, help="tokens to generate"),
     seed: int = typer.Option(0, help="RNG seed"),

@@ -275,7 +275,7 @@ def test_compress_direct_requires_hf_dependencies(monkeypatch: pytest.MonkeyPatc
     # typer.Exit is a subclass of click.exceptions.Exit which is a
     # subclass of RuntimeError. Catch it loosely.
     with pytest.raises((SystemExit, Exception)):
-        compress_fn(model="gpt2", method="pass", target="100%", prompt="Hi", max_new=2)
+        compress_fn(model="gpt2", method="pass", target=1.0, prompt="Hi", max_new=2)
 
 
 def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -316,7 +316,7 @@ def test_compress_direct_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> 
         compress_fn(
             model="gpt2",
             method="pass",
-            target="100%",
+            target=1.0,
             prompt="Hello",
             max_new=2,
             seed=0,
@@ -451,7 +451,7 @@ def test_compress_with_stubbed_model(monkeypatch: pytest.MonkeyPatch) -> None:
             "--method",
             "pass",
             "--target",
-            "100%",
+            1.0,
             "--prompt",
             "Hello",
             "--max-new",

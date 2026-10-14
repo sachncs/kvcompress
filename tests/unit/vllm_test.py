@@ -141,7 +141,7 @@ def test_import_round_trip_recovers_kv_separately(fake_model: Any, tmp_path: Pat
         new_layers.append(FakeDynamicLayer(k, v))
     new_model = FakeModel(FakeDynamicCache(new_layers))
 
-    import_kv(new_model, str(out), target_memory="100%")
+    import_kv(new_model, str(out), target_memory=1.0)
 
     # K and V should be different (K must not be a copy of V).
     for layer_idx, (k_new, v_new, k_orig, v_orig) in enumerate(

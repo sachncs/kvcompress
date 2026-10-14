@@ -40,13 +40,13 @@ export const hero = {
     { text: 'enable_compression(\n    model,\n    method=', tone: 'kw' },
     { text: '"flash"', tone: 'str' },
     { text: ',\n    target_memory=', tone: 'kw' },
-    { text: '"25%"', tone: 'str' },
+    { text: '0.25', tone: 'num' },
     { text: ',\n', tone: 'kw' },
     { text: ')\n' },
     { text: 'model.generate(', tone: 'kw' },
     { text: '...', tone: 'str' },
     { text: ')', tone: 'kw' },
-  ] as { text: string; tone?: 'kw' | 'str' | 'comment' | 'fn' }[],
+  ] as { text: string; tone?: 'kw' | 'str' | 'comment' | 'fn' | 'num' }[],
 };
 
 export const valueProps = [
@@ -141,7 +141,7 @@ export const howSteps = [
     n: '03',
     title: 'Set a budget.',
     body:
-      'Pass a ratio (3.0) or a memory target ("25%"). A joint Lagrangian allocator bisects λ to hit the global byte budget across layers.',
+      'Pass a ratio (3.0) or a memory target (0.25). A joint Lagrangian allocator bisects λ to hit the global byte budget across layers.',
   },
   {
     n: '04',
@@ -239,7 +239,7 @@ model = AutoModelForCausalLM.from_pretrained(
 tok = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
 # One call. The cache is compressed transparently during generate().
-handle = enable_compression(model, method="flash", target_memory="25%")
+handle = enable_compression(model, method="flash", target_memory=0.25)
 
 ids = tok("Hello, my name is", return_tensors="pt").input_ids.to(model.device)
 out = model.generate(ids, max_new_tokens=128, do_sample=False)

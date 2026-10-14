@@ -5,7 +5,7 @@ specific workload.
 
 ## TL;DR
 
-- **Default to 3× (target_memory="33%").** This is within the paper's
+- **Default to 3× (`target_memory=0.33`).** This is within the paper's
   reported high-fidelity "free zone" for both GQA and MHA models; validate
   perplexity and task quality on your own model.
 - **Use `flash`, not `jolt`.** 5-13× faster at matched quality.
@@ -36,7 +36,7 @@ T=1024).
 ### Default for production
 
 ```python
-enable_compression(model, method="flash", target_memory="33%")
+enable_compression(model, method="flash", target_memory=0.33)
 ```
 
 That's 3×. Both GQA and MHA models stay in the free zone.
@@ -47,8 +47,8 @@ If you've confirmed your model is GQA (Mistral, Qwen2, Gemma2), you
 can push harder:
 
 ```python
-enable_compression(model, method="flash", target_memory="20%")  # 5×
-enable_compression(model, method="flash", target_memory="14%")  # 7×
+enable_compression(model, method="flash", target_memory=0.20)  # 5×
+enable_compression(model, method="flash", target_memory=0.14)  # 7×
 ```
 
 ### Stay in the free zone for MHA
@@ -56,7 +56,7 @@ enable_compression(model, method="flash", target_memory="14%")  # 7×
 If your model is MHA (LLaMA-1/2, Phi-2), stay at 3× and below:
 
 ```python
-enable_compression(model, method="flash", target_memory="33%")  # 3× max
+enable_compression(model, method="flash", target_memory=0.33)  # 3× max
 ```
 
 ## FlashJoLT vs JoLT
@@ -86,7 +86,7 @@ The allocator can split the model into `layer_groups` independent
 groups, each with its own `(r_T, r_d, b)` decision:
 
 ```python
-enable_compression(model, method="flash", target_memory="33%", layer_groups=4)
+enable_compression(model, method="flash", target_memory=0.33, layer_groups=4)
 ```
 
 The paper's default is `layer_groups=1` and ablation A5 shows per-group
@@ -102,7 +102,7 @@ The allocator picks per-cell from the `bits` tuple. Default is
 
 ```python
 # Restrict to {0, 4} if your hardware doesn't support 2-bit ops efficiently.
-enable_compression(model, method="flash", target_memory="33%", bits=(0, 4))
+enable_compression(model, method="flash", target_memory=0.33, bits=(0, 4))
 ```
 
 The paper's bit-grid ablation (Table 3) shows quality saturates at

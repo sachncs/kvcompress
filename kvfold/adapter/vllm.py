@@ -206,7 +206,7 @@ def import_kv(
     model: Any,
     path: str,
     *,
-    target_memory: str | None = "100%",
+    target_memory: float | None = 1.0,
     ratio: float | None = None,
     method: str = "flash",
     bits: tuple[int, ...] = (0, 2, 4, 8),
@@ -224,9 +224,9 @@ def import_kv(
     Args:
         model: HF or vLLM-style model with a writable DynamicCache.
         path: source safetensors path.
-        target_memory: passed to :func:`kvfold.enable_compression`
-            if the model hasn't been compressed yet (default ``"100%"``
-            = identity).
+        target_memory: numeric fraction passed to
+            :func:`kvfold.enable_compression` if the model hasn't been
+            compressed yet (default ``1.0`` = identity).
         ratio: optional ratio override.
         method: compressor name to enable if needed.
         bits: residual bit-widths.
@@ -266,7 +266,7 @@ def import_kv(
             hint="re-export the cache with the same kvfold version",
         )
 
-    # If target_memory="100%" was requested, build an identity compressor
+    # If target_memory=1.0 was requested, build an identity compressor
     # for the temp cache; otherwise honour the user-specified ratio.
     effective_ratio = ratio
     if effective_ratio is None and target_memory is not None:
